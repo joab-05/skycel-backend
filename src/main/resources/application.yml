@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: skycel-backend
+    
+  datasource:
+    url: jdbc:mysql://localhost:3306/skyceldb2?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: # COMPLETAR POR USUARIO
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      pool-name: SkycelHikariPool
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      max-lifetime: 1800000
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # Valida que nuestro modelo Java cuadre con la DB, pero no modifica nada de tu DDL.
+    show-sql: false # Cambiar a true en entorno DEV
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+        envers:
+          audit_table_suffix: _AUD
+          store_data_at_delete: true # Permite saber el estado exacto del registro antes de que el usuario lo borrara
+          
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=60m # Mantiene catálogos por 60 min en la memoria JVM
+      
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
