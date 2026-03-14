@@ -5,7 +5,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/skyceldb2?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
     username: root
-    password: # COMPLETAR POR USUARIO
+    password: Duarte05&..
     driver-class-name: com.mysql.cj.jdbc.Driver
     type: com.zaxxer.hikari.HikariDataSource
     hikari:
@@ -33,6 +33,11 @@ spring:
     caffeine:
       spec: maximumSize=500,expireAfterWrite=60m # Mantiene catálogos por 60 min en la memoria JVM
       
+  security:
+    jwt:
+      secret: "OThkNWRhZTE4NDdkOThmZmY5OWRmMjQ1Yzc3OTM2YjJhOThmMDRkY2ZmMzg2Yjc2ZTkzOGZiNTkzNDk0NzI5Yw==" # Secret AES256 for HMAC-SHA
+      expiration-ms: 43200000 # 12 horas de duración del Token
+
 springdoc:
   api-docs:
     path: /api-docs
