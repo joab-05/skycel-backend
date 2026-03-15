@@ -18,20 +18,27 @@ public class UsuarioSesion {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "idsesion")
-    private Long idsesion;
+    private Integer idsesion;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "idusuario", nullable = false)
     private Usuario usuario;
 
-    @Column(name = "token_uuid", nullable = false, length = 36, unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "codti_terminal", nullable = false)
+    private Tienda tiendaTerminal;
+
+    @Column(name = "token_uuid", nullable = false, length = 64, unique = true)
     private String tokenUuid;
 
-    @Column(name = "ip_origen", length = 45)
-    private String ipOrigen;
+    @Column(name = "ip_publica", nullable = false, length = 45)
+    private String ipPublica;
 
     @Column(name = "user_agent")
     private String userAgent;
+
+    @Column(name = "dispositivo_info", length = 100)
+    private String dispositivoInfo;
 
     @CreationTimestamp
     @Column(name = "fecha_ingreso", updatable = false)
@@ -39,7 +46,4 @@ public class UsuarioSesion {
 
     @Column(name = "fecha_salida")
     private LocalDateTime fechaSalida;
-
-    @Column(name = "motivo_cierre", length = 50)
-    private String motivoCierre;
 }

@@ -2,7 +2,6 @@ package com.skycel.backend.security;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-import io.github.bucket4j.Refill;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,14 +22,21 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
     // Limits to 100 requests per minute per IP Address
     private Bucket createNewBucket() {
-        Bandwidth limit = Bandwidth.classic(100, Refill.greedy(100, Duration.ofMinutes(1)));
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(100)
+                .refillGreedy(100, Duration.ofMinutes(1))
+                .build();
         return Bucket.builder().addLimit(limit).build();
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs"); // Skip limits for swagger UI
+        return path.startsWith("/swagger-ui") || 
+               path.startsWith("/v3/api-docs") || 
+               path.startsWith("/api-docs") ||
+               path.startsWith("/swagger-resources") ||
+               path.startsWith("/webjars"); // Skip limits for swagger UI
     }
 
     @Override

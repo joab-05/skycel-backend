@@ -18,7 +18,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate # Valida que nuestro modelo Java cuadre con la DB, pero no modifica nada de tu DDL.
+      ddl-auto: update # Cambiado temporalmente a update para que Envers pueda crear sus tablas _AUD automáticamente
     show-sql: false # Cambiar a true en entorno DEV
     properties:
       hibernate:

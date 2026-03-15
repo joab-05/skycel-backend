@@ -41,9 +41,11 @@ public class AuthService {
         // Registramos la sesión física en MySQL (Para poder denegar remotamente después si es necesario)
         UsuarioSesion sesion = UsuarioSesion.builder()
                 .usuario(usuario)
+                .tiendaTerminal(usuario.getTienda()) // Asumiremos que el login se hace desde la tienda default del usuario, o un valor enviado por la app. 
                 .tokenUuid(tokenUuid)
-                .ipOrigen(getClientIP(request))
+                .ipPublica(getClientIP(request))
                 .userAgent(request.getHeader("User-Agent"))
+                .dispositivoInfo("WEB-BROWSER") // Provisional, luego podrá pasarlo la GUI JavaFX/Movil
                 .build();
         usuarioSesionRepository.save(sesion);
 
