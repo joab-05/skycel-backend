@@ -20,6 +20,12 @@ public class Magnitud {
     @Column(name = "nombre", nullable = false, length = 50)
     private String nombre;
 
+    @Column(name = "abreviatura", nullable = false, length = 5)
+    private String abreviatura;
+
+    @Column(name = "criterio", nullable = false)
+    private Short criterio;
+
     @Column(name = "activo", columnDefinition = "TINYINT DEFAULT 1")
     private Boolean activo;
 }

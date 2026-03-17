@@ -6,7 +6,7 @@ import lombok.Data;
 
 /**
  * DTO Genérico para catálogos simples que solo tienen 'id' y 'nombre'
- * (Color, Seccion, Proveedor, Magnitud)
+ * (Color)
  */
 @Data
 public class CatalogoSimpleRequestDTO {

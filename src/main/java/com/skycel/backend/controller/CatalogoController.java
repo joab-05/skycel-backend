@@ -2,8 +2,16 @@ package com.skycel.backend.controller;
 
 import com.skycel.backend.domain.dto.request.CategoriaRequestDTO;
 import com.skycel.backend.domain.dto.request.CatalogoSimpleRequestDTO;
+import com.skycel.backend.domain.dto.request.MagnitudRequestDTO;
+import com.skycel.backend.domain.dto.request.ProveedorRequestDTO;
 import com.skycel.backend.domain.dto.response.CategoriaResponseDTO;
 import com.skycel.backend.domain.dto.response.CatalogoSimpleResponseDTO;
+import com.skycel.backend.domain.dto.response.MagnitudResponseDTO;
+import com.skycel.backend.domain.dto.response.ProveedorResponseDTO;
+import com.skycel.backend.domain.dto.response.SeccionResponseDTO;
+import com.skycel.backend.domain.dto.request.MagnitudRequestDTO;
+import com.skycel.backend.domain.dto.request.ProveedorRequestDTO;
+import com.skycel.backend.domain.dto.request.SeccionRequestDTO;
 import com.skycel.backend.domain.entity.Tienda;
 import com.skycel.backend.service.CatalogoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -61,36 +69,53 @@ public class CatalogoController {
         return ResponseEntity.ok(catalogoService.obtenerColoresActivos());
     }
 
+    @Operation(summary = "Crear color", description = "Crea un nuevo color")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/colores")
+    public ResponseEntity<CatalogoSimpleResponseDTO> crearColor(@Valid @RequestBody CatalogoSimpleRequestDTO request) {
+        return ResponseEntity.ok(catalogoService.crearColor(request));
+    }
+
     @Operation(summary = "Obtener magnitudes", description = "Retorna la lista de magnitudes activas")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/magnitudes")
-    public ResponseEntity<List<CatalogoSimpleResponseDTO>> getMagnitudes() {
+    public ResponseEntity<List<com.skycel.backend.domain.dto.response.MagnitudResponseDTO>> getMagnitudes() {
         return ResponseEntity.ok(catalogoService.obtenerMagnitudesActivas());
+    }
+
+    @Operation(summary = "Crear magnitud", description = "Crea una nueva magnitud detallada")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/magnitudes")
+    public ResponseEntity<com.skycel.backend.domain.dto.response.MagnitudResponseDTO> crearMagnitud(@Valid @RequestBody com.skycel.backend.domain.dto.request.MagnitudRequestDTO request) {
+        return ResponseEntity.ok(catalogoService.crearMagnitud(request));
     }
 
     @Operation(summary = "Obtener proveedores", description = "Retorna la lista de proveedores activos")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/proveedores")
-    public ResponseEntity<List<CatalogoSimpleResponseDTO>> getProveedores() {
+    public ResponseEntity<List<com.skycel.backend.domain.dto.response.ProveedorResponseDTO>> getProveedores() {
         return ResponseEntity.ok(catalogoService.obtenerProveedoresActivos());
+    }
+
+    @Operation(summary = "Crear proveedor", description = "Crea un nuevo proveedor con datos fiscales detallados")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/proveedores")
+    public ResponseEntity<com.skycel.backend.domain.dto.response.ProveedorResponseDTO> crearProveedor(@Valid @RequestBody com.skycel.backend.domain.dto.request.ProveedorRequestDTO request) {
+        return ResponseEntity.ok(catalogoService.crearProveedor(request));
     }
 
     @Operation(summary = "Obtener secciones", description = "Retorna la lista de secciones activas")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/secciones")
-    public ResponseEntity<List<CatalogoSimpleResponseDTO>> getSecciones() {
+    public ResponseEntity<List<SeccionResponseDTO>> getSecciones() {
         return ResponseEntity.ok(catalogoService.obtenerSeccionesActivas());
     }
 
-    // --- Endpoints de Escritura/Borrado Genéricos ---
-
-    @Operation(summary = "Crear registro en catálogo simple", description = "Crea un registro. Tipos válidos: 'color', 'magnitud', 'proveedor', 'seccion'")
+    @Operation(summary = "Crear sección", description = "Crea una nueva sección física en tienda")
     @SecurityRequirement(name = "Bearer Authentication")
-    @PostMapping("/{tipo}")
-    public ResponseEntity<CatalogoSimpleResponseDTO> crearCatalogoSimple(
-            @PathVariable String tipo,
-            @Valid @RequestBody CatalogoSimpleRequestDTO request) {
-        return ResponseEntity.ok(catalogoService.crearCatalogoSimple(tipo, request));
+    @PostMapping("/secciones")
+    public ResponseEntity<SeccionResponseDTO> crearSeccion(@Valid @RequestBody SeccionRequestDTO request) {
+        return ResponseEntity.ok(catalogoService.crearSeccion(request));
     }
 
     @Operation(summary = "Desactivar registro (Soft Delete)", description = "Realiza un borrado lógico dado un catálogo y su ID. Tipos válidos: 'color', 'magnitud', 'proveedor', 'seccion'")

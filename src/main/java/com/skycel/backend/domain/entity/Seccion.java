@@ -20,6 +20,10 @@ public class Seccion {
     @Column(name = "nombre", nullable = false, length = 50)
     private String nombre;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "codti", nullable = false)
+    private Tienda tienda;
+
     @Column(name = "activo", columnDefinition = "TINYINT DEFAULT 1")
     private Boolean activo;
 }

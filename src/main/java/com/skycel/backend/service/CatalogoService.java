@@ -2,8 +2,16 @@ package com.skycel.backend.service;
 
 import com.skycel.backend.domain.dto.request.CategoriaRequestDTO;
 import com.skycel.backend.domain.dto.request.CatalogoSimpleRequestDTO;
+import com.skycel.backend.domain.dto.request.MagnitudRequestDTO;
+import com.skycel.backend.domain.dto.request.ProveedorRequestDTO;
 import com.skycel.backend.domain.dto.response.CategoriaResponseDTO;
 import com.skycel.backend.domain.dto.response.CatalogoSimpleResponseDTO;
+import com.skycel.backend.domain.dto.response.MagnitudResponseDTO;
+import com.skycel.backend.domain.dto.response.ProveedorResponseDTO;
+import com.skycel.backend.domain.dto.response.SeccionResponseDTO;
+import com.skycel.backend.domain.dto.request.MagnitudRequestDTO;
+import com.skycel.backend.domain.dto.request.ProveedorRequestDTO;
+import com.skycel.backend.domain.dto.request.SeccionRequestDTO;
 import com.skycel.backend.domain.entity.*;
 import com.skycel.backend.domain.mapper.CatalogoMapper;
 import com.skycel.backend.repository.*;
@@ -50,7 +58,7 @@ public class CatalogoService {
 
     @Cacheable(value = "magnitudesCache")
     @Transactional(readOnly = true)
-    public List<CatalogoSimpleResponseDTO> obtenerMagnitudesActivas() {
+    public List<MagnitudResponseDTO> obtenerMagnitudesActivas() {
         return magnitudRepository.findByActivoTrue().stream()
                 .map(catalogoMapper::toMagnitudResponse)
                 .collect(Collectors.toList());
@@ -58,7 +66,7 @@ public class CatalogoService {
 
     @Cacheable(value = "proveedoresCache")
     @Transactional(readOnly = true)
-    public List<CatalogoSimpleResponseDTO> obtenerProveedoresActivos() {
+    public List<ProveedorResponseDTO> obtenerProveedoresActivos() {
         return proveedorRepository.findByActivoTrue().stream()
                 .map(catalogoMapper::toProveedorResponse)
                 .collect(Collectors.toList());
@@ -66,7 +74,7 @@ public class CatalogoService {
 
     @Cacheable(value = "seccionesCache")
     @Transactional(readOnly = true)
-    public List<CatalogoSimpleResponseDTO> obtenerSeccionesActivas() {
+    public List<SeccionResponseDTO> obtenerSeccionesActivas() {
         return seccionRepository.findByActivoTrue().stream()
                 .map(catalogoMapper::toSeccionResponse)
                 .collect(Collectors.toList());
@@ -93,16 +101,32 @@ public class CatalogoService {
         return catalogoMapper.toCategoriaResponse(categoriaRepository.save(categoria));
     }
 
-    @CacheEvict(value = {"coloresCache", "magnitudesCache", "proveedoresCache", "seccionesCache"}, allEntries = true)
+    @CacheEvict(value = "coloresCache", allEntries = true)
     @Transactional
-    public CatalogoSimpleResponseDTO crearCatalogoSimple(String tipo, CatalogoSimpleRequestDTO dto) {
-        switch (tipo.toLowerCase()) {
-            case "color": return catalogoMapper.toColorResponse(colorRepository.save(catalogoMapper.toColorEntity(dto)));
-            case "magnitud": return catalogoMapper.toMagnitudResponse(magnitudRepository.save(catalogoMapper.toMagnitudEntity(dto)));
-            case "proveedor": return catalogoMapper.toProveedorResponse(proveedorRepository.save(catalogoMapper.toProveedorEntity(dto)));
-            case "seccion": return catalogoMapper.toSeccionResponse(seccionRepository.save(catalogoMapper.toSeccionEntity(dto)));
-            default: throw new IllegalArgumentException("Tipo de catálogo no soportado: " + tipo);
-        }
+    public CatalogoSimpleResponseDTO crearColor(CatalogoSimpleRequestDTO dto) {
+        return catalogoMapper.toColorResponse(colorRepository.save(catalogoMapper.toColorEntity(dto)));
+    }
+
+    @CacheEvict(value = "magnitudesCache", allEntries = true)
+    @Transactional
+    public MagnitudResponseDTO crearMagnitud(MagnitudRequestDTO dto) {
+        return catalogoMapper.toMagnitudResponse(magnitudRepository.save(catalogoMapper.toMagnitudEntity(dto)));
+    }
+
+    @CacheEvict(value = "proveedoresCache", allEntries = true)
+    @Transactional
+    public ProveedorResponseDTO crearProveedor(ProveedorRequestDTO dto) {
+        return catalogoMapper.toProveedorResponse(proveedorRepository.save(catalogoMapper.toProveedorEntity(dto)));
+    }
+
+    @CacheEvict(value = "seccionesCache", allEntries = true)
+    @Transactional
+    public SeccionResponseDTO crearSeccion(SeccionRequestDTO dto) {
+        Seccion seccion = catalogoMapper.toSeccionEntity(dto);
+        Tienda tienda = tiendaRepository.findById(dto.getCodti())
+                .orElseThrow(() -> new RuntimeException("Tienda no encontrada con código: " + dto.getCodti()));
+        seccion.setTienda(tienda);
+        return catalogoMapper.toSeccionResponse(seccionRepository.save(seccion));
     }
 
     @CacheEvict(value = {"coloresCache", "magnitudesCache", "proveedoresCache", "seccionesCache"}, allEntries = true)
