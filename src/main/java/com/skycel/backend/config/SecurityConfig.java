@@ -1,8 +1,10 @@
 package com.skycel.backend.config;
 
+import com.skycel.backend.security.AuthEntryPointJwt;
 import com.skycel.backend.security.JwtAuthenticationFilter;
 import com.skycel.backend.security.RateLimitingFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -18,6 +20,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -34,12 +37,19 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final RateLimitingFilter rateLimitingFilter;
     private final UserDetailsService userDetailsService;
+    private final AuthEntryPointJwt unauthorizedHandler;
+    private final AccessDeniedHandler accessDeniedHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // IMPORTANTE: Configurar el manejo de excepciones ANTES de authorizeHttpRequests
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(unauthorizedHandler)  // Tu AuthEntryPointJwt
+                        .accessDeniedHandler(accessDeniedHandler)       // Opcional: para errores 403
+                )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                         "/api/auth/**",
@@ -48,7 +58,9 @@ public class SecurityConfig {
                         "/swagger-resources/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html",
-                        "/webjars/**"
+                        "/webjars/**",
+                        // Los errores de validación (400) se reenvían a /error; sin esto se enmascaran como 401
+                        "/error"
                 ).permitAll()
                 .anyRequest().authenticated()
             )

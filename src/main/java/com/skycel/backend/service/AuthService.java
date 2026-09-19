@@ -54,6 +54,7 @@ public class AuthService {
 
         return LoginResponseDto.builder()
                 .token(jwtToken)
+                .idusuario(usuario.getIdusuario())
                 .username(usuario.getUsername())
                 .nombreCompleto(usuario.getNombreCompleto())
                 .rol(usuario.getRol().name())

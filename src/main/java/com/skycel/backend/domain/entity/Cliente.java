@@ -9,11 +9,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "cliente")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Cliente {
 
     @Id
@@ -34,10 +30,13 @@ public class Cliente {
     private String direccion;
 
     @Column(name = "tipo_cliente", nullable = false, columnDefinition = "TINYINT DEFAULT 1")
-    private Byte tipoCliente;
+    private Byte tipoCliente;          // 1=Regular 2=Frecuente 3=VIP
 
     @Column(name = "margen_factor", precision = 5, scale = 2)
     private BigDecimal margenFactor;
+
+    @Column(name = "puntos", nullable = false, columnDefinition = "INT DEFAULT 0")
+    private Integer puntos = 0;        // puntos de lealtad acumulados
 
     @CreationTimestamp
     @Column(name = "fecha_registro", updatable = false)
