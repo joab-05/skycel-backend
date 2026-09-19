@@ -53,4 +53,7 @@ public class VentaDetalle {
 
     @Column(name = "es_regalo", columnDefinition = "TINYINT(1) DEFAULT 0")
     private Boolean esRegalo;
+
+    @Column(name = "imei", length = 20)
+    private String imei;
 }
