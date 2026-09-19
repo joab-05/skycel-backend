@@ -2,7 +2,7 @@ package com.skycel.backend.dto.venta;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -21,7 +21,7 @@ public class VentaDetalleRequestDto {
     private Short cantidad;
 
     @NotNull(message = "El precio unitario final es obligatorio")
-    @Positive(message = "El precio debe ser positivo")
+    @PositiveOrZero(message = "El precio no puede ser negativo")
     private BigDecimal precioUnitarioFinal;
 
     /** IMEI del equipo, si aplica */

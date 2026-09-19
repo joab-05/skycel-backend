@@ -354,6 +354,145 @@ class VentaServiceTest {
         }
     }
 
+    // ── Crear — regalos y costo por unidad ───────────────────────────────────
+
+    @Nested
+    @DisplayName("crear — regalos (precio $0)")
+    class Regalo {
+
+        private void accesorioEnStock() {
+            ProductoMaster master = masterAccesorio();
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(master, BigDecimal.TEN)));
+        }
+
+        private VentaDetalleRequestDto regalo(String precio) {
+            VentaDetalleRequestDto d = lineaAccesorio((short) 1);
+            d.setPrecioUnitarioFinal(new BigDecimal(precio));
+            d.setEsRegalo(true);
+            return d;
+        }
+
+        private VentaDetalleRequestDto conPrecio(String precio) {
+            VentaDetalleRequestDto d = lineaAccesorio((short) 1);
+            d.setPrecioUnitarioFinal(new BigDecimal(precio));
+            return d;
+        }
+
+        private void vendedorConRol(com.skycel.backend.domain.enums.Rol rol) {
+            vendedor.setRol(rol);
+        }
+
+        @Test
+        @DisplayName("un encargado puede regalar: la línea queda con precio $0, marcada como regalo, y el stock baja")
+        void encargadoRegala() {
+            accesorioEnStock();
+            vendedorConRol(com.skycel.backend.domain.enums.Rol.ENCARGADO_TIENDA);
+
+            VentaResponseDto r = ventaService.crear(
+                    ventaBase(List.of(lineaAccesorio((short) 1), regalo("0"))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("15");        // el regalo no suma
+            ArgumentCaptor<VentaDetalle> cap = ArgumentCaptor.forClass(VentaDetalle.class);
+            verify(ventaDetalleRepository, times(2)).save(cap.capture());
+            VentaDetalle regaloGuardado = cap.getAllValues().get(1);
+            assertThat(regaloGuardado.getEsRegalo()).isTrue();
+            assertThat(regaloGuardado.getPrecioUnitarioFinal()).isEqualByComparingTo("0");
+            assertThat(regaloGuardado.getCostoUnitarioCompra()).isEqualByComparingTo("5"); // la pérdida queda registrada
+        }
+
+        @Test
+        @DisplayName("un vendedor no puede regalar: 403")
+        void vendedorNoRegala() {
+            accesorioEnStock();
+            vendedorConRol(com.skycel.backend.domain.enums.Rol.VENDEDOR);
+
+            assertThatThrownBy(() -> ventaService.crear(
+                    ventaBase(List.of(lineaAccesorio((short) 1), regalo("0"))), ID_VENDEDOR))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            e -> assertThat(e.getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.FORBIDDEN));
+            verify(ventaRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("precio $0 sin marcarlo como regalo: 400")
+        void precioCeroSinRegalo() {
+            accesorioEnStock();
+
+            assertThatThrownBy(() -> ventaService.crear(
+                    ventaBase(List.of(lineaAccesorio((short) 1), conPrecio("0"))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("solo se permite en artículos marcados como regalo");
+        }
+
+        @Test
+        @DisplayName("un regalo con precio mayor a $0: 400")
+        void regaloConPrecio() {
+            accesorioEnStock();
+            vendedorConRol(com.skycel.backend.domain.enums.Rol.ADMIN);
+
+            assertThatThrownBy(() -> ventaService.crear(
+                    ventaBase(List.of(lineaAccesorio((short) 1), regalo("10"))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("debe tener precio $0");
+        }
+
+        @Test
+        @DisplayName("una venta solo de regalos (total $0): 400")
+        void ventaDeCero() {
+            accesorioEnStock();
+            vendedorConRol(com.skycel.backend.domain.enums.Rol.ADMIN);
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(regalo("0"))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("no puede ser de $0");
+            verify(ventaRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("crear — costo por unidad de un equipo")
+    class CostoPorUnidad {
+
+        private ProductoImei unidadConCosto(Producto producto, BigDecimal costo) {
+            ProductoImei pi = ProductoImei.builder().id(1L).producto(producto).imei("350000000000011")
+                    .estado("DISPONIBLE").costoUnitario(costo).build();
+            when(productoImeiRepository.findByImei("350000000000011")).thenReturn(Optional.of(pi));
+            return pi;
+        }
+
+        @Test
+        @DisplayName("un usado con costo propio: el costo de la venta es el de esa unidad, no el del modelo")
+        void usaElCostoDeLaUnidad() {
+            ProductoMaster master = masterCelular();
+            Producto producto = productoCelular(master, BigDecimal.ONE);   // costo del modelo: 100
+            unidadConCosto(producto, new BigDecimal("80"));
+            when(productoMasterRepository.findById(1)).thenReturn(Optional.of(master));
+
+            ventaService.crear(ventaBase(List.of(lineaCelular("350000000000011"))), ID_VENDEDOR);
+
+            ArgumentCaptor<VentaDetalle> cap = ArgumentCaptor.forClass(VentaDetalle.class);
+            verify(ventaDetalleRepository).save(cap.capture());
+            assertThat(cap.getValue().getCostoUnitarioCompra()).isEqualByComparingTo("80");
+        }
+
+        @Test
+        @DisplayName("sin costo propio: se usa el costo del modelo")
+        void usaElCostoDelModelo() {
+            ProductoMaster master = masterCelular();
+            Producto producto = productoCelular(master, BigDecimal.ONE);
+            unidadConCosto(producto, null);
+            when(productoMasterRepository.findById(1)).thenReturn(Optional.of(master));
+
+            ventaService.crear(ventaBase(List.of(lineaCelular("350000000000011"))), ID_VENDEDOR);
+
+            ArgumentCaptor<VentaDetalle> cap = ArgumentCaptor.forClass(VentaDetalle.class);
+            verify(ventaDetalleRepository).save(cap.capture());
+            assertThat(cap.getValue().getCostoUnitarioCompra()).isEqualByComparingTo("100");
+        }
+    }
+
     // ── Crear — pago MIXTO ───────────────────────────────────────────────────
 
     @Nested

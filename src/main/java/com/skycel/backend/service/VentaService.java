@@ -1,6 +1,7 @@
 package com.skycel.backend.service;
 
 import com.skycel.backend.domain.entity.*;
+import com.skycel.backend.domain.enums.Rol;
 import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.dto.venta.VentaDetalleRequestDto;
 import com.skycel.backend.dto.venta.VentaDetalleResponseDto;
@@ -98,9 +99,13 @@ public class VentaService {
         List<LineaResuelta> lineas = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
         for (VentaDetalleRequestDto d : dto.getDetalles()) {
-            LineaResuelta linea = resolverLinea(d, tienda);
+            LineaResuelta linea = resolverLinea(d, tienda, vendedor);
             lineas.add(linea);
             total = total.add(linea.subtotal);
+        }
+        if (total.signum() == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La venta no puede ser de $0: agregue al menos un artículo con precio.");
         }
 
         BigDecimal montoAbonado = resolverMontoAbonado(dto, total);
@@ -345,7 +350,7 @@ public class VentaService {
         Boolean esRegalo;
     }
 
-    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda) {
+    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor) {
         ProductoMaster master = productoMasterRepository.findById(d.getIdprodmaster())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Producto maestro no encontrado: " + d.getIdprodmaster()));
@@ -385,7 +390,9 @@ public class VentaService {
 
             linea.producto = producto;
             linea.imei = d.getImei();
-            linea.costoUnitarioCompra = producto.getPreciopro();
+            // El costo de ESTA unidad (p. ej. un usado comprado a un cliente) o, si no tiene, el del modelo.
+            linea.costoUnitarioCompra = pi.getCostoUnitario() != null
+                    ? pi.getCostoUnitario() : producto.getPreciopro();
             // El precio de referencia es el de ESTA unidad (override si tiene uno propio),
             // no el genérico del modelo — es justo lo que resuelve poder liquidar un
             // equipo específico sin tocar el precio de los demás del mismo modelo.
@@ -411,8 +418,31 @@ public class VentaService {
         }
 
         linea.precioUnitarioFinal = d.getPrecioUnitarioFinal();
+        validarRegalo(linea, vendedor);
         linea.subtotal = linea.precioUnitarioFinal.multiply(BigDecimal.valueOf(linea.cantidadSolicitada));
         return linea;
+    }
+
+    /**
+     * Un precio de $0 solo es válido en un artículo marcado como regalo, y un regalo debe costar $0.
+     * Los vendedores no pueden regalar: lo autoriza un encargado o un administrador.
+     */
+    private void validarRegalo(LineaResuelta linea, Usuario vendedor) {
+        boolean precioCero = linea.precioUnitarioFinal.signum() == 0;
+        if (linea.esRegalo) {
+            if (!precioCero) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Un artículo de regalo debe tener precio $0: '" + linea.productoMaster.getNombreBase() + "'.");
+            }
+            if (vendedor.getRol() == Rol.VENDEDOR) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Solo un encargado o un administrador puede autorizar un regalo.");
+            }
+        } else if (precioCero) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Un precio de $0 solo se permite en artículos marcados como regalo (esRegalo): '"
+                            + linea.productoMaster.getNombreBase() + "'.");
+        }
     }
 
     private Producto resolverProductoNoSerial(VentaDetalleRequestDto d, ProductoMaster master, Tienda tienda) {
