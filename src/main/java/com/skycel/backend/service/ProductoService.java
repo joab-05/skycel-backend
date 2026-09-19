@@ -184,10 +184,7 @@ public class ProductoService {
         // Generar codpro si viene vacío
         String codpro = dto.getCodpro();
         if (codpro == null || codpro.trim().isEmpty()) {
-            // Equipos: CEL-000001 (contador propio). Accesorios y servicios: {código de su categoría}-000001.
-            codpro = master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR
-                    ? generarCodigoEquipo()
-                    : generarCodigoPorCategoria(master.getCategoria());
+            codpro = generarCodigoPara(master);
         } else {
             codpro = codpro.trim();
         }
@@ -697,6 +694,17 @@ public class ProductoService {
         categoriaFolioRepository.incrementar(categoria.getIdcat());
         Long folio = categoriaFolioRepository.obtenerUltimoFolioGenerado(categoria.getIdcat());
         return categoria.getCodigo().trim().toUpperCase() + "-" + String.format("%06d", folio);
+    }
+
+    /**
+     * Código nuevo para un producto de este maestro. Equipos: CEL-000001 (contador propio).
+     * Accesorios y servicios: {código de su categoría}-000001. También lo usa el traspaso al crear
+     * el producto en la tienda destino.
+     */
+    public String generarCodigoPara(ProductoMaster master) {
+        return master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR
+                ? generarCodigoEquipo()
+                : generarCodigoPorCategoria(master.getCategoria());
     }
 
     /** Código consecutivo de un equipo (CEL-000001), con un contador propio. */
