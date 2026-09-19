@@ -20,6 +20,13 @@ public class ProductoMasterRequestDTO {
 
     private String urlImagen;
 
+    @Size(max = 255, message = "La compatibilidad no puede exceder los 255 caracteres")
+    private String compatibilidad;
+
+    private Integer tiempoEstimadoMin;
+
+    private Integer diasGarantia;
+
     @NotBlank(message = "El tipo de producto es obligatorio")
     private String tipo; // CELULAR, ACCESORIO, SERVICIO
 }

@@ -40,6 +40,17 @@ public class ProductoImei {
     @Column(name = "precio_venta_override", precision = 12, scale = 2)
     private java.math.BigDecimal precioVentaOverride;
 
+    // Condición de ESTA unidad: NUEVO, USADO o REACONDICIONADO. Un equipo usado tiene su propio
+    // precio y su propia garantía, por eso vive en la unidad y no en el producto.
+    @Column(name = "condicion", nullable = false, length = 20, columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'NUEVO'")
+    @Builder.Default
+    private String condicion = "NUEVO";
+
+    // Costo de compra de ESTA unidad (p. ej. un usado comprado a un cliente). Si es null se usa el
+    // costo del modelo (Producto.preciopro) — ver VentaService.resolverLinea.
+    @Column(name = "costo_unitario", precision = 12, scale = 2)
+    private java.math.BigDecimal costoUnitario;
+
     @CreationTimestamp
     @Column(name = "fecha_registro", updatable = false)
     private LocalDateTime fechaRegistro;

@@ -12,8 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +33,11 @@ public class ProductoService {
     private final ProductoImeiRepository   productoImeiRepository;
     private final CategoriaFolioRepository categoriaFolioRepository;
     private final ProductoMapper           productoMapper;
+
+    /** Contador reservado para los equipos (CEL-000001...). categoria_folio no tiene FK real, así que 0 no choca con ninguna categoría. */
+    private static final short FOLIO_EQUIPOS = 0;
+    /** Condiciones admitidas de una unidad de equipo. */
+    private static final Set<String> CONDICIONES = Set.of("NUEVO", "USADO", "REACONDICIONADO");
 
     // ──────────────────────────────────────────────────────────────────────────
     // PRODUCTO MASTER
@@ -155,6 +162,9 @@ public class ProductoService {
                         .modelo(esEquipo ? trimOrNull(dto.getModelo()) : null)
                         .especificaciones(!esEquipo ? trimOrNull(dto.getDescripcion()) : null)
                         .notaAdicional(esServicio ? trimOrNull(dto.getDescripcion2()) : null)
+                        .compatibilidad(!esEquipo ? trimOrNull(dto.getCompatibilidad()) : null)
+                        .tiempoEstimadoMin(esServicio ? validarTiempo(dto.getTiempoEstimadoMin()) : null)
+                        .diasGarantia(validarDiasGarantia(dto.getDiasGarantia()))
                         .activo(true)
                         .build();
                 master = productoMasterRepository.save(master);
@@ -174,11 +184,10 @@ public class ProductoService {
         // Generar codpro si viene vacío
         String codpro = dto.getCodpro();
         if (codpro == null || codpro.trim().isEmpty()) {
-            boolean usaCodigoPorCategoria = master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.ACCESORIO
-                    || master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.SERVICIO;
-            codpro = usaCodigoPorCategoria
-                    ? generarCodigoPorCategoria(master.getCategoria())
-                    : generarCodigoUnico(master.getTipo());
+            // Equipos: CEL-000001 (contador propio). Accesorios y servicios: {código de su categoría}-000001.
+            codpro = master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR
+                    ? generarCodigoEquipo()
+                    : generarCodigoPorCategoria(master.getCategoria());
         } else {
             codpro = codpro.trim();
         }
@@ -189,25 +198,27 @@ public class ProductoService {
                     "Ya existe el código '" + codpro + "' en esa tienda.");
 
         // Validaciones especiales por tipo de producto
+        List<UnidadEquipoDTO> unidades = List.of();
         if (master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR) {
+            unidades = unidadesDe(dto.getImeis(), dto.getUnidades());
             BigDecimal stock = dto.getStock() != null ? dto.getStock() : BigDecimal.ZERO;
             int cantidad = stock.intValue();
             if (stock.compareTo(BigDecimal.valueOf(cantidad)) != 0 || cantidad < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El stock para celulares debe ser un número entero no negativo.");
             }
             if (cantidad > 0) {
-                if (dto.getImeis() == null || dto.getImeis().size() != cantidad) {
+                if (unidades.size() != cantidad) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "Debe proporcionar exactamente " + cantidad + " IMEIs para el stock inicial.");
                 }
-                for (String imei : dto.getImeis()) {
-                    if (imei == null || !imei.matches("[A-Za-z0-9]{5,20}")) {
+                for (UnidadEquipoDTO u : unidades) {
+                    if (u.getImei() == null || !u.getImei().matches("[A-Za-z0-9]{5,20}")) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "El identificador '" + imei + "' debe tener entre 5 y 20 caracteres alfanuméricos (IMEI o número de serie).");
+                                "El identificador '" + u.getImei() + "' debe tener entre 5 y 20 caracteres alfanuméricos (IMEI o número de serie).");
                     }
-                    if (productoImeiRepository.existsByImei(imei)) {
+                    if (productoImeiRepository.existsByImei(u.getImei())) {
                         throw new ResponseStatusException(HttpStatus.CONFLICT,
-                                "El identificador '" + imei + "' ya está registrado en el sistema.");
+                                "El identificador '" + u.getImei() + "' ya está registrado en el sistema.");
                     }
                 }
             }
@@ -224,6 +235,7 @@ public class ProductoService {
         if (master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.SERVICIO) {
             producto.setStock(BigDecimal.ZERO);
         }
+        producto.setStockMinimo(validarStockMinimo(dto.getStockMinimo(), master.getTipo()));
 
         // Opcionales
         if (dto.getIdColor()     != null) producto.setColor(colorRepository.findById(dto.getIdColor()).orElse(null));
@@ -233,15 +245,8 @@ public class ProductoService {
         Producto saved = productoRepository.save(producto);
 
         // Registrar IMEIs si es celular y hay stock
-        if (master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR && dto.getImeis() != null) {
-            for (String imei : dto.getImeis()) {
-                ProductoImei prodImei = ProductoImei.builder()
-                        .producto(saved)
-                        .imei(imei)
-                        .estado("DISPONIBLE")
-                        .build();
-                productoImeiRepository.save(prodImei);
-            }
+        for (UnidadEquipoDTO u : unidades) {
+            productoImeiRepository.save(nuevaUnidad(saved, u));
         }
 
         return toDto(saved);
@@ -262,8 +267,47 @@ public class ProductoService {
         if (dto.getIdSeccion()    != null) p.setSeccion(seccionRepository.findById(dto.getIdSeccion()).orElse(null));
         if (dto.getIdMagnitud()   != null) p.setMagnitud(magnitudRepository.findById(dto.getIdMagnitud())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Magnitud no encontrada")));
+        if (dto.getStockMinimo()  != null) p.setStockMinimo(validarStockMinimo(dto.getStockMinimo(), p.getProductoMaster().getTipo()));
 
         return toDto(productoRepository.save(p));
+    }
+
+    /** Atributos del artículo que no dependen de la tienda: compatibilidad, tiempo estimado y garantía. */
+    @Transactional
+    public ProductoMasterResponseDTO actualizarMaster(Integer idprodmaster, ProductoMasterUpdateDTO dto) {
+        ProductoMaster master = productoMasterRepository.findById(idprodmaster)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Producto maestro no encontrado: " + idprodmaster));
+
+        if (dto.getCompatibilidad() != null) master.setCompatibilidad(trimOrNull(dto.getCompatibilidad()));
+        if (dto.getTiempoEstimadoMin() != null) {
+            if (master.getTipo() != com.skycel.backend.domain.enums.TipoProducto.SERVICIO) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El tiempo estimado solo aplica a servicios.");
+            }
+            master.setTiempoEstimadoMin(validarTiempo(dto.getTiempoEstimadoMin()));
+        }
+        if (dto.getDiasGarantia() != null) master.setDiasGarantia(validarDiasGarantia(dto.getDiasGarantia()));
+
+        return productoMapper.toResponse(productoMasterRepository.save(master));
+    }
+
+    /** Productos de la tienda que llegaron a su umbral de reposición. */
+    @Transactional(readOnly = true)
+    public List<ProductoResponseDTO> obtenerBajoStock(Integer codti) {
+        return productoRepository.findBajoStockByTienda(codti).stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
+
+    /** Accesorios con stock de la tienda que sirven para un modelo (incluye los "Universal"). */
+    @Transactional(readOnly = true)
+    public List<ProductoResponseDTO> obtenerAccesoriosCompatibles(Integer codti, String modelo) {
+        if (modelo == null || modelo.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el modelo (parámetro 'con').");
+        }
+        return productoRepository.findAccesoriosCompatibles(codti, modelo.trim()).stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -296,14 +340,17 @@ public class ProductoService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidad para celulares debe ser un número entero no negativo.");
             }
 
+            List<UnidadEquipoDTO> unidades = unidadesDe(dto.getImeis(), dto.getUnidades());
+            List<String> imeis = unidades.stream().map(UnidadEquipoDTO::getImei).collect(Collectors.toList());
+
             if (cantInt > 0) {
-                if (dto.getImeis() == null || dto.getImeis().size() != cantInt) {
+                if (unidades.size() != cantInt) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "Debe proporcionar exactamente " + cantInt + " IMEIs para esta operación.");
                 }
 
                 // Validar los IMEIs/números de serie proporcionados
-                for (String imei : dto.getImeis()) {
+                for (String imei : imeis) {
                     if (imei == null || !imei.matches("[A-Za-z0-9]{5,20}")) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                                 "El identificador '" + imei + "' debe tener entre 5 y 20 caracteres alfanuméricos (IMEI o número de serie).");
@@ -314,26 +361,21 @@ public class ProductoService {
             switch (dto.getTipo().toUpperCase()) {
                 case "ENTRADA" -> {
                     // Validar que no existan
-                    for (String imei : dto.getImeis()) {
+                    for (String imei : imeis) {
                         if (productoImeiRepository.existsByImei(imei)) {
                             throw new ResponseStatusException(HttpStatus.CONFLICT,
                                     "El IMEI '" + imei + "' ya está registrado en el sistema.");
                         }
                     }
                     // Insertar
-                    for (String imei : dto.getImeis()) {
-                        ProductoImei pi = ProductoImei.builder()
-                                .producto(p)
-                                .imei(imei)
-                                .estado("DISPONIBLE")
-                                .build();
-                        productoImeiRepository.save(pi);
+                    for (UnidadEquipoDTO u : unidades) {
+                        productoImeiRepository.save(nuevaUnidad(p, u));
                     }
                     p.setStock(stockActual.add(cantidad));
                 }
                 case "SALIDA" -> {
                     // Validar que existan y estén DISPONIBLES para este producto
-                    for (String imei : dto.getImeis()) {
+                    for (String imei : imeis) {
                         ProductoImei pi = productoImeiRepository.findByImei(imei)
                                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                                         "El IMEI '" + imei + "' no existe."));
@@ -351,7 +393,7 @@ public class ProductoService {
                     if (dto.getComentario() != null && dto.getComentario().toUpperCase().contains("VENTA")) {
                         nuevoEstado = "VENDIDO";
                     }
-                    for (String imei : dto.getImeis()) {
+                    for (String imei : imeis) {
                         ProductoImei pi = productoImeiRepository.findByImei(imei).get();
                         pi.setEstado(nuevoEstado);
                         productoImeiRepository.save(pi);
@@ -366,7 +408,7 @@ public class ProductoService {
                 case "AJUSTE" -> {
                     // Para AJUSTE:
                     // 1. Validar que los IMEIs no pertenezcan a otro producto
-                    for (String imei : dto.getImeis()) {
+                    for (String imei : imeis) {
                         productoImeiRepository.findByImei(imei).ifPresent(pi -> {
                             if (!pi.getProducto().getIdproducto().equals(p.getIdproducto())) {
                                 throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -381,19 +423,18 @@ public class ProductoService {
                         productoImeiRepository.save(pi);
                     }
                     // 3. Registrar los nuevos, reactivando los que ya existían o insertando nuevos
-                    for (String imei : dto.getImeis()) {
-                        Optional<ProductoImei> piOpt = productoImeiRepository.findByImei(imei);
+                    for (UnidadEquipoDTO u : unidades) {
+                        Optional<ProductoImei> piOpt = productoImeiRepository.findByImei(u.getImei());
                         if (piOpt.isPresent()) {
                             ProductoImei pi = piOpt.get();
                             pi.setEstado("DISPONIBLE");
+                            // Si se enviaron datos propios de la unidad, se actualizan; si no, se conservan los que tenía
+                            if (u.getCondicion() != null) pi.setCondicion(normalizarCondicion(u.getCondicion()));
+                            if (u.getCostoUnitario() != null) pi.setCostoUnitario(u.getCostoUnitario());
+                            if (u.getPrecioVenta() != null) pi.setPrecioVentaOverride(u.getPrecioVenta());
                             productoImeiRepository.save(pi);
                         } else {
-                            ProductoImei pi = ProductoImei.builder()
-                                    .producto(p)
-                                    .imei(imei)
-                                    .estado("DISPONIBLE")
-                                    .build();
-                            productoImeiRepository.save(pi);
+                            productoImeiRepository.save(nuevaUnidad(p, u));
                         }
                     }
                     p.setStock(cantidad);
@@ -452,11 +493,28 @@ public class ProductoService {
         pi.setPrecioVentaOverride(nuevoPrecio); // null = quitar el override, vuelve al precio del modelo
         pi = productoImeiRepository.save(pi);
 
-        BigDecimal precioModelo = pi.getProducto().getPreciopub();
-        return new ImeiInfoDTO(
-                pi.getImei(),
-                pi.getPrecioVentaOverride() != null ? pi.getPrecioVentaOverride() : precioModelo,
-                pi.getPrecioVentaOverride() != null);
+        return toImeiInfo(pi, pi.getProducto());
+    }
+
+    /** Corrige la condición o el costo de una unidad disponible. */
+    @Transactional
+    public ImeiInfoDTO actualizarImei(String imei, ImeiUpdateDTO dto) {
+        ProductoImei pi = productoImeiRepository.findByImei(imei)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "El IMEI '" + imei + "' no está registrado."));
+
+        if (!"DISPONIBLE".equals(pi.getEstado())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Solo se puede modificar una unidad disponible (estado actual: " + pi.getEstado() + ").");
+        }
+        if (dto.getCondicion() != null) pi.setCondicion(normalizarCondicion(dto.getCondicion()));
+        if (dto.getCostoUnitario() != null) {
+            if (dto.getCostoUnitario().signum() < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El costo no puede ser negativo.");
+            }
+            pi.setCostoUnitario(dto.getCostoUnitario());
+        }
+        return toImeiInfo(productoImeiRepository.save(pi), pi.getProducto());
     }
 
     // ── Mapeo enriquecido ─────────────────────────────────────────────────────
@@ -471,25 +529,132 @@ public class ProductoService {
         if (p.getProductoMaster() != null && p.getProductoMaster().getCategoria() != null) {
             dto.setNombreCategoria(p.getProductoMaster().getCategoria().getNombre());
         }
+        boolean esServicio = false;
         if (p.getProductoMaster() != null) {
             dto.setMarca(p.getProductoMaster().getMarca());
             dto.setModelo(p.getProductoMaster().getModelo());
             dto.setDescripcion(p.getProductoMaster().getEspecificaciones());
             dto.setDescripcion2(p.getProductoMaster().getNotaAdicional());
+            dto.setCompatibilidad(p.getProductoMaster().getCompatibilidad());
+            dto.setTiempoEstimadoMin(p.getProductoMaster().getTiempoEstimadoMin());
+            dto.setDiasGarantia(p.getProductoMaster().getDiasGarantia());
+            esServicio = p.getProductoMaster().getTipo() == com.skycel.backend.domain.enums.TipoProducto.SERVICIO;
         }
+        // Alerta de reposición: stock <= umbral, solo si hay umbral definido y no es un servicio
+        BigDecimal minimo = p.getStockMinimo() != null ? p.getStockMinimo() : BigDecimal.ZERO;
+        BigDecimal stock = p.getStock() != null ? p.getStock() : BigDecimal.ZERO;
+        dto.setStockMinimo(minimo);
+        dto.setBajoStock(!esServicio && minimo.signum() > 0 && stock.compareTo(minimo) <= 0);
+
         if (p.getProductoMaster() != null && p.getProductoMaster().getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR) {
-            BigDecimal precioModelo = p.getPreciopub();
             List<ImeiInfoDTO> availableImeis = productoImeiRepository.findByProducto_IdproductoAndEstado(p.getIdproducto(), "DISPONIBLE")
                     .stream()
-                    .map(pi -> new ImeiInfoDTO(
-                            pi.getImei(),
-                            pi.getPrecioVentaOverride() != null ? pi.getPrecioVentaOverride() : precioModelo,
-                            pi.getPrecioVentaOverride() != null))
+                    .map(pi -> toImeiInfo(pi, p))
                     .collect(Collectors.toList());
             dto.setImeisDisponibles(availableImeis);
         }
         dto.setActivo(p.getActivo());
         return dto;
+    }
+
+    /** Datos de una unidad: precio y costo efectivos (propios si los tiene, si no los del modelo) y su condición. */
+    private ImeiInfoDTO toImeiInfo(ProductoImei pi, Producto p) {
+        boolean precioPropio = pi.getPrecioVentaOverride() != null;
+        boolean costoPropio = pi.getCostoUnitario() != null;
+        return new ImeiInfoDTO(
+                pi.getImei(),
+                precioPropio ? pi.getPrecioVentaOverride() : p.getPreciopub(),
+                precioPropio,
+                pi.getCondicion() != null ? pi.getCondicion() : "NUEVO",
+                costoPropio ? pi.getCostoUnitario() : p.getPreciopro(),
+                costoPropio);
+    }
+
+    // ── Unidades de equipo (IMEI / serie) ─────────────────────────────────────
+
+    /**
+     * Unifica las dos formas de enviar unidades: la lista simple `imeis` (todas nuevas, con el costo
+     * y el precio del modelo) o `unidades`, con condición, costo y precio propios. Devuelve siempre
+     * una lista (vacía si no se envió ninguna). No se aceptan ambas a la vez.
+     */
+    private List<UnidadEquipoDTO> unidadesDe(List<String> imeis, List<UnidadEquipoDTO> unidades) {
+        boolean hayImeis = imeis != null && !imeis.isEmpty();
+        boolean hayUnidades = unidades != null && !unidades.isEmpty();
+        if (hayImeis && hayUnidades) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Envíe 'imeis' o 'unidades', no ambas.");
+        }
+        if (hayUnidades) {
+            for (UnidadEquipoDTO u : unidades) {
+                normalizarCondicion(u.getCondicion());
+                if (u.getCostoUnitario() != null && u.getCostoUnitario().signum() < 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El costo de la unidad no puede ser negativo.");
+                }
+                if (u.getPrecioVenta() != null && u.getPrecioVenta().signum() <= 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El precio de la unidad debe ser mayor a 0.");
+                }
+            }
+            return unidades;
+        }
+        List<UnidadEquipoDTO> simples = new ArrayList<>();
+        if (hayImeis) {
+            for (String imei : imeis) {
+                UnidadEquipoDTO u = new UnidadEquipoDTO();
+                u.setImei(imei);
+                simples.add(u);
+            }
+        }
+        return simples;
+    }
+
+    private ProductoImei nuevaUnidad(Producto p, UnidadEquipoDTO u) {
+        return ProductoImei.builder()
+                .producto(p)
+                .imei(u.getImei())
+                .estado("DISPONIBLE")
+                .condicion(normalizarCondicion(u.getCondicion()))
+                .costoUnitario(u.getCostoUnitario())
+                .precioVentaOverride(u.getPrecioVenta())
+                .build();
+    }
+
+    /** Mayúsculas y validación; sin valor equivale a NUEVO. */
+    private String normalizarCondicion(String condicion) {
+        if (condicion == null || condicion.isBlank()) return "NUEVO";
+        String c = condicion.trim().toUpperCase();
+        if (!CONDICIONES.contains(c)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Condición inválida: '" + condicion + "'. Use NUEVO, USADO o REACONDICIONADO.");
+        }
+        return c;
+    }
+
+    // ── Validaciones de atributos ─────────────────────────────────────────────
+
+    /** Umbral de reposición: no negativo y sin sentido en servicios (siempre 0). */
+    private BigDecimal validarStockMinimo(BigDecimal minimo, com.skycel.backend.domain.enums.TipoProducto tipo) {
+        if (minimo == null) return BigDecimal.ZERO;
+        if (minimo.signum() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El stock mínimo no puede ser negativo.");
+        }
+        if (tipo == com.skycel.backend.domain.enums.TipoProducto.SERVICIO && minimo.signum() > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El stock mínimo no aplica a servicios.");
+        }
+        return minimo;
+    }
+
+    private Integer validarTiempo(Integer minutos) {
+        if (minutos != null && minutos < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El tiempo estimado debe ser de al menos 1 minuto.");
+        }
+        return minutos;
+    }
+
+    private Integer validarDiasGarantia(Integer dias) {
+        if (dias != null && dias < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los días de garantía no pueden ser negativos.");
+        }
+        return dias;
     }
 
     /**
@@ -534,22 +699,10 @@ public class ProductoService {
         return categoria.getCodigo().trim().toUpperCase() + "-" + String.format("%06d", folio);
     }
 
-    private String generarCodigoUnico(com.skycel.backend.domain.enums.TipoProducto tipo) {
-        String prefix = switch (tipo) {
-            case CELULAR -> "CEL-";
-            case SERVICIO -> "SRV-";
-            default -> "ACC-";
-        };
-
-        String codpro;
-        do {
-            String randomPart = java.util.UUID.randomUUID().toString()
-                    .replace("-", "")
-                    .substring(0, 8)
-                    .toUpperCase();
-            codpro = prefix + randomPart;
-        } while (productoRepository.findByCodpro(codpro).isPresent());
-
-        return codpro;
+    /** Código consecutivo de un equipo (CEL-000001), con un contador propio. */
+    private String generarCodigoEquipo() {
+        categoriaFolioRepository.incrementar(FOLIO_EQUIPOS);
+        Long folio = categoriaFolioRepository.obtenerUltimoFolioGenerado(FOLIO_EQUIPOS);
+        return "CEL-" + String.format("%06d", folio);
     }
 }

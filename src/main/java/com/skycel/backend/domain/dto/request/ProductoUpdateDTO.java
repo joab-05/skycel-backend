@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 public class ProductoUpdateDTO {
     private BigDecimal precioCompra;   // nuevo precio de compra
     private BigDecimal precioVenta;    // nuevo precio de venta
+    private BigDecimal stockMinimo;    // nuevo umbral de reposición (0 quita la alerta)
     private Short      idColor;
     private Short      idProveedor;
     private Short      idSeccion;

@@ -19,6 +19,7 @@ public interface ProductoMasterRepository extends JpaRepository<ProductoMaster, 
 
     @Query("SELECT p FROM ProductoMaster p WHERE p.activo = true AND " +
            "(LOWER(p.nombreBase) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(p.notaAdicional) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+           "LOWER(p.notaAdicional) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "LOWER(p.compatibilidad) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     List<ProductoMaster> searchByKeyword(String keyword);
 }

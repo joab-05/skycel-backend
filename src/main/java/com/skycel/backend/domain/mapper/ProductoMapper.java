@@ -86,6 +86,10 @@ public interface ProductoMapper {
     @Mapping(target = "modelo", ignore = true)
     @Mapping(target = "descripcion", ignore = true)
     @Mapping(target = "descripcion2", ignore = true)
+    @Mapping(target = "compatibilidad", ignore = true)
+    @Mapping(target = "tiempoEstimadoMin", ignore = true)
+    @Mapping(target = "diasGarantia", ignore = true)
+    @Mapping(target = "bajoStock", ignore = true)
     @Mapping(target = "imeisDisponibles", ignore = true)
     ProductoResponseDTO toProductoResponse(Producto entity);
 }

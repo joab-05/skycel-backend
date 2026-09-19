@@ -10,6 +10,8 @@ public class ProductoResponseDTO {
     private Integer codti;                // ← tienda donde está el producto
     private String  nombreTienda;         // ← nombre de la tienda
     private BigDecimal stock;
+    private BigDecimal stockMinimo;       // umbral de reposición (0 = sin alerta)
+    private Boolean bajoStock;            // true si stock <= stockMinimo (no aplica a servicios)
     private BigDecimal preciopro;         // precio compra
     private BigDecimal preciopub;         // precio venta
     private CatalogoSimpleResponseDTO color;
@@ -22,6 +24,9 @@ public class ProductoResponseDTO {
     private String  modelo;               // solo EQUIPO
     private String  descripcion;          // "especificaciones" — ACCESORIO/SERVICIO
     private String  descripcion2;         // "notaAdicional" — solo SERVICIO
+    private String  compatibilidad;       // modelos con los que sirve — ACCESORIO/SERVICIO
+    private Integer tiempoEstimadoMin;    // duración estimada en minutos — solo SERVICIO
+    private Integer diasGarantia;         // días de garantía del artículo o servicio
     private String  nombreCategoria;      // ← categoría del maestro
     private String  tipo;                 // Tipo de producto (CELULAR, ACCESORIO, SERVICIO)
     private java.util.List<ImeiInfoDTO> imeisDisponibles; // IMEIs disponibles con su precio (solo celulares)

@@ -43,6 +43,19 @@ public class ProductoMaster {
     @Column(name = "nota_adicional", length = 500)
     private String notaAdicional;
 
+    // Modelos o familias con los que sirve un ACCESORIO o SERVICIO (ej. "iPhone 13", "Samsung/Android",
+    // "Universal"). Texto libre buscable; permite listar los accesorios de un equipo.
+    @Column(name = "compatibilidad", length = 255)
+    private String compatibilidad;
+
+    // Solo SERVICIO: duración estimada del trabajo, en minutos.
+    @Column(name = "tiempo_estimado_min")
+    private Integer tiempoEstimadoMin;
+
+    // Días de garantía que ofrece este artículo o servicio (null = sin garantía definida).
+    @Column(name = "dias_garantia")
+    private Integer diasGarantia;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo", nullable = false, length = 20)
     private TipoProducto tipo = TipoProducto.ACCESORIO;

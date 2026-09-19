@@ -21,4 +21,19 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     @Query("SELECT p FROM Producto p WHERE p.tienda.codti = :codti AND p.stock > 0 AND p.activo = true")
     List<Producto> findAvailableStockByTienda(Integer codti);
+
+    /** Productos (no servicios) que llegaron a su umbral de reposición: stock <= stockMinimo, con umbral definido. */
+    @Query("SELECT p FROM Producto p WHERE p.tienda.codti = :codti AND p.activo = true " +
+           "AND p.productoMaster.tipo <> com.skycel.backend.domain.enums.TipoProducto.SERVICIO " +
+           "AND p.stockMinimo > 0 AND p.stock <= p.stockMinimo " +
+           "ORDER BY p.stock ASC, p.codpro ASC")
+    List<Producto> findBajoStockByTienda(Integer codti);
+
+    /** Accesorios de la tienda compatibles con un modelo (o "Universal"), con stock. */
+    @Query("SELECT p FROM Producto p WHERE p.tienda.codti = :codti AND p.activo = true AND p.stock > 0 " +
+           "AND p.productoMaster.tipo = com.skycel.backend.domain.enums.TipoProducto.ACCESORIO " +
+           "AND (LOWER(p.productoMaster.compatibilidad) LIKE LOWER(CONCAT('%', :modelo, '%')) " +
+           "     OR LOWER(p.productoMaster.compatibilidad) LIKE '%universal%') " +
+           "ORDER BY p.productoMaster.nombreBase ASC")
+    List<Producto> findAccesoriosCompatibles(Integer codti, String modelo);
 }

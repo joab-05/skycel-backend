@@ -14,6 +14,17 @@ public class ProductoRequestDTO {
 
     private java.util.List<String> imeis; // Opcional. Requerido sólo si el producto es de tipo CELULAR.
 
+    // Alternativa a `imeis` cuando las unidades tienen datos propios (condición, costo, precio).
+    // No se pueden enviar ambas listas a la vez.
+    private java.util.List<UnidadEquipoDTO> unidades;
+
+    private BigDecimal stockMinimo;    // Opcional: umbral de reposición (alerta de bajo stock). No aplica a servicios.
+
+    // Atributos del artículo (solo se usan al crear el maestro, no si se reutiliza uno con idProductoMaster)
+    private String  compatibilidad;    // ACCESORIO/SERVICIO: modelos con los que sirve (ej. "iPhone 13", "Universal")
+    private Integer tiempoEstimadoMin; // SERVICIO: duración estimada en minutos
+    private Integer diasGarantia;      // Días de garantía del artículo o servicio
+
     @NotNull(message = "La tienda es obligatoria")
     private Integer codti;              // ← antes hardcodeado en el service como 1
 

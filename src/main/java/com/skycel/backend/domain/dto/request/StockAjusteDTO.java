@@ -22,4 +22,7 @@ public class StockAjusteDTO {
     private String comentario;         // motivo del ajuste
 
     private java.util.List<String> imeis; // Opcional. Lista de IMEIs si el producto es CELULAR.
+    // Alternativa a `imeis` para ENTRADA/AJUSTE cuando las unidades tienen datos propios
+    // (condición, costo, precio). No se pueden enviar ambas listas a la vez.
+    private java.util.List<UnidadEquipoDTO> unidades;
 }

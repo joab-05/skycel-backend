@@ -76,6 +76,24 @@ public class ProductoController {
         return ResponseEntity.ok(productoService.obtenerStockDisponiblePorTienda(codti));
     }
 
+    @Operation(summary = "Productos en bajo stock (stock <= stock mínimo) de una tienda")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/tienda/{codti}/bajo-stock")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<ProductoResponseDTO>> getBajoStock(@PathVariable Integer codti) {
+        return ResponseEntity.ok(productoService.obtenerBajoStock(codti));
+    }
+
+    @Operation(summary = "Accesorios con stock compatibles con un modelo (incluye los Universal)",
+            description = "Ejemplo: /api/productos/tienda/2/compatibles?con=iPhone 13")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/tienda/{codti}/compatibles")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<ProductoResponseDTO>> getAccesoriosCompatibles(
+            @PathVariable Integer codti, @RequestParam String con) {
+        return ResponseEntity.ok(productoService.obtenerAccesoriosCompatibles(codti, con));
+    }
+
     @Operation(summary = "Buscar producto por IMEI")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/imei/{imei}")
@@ -121,6 +139,24 @@ public class ProductoController {
             @PathVariable String imei,
             @RequestBody com.skycel.backend.domain.dto.request.ImeiPrecioUpdateDTO request) {
         return ResponseEntity.ok(productoService.actualizarPrecioImei(imei, request));
+    }
+
+    @Operation(summary = "Corregir la condición (NUEVO/USADO/REACONDICIONADO) o el costo de una unidad disponible")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PatchMapping("/imei/{imei}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<ImeiInfoDTO> actualizarImei(
+            @PathVariable String imei, @Valid @RequestBody ImeiUpdateDTO request) {
+        return ResponseEntity.ok(productoService.actualizarImei(imei, request));
+    }
+
+    @Operation(summary = "Actualizar compatibilidad, tiempo estimado o garantía de un producto maestro")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PatchMapping("/master/{id}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<ProductoMasterResponseDTO> actualizarMaster(
+            @PathVariable Integer id, @Valid @RequestBody ProductoMasterUpdateDTO request) {
+        return ResponseEntity.ok(productoService.actualizarMaster(id, request));
     }
 
     @Operation(summary = "Desactivar producto (soft delete)")

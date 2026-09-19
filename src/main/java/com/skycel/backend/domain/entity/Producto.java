@@ -60,6 +60,11 @@ public class Producto {
     @Column(name = "stock", precision = 10, scale = 2, columnDefinition = "DECIMAL(10,2) DEFAULT 0.00")
     private BigDecimal stock;
 
+    // Umbral de reposición: cuando stock <= stockMinimo el producto aparece en las alertas de bajo stock.
+    // null o 0 = sin alerta. No aplica a servicios.
+    @Column(name = "stock_minimo", precision = 10, scale = 2, columnDefinition = "DECIMAL(10,2) DEFAULT 0.00")
+    private BigDecimal stockMinimo;
+
     @Column(name = "preciopro", nullable = false, precision = 12, scale = 4, columnDefinition = "DECIMAL(12,4) DEFAULT 0.0000")
     private BigDecimal preciopro;
 
