@@ -44,4 +44,6 @@ public class VentaResponseDto {
 
     // ── Líneas ────────────────────────────────────────────────────────────────
     private List<VentaDetalleResponseDto> detalles;
+    /** Desglose del pago (solo ventas con método Mixto; vacío en las demás). */
+    private List<VentaPagoDetalleResponseDto> pagos;
 }

@@ -49,6 +49,7 @@ class VentaServiceTest {
     @Mock private UsuarioRepository        usuarioRepository;
     @Mock private MovimientoCajaService    movimientoCajaService;
     @Mock private CuentaPorCobrarService   cuentaPorCobrarService;
+    @Mock private VentaPagoDetalleRepository ventaPagoDetalleRepository;
 
     @InjectMocks
     private VentaService ventaService;
@@ -350,6 +351,152 @@ class VentaServiceTest {
             ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 1))), ID_VENDEDOR);
 
             verify(cuentaPorCobrarService, never()).crearDesdeVenta(any(), any(), any());
+        }
+    }
+
+    // ── Crear — pago MIXTO ───────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("crear — pago Mixto")
+    class PagoMixto {
+
+        private com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto pago(int metodo, String monto, String folio) {
+            var p = new com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto();
+            p.setMetodoPago((byte) metodo);
+            p.setMonto(new BigDecimal(monto));
+            p.setFolioOperacion(folio);
+            return p;
+        }
+
+        /** Venta de 4 accesorios a $15 = $60, con método Mixto y el desglose indicado. */
+        private VentaRequestDto mixta(com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto... pagos) {
+            ProductoMaster master = masterAccesorio();
+            Producto producto = productoAccesorio(master, BigDecimal.TEN);
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(producto));
+            VentaRequestDto request = ventaBase(List.of(lineaAccesorio((short) 4)));
+            request.setMetodoPago((byte) 4);
+            request.setPagos(pagos.length == 0 ? null : List.of(pagos));
+            return request;
+        }
+
+        private void conCliente(VentaRequestDto request) {
+            Cliente cliente = Cliente.builder().idcliente(7).nombreCompleto("María López").build();
+            when(clienteRepository.findById(7)).thenReturn(Optional.of(cliente));
+            request.setIdcliente(7);
+        }
+
+        @Test
+        @DisplayName("desglose completo: guarda cada línea, abona la suma y solo el efectivo entra a caja")
+        void desgloseCompleto_soloElEfectivoEntraACaja() {
+            VentaRequestDto request = mixta(pago(1, "40", null), pago(2, "20", "VOU-123"));
+            when(ventaPagoDetalleRepository.findByVenta_IdventaOrderByIdpagoDetalle(500)).thenReturn(List.of(
+                    VentaPagoDetalle.builder().metodoPago((byte) 1).monto(new BigDecimal("40")).build(),
+                    VentaPagoDetalle.builder().metodoPago((byte) 2).monto(new BigDecimal("20")).folioOperacion("VOU-123").build()));
+
+            VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
+
+            assertThat(response.getTotal()).isEqualByComparingTo("60");
+            assertThat(response.getMontoAbonado()).isEqualByComparingTo("60");
+            assertThat(response.getPagos()).hasSize(2);
+            assertThat(response.getPagos().get(0).getDescripcionMetodoPago()).isEqualTo("Efectivo");
+            assertThat(response.getPagos().get(1).getFolioOperacion()).isEqualTo("VOU-123");
+
+            ArgumentCaptor<VentaPagoDetalle> cap = ArgumentCaptor.forClass(VentaPagoDetalle.class);
+            verify(ventaPagoDetalleRepository, times(2)).save(cap.capture());
+            assertThat(cap.getAllValues().get(0).getMonto()).isEqualByComparingTo("40");
+            assertThat(cap.getAllValues().get(1).getMonto()).isEqualByComparingTo("20");
+            assertThat(cap.getAllValues().get(1).getFolioOperacion()).isEqualTo("VOU-123");
+            verify(movimientoCajaService).registrarEntradaVenta(any(Venta.class), eq(vendedor),
+                    argThat(m -> m.compareTo(new BigDecimal("40")) == 0));
+            verify(movimientoCajaService, never()).registrarVentaEfectivo(any(), any());
+            verify(cuentaPorCobrarService, never()).crearDesdeVenta(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("sin efectivo en el desglose (tarjeta + transferencia): no entra dinero a caja")
+        void sinEfectivo_noEntraNadaACaja() {
+            ventaService.crear(mixta(pago(2, "30", null), pago(3, "30", "SPEI-9")), ID_VENDEDOR);
+
+            verify(movimientoCajaService).registrarEntradaVenta(any(Venta.class), eq(vendedor),
+                    argThat(m -> m.signum() == 0));
+        }
+
+        @Test
+        @DisplayName("desglose menor al total con cliente: es venta a crédito por el saldo")
+        void sumaMenorAlTotal_conCliente_generaCuentaPorElSaldo() {
+            VentaRequestDto request = mixta(pago(1, "30", null), pago(2, "10", null));
+            conCliente(request);
+
+            VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
+
+            assertThat(response.getMontoAbonado()).isEqualByComparingTo("40");
+            verify(cuentaPorCobrarService).crearDesdeVenta(any(Venta.class), argThat(s -> s.compareTo(new BigDecimal("20")) == 0), isNull());
+        }
+
+        @Test
+        @DisplayName("desglose menor al total sin cliente: 400")
+        void sumaMenorAlTotal_sinCliente() {
+            assertThatThrownBy(() -> ventaService.crear(mixta(pago(1, "30", null), pago(2, "10", null)), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("requiere un cliente registrado");
+            verify(ventaRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("desglose mayor al total: 400")
+        void sumaMayorAlTotal() {
+            assertThatThrownBy(() -> ventaService.crear(mixta(pago(1, "40", null), pago(2, "30", null)), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("supera el total");
+            verify(ventaRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("monto abonado que contradice la suma del desglose: 400")
+        void montoAbonadoContradice() {
+            VentaRequestDto request = mixta(pago(1, "40", null), pago(2, "20", null));
+            request.setMontoAbonado(new BigDecimal("50"));
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("no coincide");
+        }
+
+        @Test
+        @DisplayName("método Mixto sin desglose: 400")
+        void sinDesglose() {
+            assertThatThrownBy(() -> ventaService.crear(mixta(), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("desglose");
+        }
+
+        @Test
+        @DisplayName("desglose de una sola línea: 400")
+        void unaSolaLinea() {
+            assertThatThrownBy(() -> ventaService.crear(mixta(pago(1, "60", null)), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("al menos 2 líneas");
+        }
+
+        @Test
+        @DisplayName("una línea con método no válido (p. ej. Mixto dentro del Mixto): 400")
+        void metodoNoValidoEnLinea() {
+            assertThatThrownBy(() -> ventaService.crear(mixta(pago(1, "30", null), pago(4, "30", null)), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("no válido");
+        }
+
+        @Test
+        @DisplayName("desglose con un método que no es Mixto: 400")
+        void desgloseConMetodoNoMixto() {
+            VentaRequestDto request = mixta(pago(1, "30", null), pago(2, "30", null));
+            request.setMetodoPago((byte) 1);
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("solo aplica al método Mixto");
         }
     }
 

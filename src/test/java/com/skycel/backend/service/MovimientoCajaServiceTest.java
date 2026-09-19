@@ -287,6 +287,25 @@ class MovimientoCajaServiceTest {
     }
 
     @Test
+    @DisplayName("entrada por el efectivo de un pago mixto: registra ese monto; con 0 no registra nada")
+    void entradaVentaMixta() {
+        CatMotivo motivoVenta = CatMotivo.builder().idmotivo(1).nombre("Venta").tipoMov((byte) 1).catSat((byte) 1).activo(true).build();
+        when(catMotivoRepository.findByNombre("Venta")).thenReturn(Optional.of(motivoVenta));
+        Venta venta = Venta.builder().idventa(9).caja(caja).total(new BigDecimal("998.00")).build();
+
+        service.registrarEntradaVenta(venta, encargado, BigDecimal.ZERO);
+        service.registrarEntradaVenta(venta, encargado, null);
+        verify(movimientoCajaRepository, never()).save(any());
+
+        service.registrarEntradaVenta(venta, encargado, new BigDecimal("500.00"));
+
+        ArgumentCaptor<MovimientoCaja> cap = ArgumentCaptor.forClass(MovimientoCaja.class);
+        verify(movimientoCajaRepository).save(cap.capture());
+        assertThat(cap.getValue().getMonto()).isEqualByComparingTo("500.00");
+        assertThat(cap.getValue().getObservaciones()).isEqualTo("Venta #9");
+    }
+
+    @Test
     @DisplayName("cancelar una venta sin movimiento (no fue efectivo / es anterior): no registra nada")
     void cancelacionSinMovimientoOriginal() {
         CatMotivo motivoVenta = CatMotivo.builder().idmotivo(1).nombre("Venta").tipoMov((byte) 1).catSat((byte) 1).activo(true).build();

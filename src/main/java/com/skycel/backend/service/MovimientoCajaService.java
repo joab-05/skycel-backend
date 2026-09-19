@@ -97,7 +97,13 @@ public class MovimientoCajaService {
         BigDecimal monto = venta.getMontoAbonado() != null
                 ? venta.getMontoAbonado().min(venta.getTotal())
                 : venta.getTotal();
-        if (monto.signum() <= 0) return;
+        registrarEntradaVenta(venta, vendedor, monto);
+    }
+
+    /** Entrada por la parte en efectivo de una venta (p. ej. el efectivo de un pago Mixto). */
+    @Transactional
+    public void registrarEntradaVenta(Venta venta, Usuario vendedor, BigDecimal monto) {
+        if (monto == null || monto.signum() <= 0) return;
         guardar(venta.getCaja(), vendedor, null, motivoSistema(VENTA), monto, referenciaVenta(venta.getIdventa()), null);
     }
 

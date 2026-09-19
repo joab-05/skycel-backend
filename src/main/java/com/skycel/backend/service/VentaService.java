@@ -4,6 +4,8 @@ import com.skycel.backend.domain.entity.*;
 import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.dto.venta.VentaDetalleRequestDto;
 import com.skycel.backend.dto.venta.VentaDetalleResponseDto;
+import com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto;
+import com.skycel.backend.dto.venta.VentaPagoDetalleResponseDto;
 import com.skycel.backend.dto.venta.VentaRequestDto;
 import com.skycel.backend.dto.venta.VentaResponseDto;
 import com.skycel.backend.repository.*;
@@ -18,6 +20,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -31,7 +34,9 @@ import java.util.stream.Collectors;
  *    esa cuenta; si ya tiene abonos, la cancelación se bloquea.
  *  - Movimientos de caja: una venta en EFECTIVO registra una entrada (lo abonado,
  *    sin exceder el total); cancelarla registra la salida que la revierte. Los demás
- *    métodos de pago no mueven la caja. Aún no se asocia la sesión de caja (idsesion).
+ *    métodos de pago no mueven la caja. Un pago MIXTO exige el desglose (pagos): el monto
+ *    abonado es la suma de sus líneas y solo la parte en efectivo entra a la caja.
+ *    Aún no se asocia la sesión de caja (idsesion).
  */
 @Service
 @RequiredArgsConstructor
@@ -40,6 +45,9 @@ public class VentaService {
     private static final byte ESTADO_COMPLETADA = 1;
     private static final byte ESTADO_CANCELADA  = 2;
     private static final byte METODO_EFECTIVO   = 1;
+    private static final byte METODO_MIXTO      = 4;
+    /** Métodos admitidos en las líneas de un pago Mixto: efectivo, tarjeta, transferencia y PayJoy. */
+    private static final Set<Byte> METODOS_DESGLOSE = Set.of((byte) 1, (byte) 2, (byte) 3, (byte) 5);
 
     private final VentaRepository          ventaRepository;
     private final VentaDetalleRepository   ventaDetalleRepository;
@@ -52,6 +60,7 @@ public class VentaService {
     private final UsuarioRepository        usuarioRepository;
     private final MovimientoCajaService    movimientoCajaService;
     private final CuentaPorCobrarService   cuentaPorCobrarService;
+    private final VentaPagoDetalleRepository ventaPagoDetalleRepository;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
@@ -94,7 +103,7 @@ public class VentaService {
             total = total.add(linea.subtotal);
         }
 
-        BigDecimal montoAbonado = dto.getMontoAbonado() != null ? dto.getMontoAbonado() : total;
+        BigDecimal montoAbonado = resolverMontoAbonado(dto, total);
 
         if (montoAbonado.compareTo(total) < 0 && cliente == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -121,6 +130,7 @@ public class VentaService {
                 .observaciones(dto.getObservaciones())
                 .build();
         venta = ventaRepository.save(venta);
+        guardarDesglose(venta, dto);
 
         // 3) Aplicar el descuento de stock/IMEI y guardar cada línea.
         List<VentaDetalle> detallesGuardados = new ArrayList<>();
@@ -144,6 +154,9 @@ public class VentaService {
         // 4) Solo el efectivo mueve la caja (tarjeta/transferencia/PayJoy no entran al cajón).
         if (venta.getMetodoPago() != null && venta.getMetodoPago() == METODO_EFECTIVO) {
             movimientoCajaService.registrarVentaEfectivo(venta, vendedor);
+        } else if (venta.getMetodoPago() != null && venta.getMetodoPago() == METODO_MIXTO) {
+            // En un pago Mixto solo la parte pagada en efectivo entra al cajón.
+            movimientoCajaService.registrarEntradaVenta(venta, vendedor, efectivoDelDesglose(dto));
         }
 
         // 5) Venta a crédito: el saldo queda como cuenta por cobrar (el cliente es obligatorio, ya validado).
@@ -152,6 +165,80 @@ public class VentaService {
         }
 
         return toResponseDto(venta, detallesGuardados);
+    }
+
+    // ── Pago Mixto ───────────────────────────────────────────────────────────
+
+    /**
+     * Monto abonado de la venta. En un pago Mixto es la suma del desglose (que no puede superar el total
+     * ni contradecir un montoAbonado explícito); en los demás casos, lo indicado o el total.
+     */
+    private BigDecimal resolverMontoAbonado(VentaRequestDto dto, BigDecimal total) {
+        boolean mixto = dto.getMetodoPago() != null && dto.getMetodoPago() == METODO_MIXTO;
+        List<VentaPagoDetalleRequestDto> pagos = dto.getPagos();
+        boolean hayPagos = pagos != null && !pagos.isEmpty();
+
+        if (!mixto) {
+            if (hayPagos) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "El desglose de pagos solo aplica al método Mixto (4).");
+            }
+            return dto.getMontoAbonado() != null ? dto.getMontoAbonado() : total;
+        }
+
+        if (!hayPagos || pagos.size() < 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Un pago Mixto requiere el desglose (pagos) con al menos 2 líneas.");
+        }
+        BigDecimal suma = BigDecimal.ZERO;
+        for (VentaPagoDetalleRequestDto p : pagos) {
+            if (p.getMetodoPago() == null || !METODOS_DESGLOSE.contains(p.getMetodoPago())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Método de pago no válido en el desglose: " + p.getMetodoPago()
+                                + " (use 1 Efectivo, 2 Tarjeta, 3 Transferencia o 5 PayJoy).");
+            }
+            suma = suma.add(p.getMonto());
+        }
+        if (suma.compareTo(total) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El desglose ($" + suma + ") supera el total de la venta ($" + total + ").");
+        }
+        if (dto.getMontoAbonado() != null && dto.getMontoAbonado().compareTo(suma) != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El monto abonado ($" + dto.getMontoAbonado() + ") no coincide con la suma del desglose ($" + suma + ").");
+        }
+        return suma;
+    }
+
+    private void guardarDesglose(Venta venta, VentaRequestDto dto) {
+        if (venta.getMetodoPago() == null || venta.getMetodoPago() != METODO_MIXTO) return;
+        for (VentaPagoDetalleRequestDto p : dto.getPagos()) {
+            ventaPagoDetalleRepository.save(VentaPagoDetalle.builder()
+                    .venta(venta)
+                    .metodoPago(p.getMetodoPago())
+                    .monto(p.getMonto())
+                    .folioOperacion(p.getFolioOperacion())
+                    .build());
+        }
+    }
+
+    private BigDecimal efectivoDelDesglose(VentaRequestDto dto) {
+        return dto.getPagos().stream()
+                .filter(p -> p.getMetodoPago() == METODO_EFECTIVO)
+                .map(VentaPagoDetalleRequestDto::getMonto)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private List<VentaPagoDetalleResponseDto> desgloseDe(Venta venta) {
+        if (venta.getMetodoPago() == null || venta.getMetodoPago() != METODO_MIXTO) return List.of();
+        return ventaPagoDetalleRepository.findByVenta_IdventaOrderByIdpagoDetalle(venta.getIdventa()).stream()
+                .map(p -> VentaPagoDetalleResponseDto.builder()
+                        .metodoPago(p.getMetodoPago())
+                        .descripcionMetodoPago(descripcionMetodoPago(p.getMetodoPago()))
+                        .monto(p.getMonto())
+                        .folioOperacion(p.getFolioOperacion())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     // ── Consultas ────────────────────────────────────────────────────────────
@@ -402,6 +489,7 @@ public class VentaService {
                 .observaciones(venta.getObservaciones())
                 .fechaVenta(venta.getFechaVenta())
                 .detalles(detalles.stream().map(this::toDetalleDto).collect(Collectors.toList()))
+                .pagos(desgloseDe(venta))
                 .build();
     }
 

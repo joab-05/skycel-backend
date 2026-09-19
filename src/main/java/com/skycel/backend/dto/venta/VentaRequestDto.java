@@ -46,6 +46,13 @@ public class VentaRequestDto {
      */
     private LocalDate fechaVencimientoCredito;
 
+    /**
+     * Desglose del pago. Obligatorio (2 líneas o más) cuando metodoPago = 4 (Mixto) y no se admite con
+     * otros métodos. El monto abonado es la suma de las líneas; si es menor al total, es una venta a crédito.
+     */
+    @Valid
+    private List<VentaPagoDetalleRequestDto> pagos;
+
     @NotEmpty(message = "La venta debe tener al menos un artículo")
     @Valid
     private List<VentaDetalleRequestDto> detalles;
