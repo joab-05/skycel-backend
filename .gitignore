@@ -37,3 +37,7 @@ build/
 
 ### Others ###
 *.log
+
+### Credenciales locales (usar secrets.example.yml como plantilla) ###
+src/main/resources/secrets.yml
+backup-*.sql

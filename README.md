@@ -16,7 +16,7 @@ Actualmente el proyecto cuenta con:
 2. Selecciona `File` -> `Open...` y elige la carpeta `skycel-backend`. (Asegúrate de abrir la carpeta que contiene el archivo pom.xml).
 3. IntelliJ detectará automáticamente que es un proyecto Maven e indexará las dependencias. Esto puede tardar 1-2 minutos.
 4. Asegúrate que en `File -> Project Structure`, el `Project SDK` esté seteado a **Java 21**.
-5. Ve a `src/main/resources/application.yml` y valida que la contraseña local del root de MySQL sea correcta.
+5. Copia `src/main/resources/secrets.example.yml` como `src/main/resources/secrets.yml` y pon tu usuario/contraseña de MySQL y una clave JWT propia. Ese archivo está en `.gitignore` y no se sube al repositorio. (Alternativa: definir las variables de entorno `DB_USERNAME`, `DB_PASSWORD` y `JWT_SECRET`, que tienen prioridad.)
 6. Ejecuta la clase principal: `src/main/java/com/skycel/backend/SkycelBackendApplication.java` dándole clic derecho -> `Run 'SkycelBackendApplication.main()'`.
 7. Si el log de la consola dice `Started SkycelBackendApplication in X seconds`, ¡Felicidades! Tienes tu servicio conectado a tu DDL original.
 

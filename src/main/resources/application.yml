@@ -1,11 +1,17 @@
 spring:
   application:
     name: skycel-backend
+  config:
+    # Credenciales fuera de Git: ver secrets.example.yml. Las variables de entorno tienen prioridad.
+    import: optional:classpath:secrets.yml
+  threads:
+    virtual:
+      enabled: true  # Habilita Virtual Threads en Tomcat
     
   datasource:
     url: jdbc:mysql://localhost:3306/skyceldb2?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: Duarte05&..
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
     type: com.zaxxer.hikari.HikariDataSource
     hikari:
@@ -35,7 +41,7 @@ spring:
       
   security:
     jwt:
-      secret: "OThkNWRhZTE4NDdkOThmZmY5OWRmMjQ1Yzc3OTM2YjJhOThmMDRkY2ZmMzg2Yjc2ZTkzOGZiNTkzNDk0NzI5Yw==" # Secret AES256 for HMAC-SHA
+      secret: ${JWT_SECRET} # Cadena aleatoria de 64+ caracteres (HS512). Se define en secrets.yml o como variable de entorno
       expiration-ms: 43200000 # 12 horas de duración del Token
 
 springdoc:
