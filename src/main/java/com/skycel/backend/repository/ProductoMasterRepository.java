@@ -12,6 +12,8 @@ import java.util.Optional;
 public interface ProductoMasterRepository extends JpaRepository<ProductoMaster, Integer> {
     
     List<ProductoMaster> findByActivoTrue();
+
+    Optional<ProductoMaster> findByNombreBaseIgnoreCaseAndActivoTrue(String nombreBase);
     
     List<ProductoMaster> findByCategoria_IdcatAndActivoTrue(Short idcat);
 

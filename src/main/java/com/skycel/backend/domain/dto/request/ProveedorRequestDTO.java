@@ -22,6 +22,12 @@ public class ProveedorRequestDTO {
     @Size(max = 100, message = "El email no puede exceder 100 caracteres")
     private String emailContacto;
 
+    @Size(max = 100, message = "El email no puede exceder 100 caracteres")
+    private String nombreContacto;
+
+    @Size(max = 60, message = "El email no puede exceder 60 caracteres")
+    private String categoria;
+
     private Integer diasCredito;
 
     private String condicionesGarantia;

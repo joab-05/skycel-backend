@@ -81,5 +81,11 @@ public interface ProductoMapper {
     @Mapping(target = "magnitud", source = "magnitud")
     @Mapping(target = "proveedor", source = "proveedor")
     @Mapping(target = "seccion", source = "seccion")
+    @Mapping(target = "tipo", source = "productoMaster.tipo")
+    @Mapping(target = "marca", ignore = true)
+    @Mapping(target = "modelo", ignore = true)
+    @Mapping(target = "descripcion", ignore = true)
+    @Mapping(target = "descripcion2", ignore = true)
+    @Mapping(target = "imeisDisponibles", ignore = true)
     ProductoResponseDTO toProductoResponse(Producto entity);
 }

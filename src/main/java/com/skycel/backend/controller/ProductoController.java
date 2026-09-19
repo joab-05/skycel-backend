@@ -1,9 +1,7 @@
 package com.skycel.backend.controller;
 
-import com.skycel.backend.domain.dto.request.ProductoMasterRequestDTO;
-import com.skycel.backend.domain.dto.request.ProductoRequestDTO;
-import com.skycel.backend.domain.dto.response.ProductoMasterResponseDTO;
-import com.skycel.backend.domain.dto.response.ProductoResponseDTO;
+import com.skycel.backend.domain.dto.request.*;
+import com.skycel.backend.domain.dto.response.*;
 import com.skycel.backend.service.ProductoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -11,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,73 +17,116 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/productos")
 @RequiredArgsConstructor
-@Tag(name = "Productos", description = "Endpoints para gestionar el catálogo y existencias de inventario")
+@Tag(name = "Productos", description = "Gestión de catálogo e inventario")
 public class ProductoController {
 
     private final ProductoService productoService;
 
-    // ==========================================
-    // === PRODUCTO MASTER                    ===
-    // ==========================================
+    // ── PRODUCTO MASTER ───────────────────────────────────────────────────────
 
-    @Operation(summary = "Obtener Catálogo Maestro", description = "Retorna todos los productos genéricos activos")
+    @Operation(summary = "Catálogo Maestro")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/master")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ProductoMasterResponseDTO>> getCatalogoMaestro() {
         return ResponseEntity.ok(productoService.obtenerTodosMaster());
     }
 
-    @Operation(summary = "Crear Producto Maestro", description = "Registra un nuevo producto base en el catálogo")
-    @SecurityRequirement(name = "Bearer Authentication")
-    @PostMapping("/master")
-    public ResponseEntity<ProductoMasterResponseDTO> crearMaster(@Valid @RequestBody ProductoMasterRequestDTO request) {
-        return ResponseEntity.ok(productoService.crearMaster(request));
-    }
-
-    @Operation(summary = "Buscar en Catálogo Master", description = "Busca productos maestros por palabra clave")
+    @Operation(summary = "Buscar en Catálogo Master")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/master/buscar")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ProductoMasterResponseDTO>> buscarMaster(@RequestParam String query) {
         return ResponseEntity.ok(productoService.buscarMaster(query));
     }
 
-    @Operation(summary = "Borrado Lógico Master", description = "Desactiva un producto maestro")
+    @Operation(summary = "Crear Producto Maestro")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/master")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<ProductoMasterResponseDTO> crearMaster(
+            @Valid @RequestBody ProductoMasterRequestDTO request) {
+        return ResponseEntity.ok(productoService.crearMaster(request));
+    }
+
+    @Operation(summary = "Desactivar Producto Maestro")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/master/{id}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
     public ResponseEntity<Void> eliminarMaster(@PathVariable Integer id) {
         productoService.eliminarMaster(id);
         return ResponseEntity.noContent().build();
     }
 
+    // ── PRODUCTO / STOCK ──────────────────────────────────────────────────────
 
-    // ==========================================
-    // === PRODUCTO (Stock/Inventario)         ===
-    // ==========================================
-
-    @Operation(summary = "Obtener Inventario por Tienda", description = "Retorna existencias de una sucursal")
+    @Operation(summary = "Inventario por tienda (todos)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ProductoResponseDTO>> getInventarioPorTienda(@PathVariable Integer codti) {
-         return ResponseEntity.ok(productoService.obtenerStockPorTienda(codti));
+        return ResponseEntity.ok(productoService.obtenerStockPorTienda(codti));
     }
 
-    @Operation(summary = "Obtener Stock Disponible", description = "Retorna productos con existencia > 0")
+    @Operation(summary = "Stock disponible por tienda (stock > 0)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}/disponibles")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ProductoResponseDTO>> getStockDisponible(@PathVariable Integer codti) {
-         return ResponseEntity.ok(productoService.obtenerStockDisponiblePorTienda(codti));
+        return ResponseEntity.ok(productoService.obtenerStockDisponiblePorTienda(codti));
     }
 
-    @Operation(summary = "Crear SKU/Producto en Tienda", description = "Registra una variante de producto con stock inicial")
+    @Operation(summary = "Buscar producto por IMEI")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/imei/{imei}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ProductoResponseDTO> getProductoPorImei(@PathVariable String imei) {
+        return ResponseEntity.ok(productoService.obtenerProductoPorImei(imei));
+    }
+
+    @Operation(summary = "Registrar producto en tienda")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    public ResponseEntity<ProductoResponseDTO> crearProducto(@Valid @RequestBody ProductoRequestDTO request) {
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<ProductoResponseDTO> crearProducto(
+            @Valid @RequestBody ProductoRequestDTO request) {
         return ResponseEntity.ok(productoService.crearProducto(request));
     }
 
-    @Operation(summary = "Borrado Lógico de Producto", description = "Desactiva un SKU específico por su codpro")
+    @Operation(summary = "Actualizar precios y datos de un producto")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PutMapping("/{codpro}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<ProductoResponseDTO> actualizarProducto(
+            @PathVariable String codpro,
+            @RequestBody ProductoUpdateDTO request) {
+        return ResponseEntity.ok(productoService.actualizar(codpro, request));
+    }
+
+    @Operation(summary = "Ajustar stock — ENTRADA / SALIDA / AJUSTE")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PatchMapping("/{codpro}/stock")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<ProductoResponseDTO> ajustarStock(
+            @PathVariable String codpro,
+            @RequestBody StockAjusteDTO request) {
+        return ResponseEntity.ok(productoService.ajustarStock(codpro, request));
+    }
+
+    @Operation(summary = "Fijar (o quitar) el precio propio de un IMEI específico, distinto al del modelo")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PatchMapping("/imei/{imei}/precio")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<com.skycel.backend.domain.dto.response.ImeiInfoDTO> actualizarPrecioImei(
+            @PathVariable String imei,
+            @RequestBody com.skycel.backend.domain.dto.request.ImeiPrecioUpdateDTO request) {
+        return ResponseEntity.ok(productoService.actualizarPrecioImei(imei, request));
+    }
+
+    @Operation(summary = "Desactivar producto (soft delete)")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{codpro}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
     public ResponseEntity<Void> eliminarProducto(@PathVariable String codpro) {
         productoService.eliminarProducto(codpro);
         return ResponseEntity.noContent().build();

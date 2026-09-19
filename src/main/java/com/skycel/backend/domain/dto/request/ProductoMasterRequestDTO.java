@@ -19,4 +19,7 @@ public class ProductoMasterRequestDTO {
     private Short idCategoria;
 
     private String urlImagen;
+
+    @NotBlank(message = "El tipo de producto es obligatorio")
+    private String tipo; // CELULAR, ACCESORIO, SERVICIO
 }

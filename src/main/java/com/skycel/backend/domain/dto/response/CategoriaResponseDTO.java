@@ -7,6 +7,7 @@ import java.util.List;
 public class CategoriaResponseDTO {
     private Short idcat;
     private String nombre;
+    private String codigo;
     private Short idCategoriaSuperior; // Avoid circular reference, just send ID
     private List<CategoriaResponseDTO> subcategorias; 
 }

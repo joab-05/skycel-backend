@@ -9,9 +9,13 @@ import java.math.BigDecimal;
 @Data
 public class ProductoRequestDTO {
 
-    @NotBlank(message = "El código de producto (codpro) es obligatorio")
     @Size(max = 25)
-    private String codpro;
+    private String codpro; // Opcional, si viene vacío se generará de manera automática.
+
+    private java.util.List<String> imeis; // Opcional. Requerido sólo si el producto es de tipo CELULAR.
+
+    @NotNull(message = "La tienda es obligatoria")
+    private Integer codti;              // ← antes hardcodeado en el service como 1
 
     @NotNull(message = "El stock inicial es obligatorio")
     private BigDecimal stock;
@@ -22,18 +26,29 @@ public class ProductoRequestDTO {
     @NotNull(message = "El precio de venta es obligatorio")
     private BigDecimal precioVenta;
 
-    @NotNull(message = "El color es obligatorio")
-    private Short idColor;
+    private Short idColor;             // opcional
 
-    @NotNull(message = "La magnitud/unidad es obligatoria")
-    private Short idMagnitud;
+    private Short idMagnitud;          // opcional
 
-    @NotNull(message = "El proveedor es obligatorio")
-    private Short idProveedor;
+    private Short idProveedor;         // opcional
 
-    @NotNull(message = "La sección/ubicación es obligatoria")
-    private Short idSeccion;
+    private Short idSeccion;           // opcional
 
-    @NotNull(message = "ID de producto maestro es obligatorio")
-    private Long idProductoMaster;
+    private Long idProductoMaster;     // opcional
+
+    private String nombreMaster;       // Opcional: si se da, se usa tal cual (override manual).
+                                        // Si no, el nombre se arma solo a partir de los campos
+                                        // de abajo según el tipo — ver ProductoService.construirNombreBase.
+
+    private String tipoMaster;         // Opcional. CELULAR, ACCESORIO, SERVICIO. Usado si se crea el maestro.
+
+    private String categoriaMaster;    // Opcional. Nombre de la categoría/Tipo2. Usado si se crea el maestro.
+
+    // Solo para tipo CELULAR (Equipo)
+    private String marca;              // ej. "iPhone"
+    private String modelo;             // ej. "17 Pro Max 8/256gb"
+
+    // Solo para ACCESORIO y SERVICIO
+    private String descripcion;        // ej. "AirPods Pro 2 Gen" / "Cambio de Pantalla"
+    private String descripcion2;       // Solo SERVICIO: equipo al que aplica, ej. "Samsung A56 5G"
 }

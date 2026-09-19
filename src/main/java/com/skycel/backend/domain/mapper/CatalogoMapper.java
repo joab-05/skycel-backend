@@ -14,6 +14,7 @@ import com.skycel.backend.domain.entity.*;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
+import org.mapstruct.Named;
 
 @Mapper(componentModel = "spring")
 public interface CatalogoMapper {
@@ -84,6 +85,16 @@ public interface CatalogoMapper {
     // --- Categoria ---
     @Mapping(target = "idCategoriaSuperior", source = "categoriaSuperior.idcat")
     CategoriaResponseDTO toCategoriaResponse(Categoria entity);
+//    @Mapping(target = "idCategoriaSuperior",
+//            expression = "java(entity.getCategoriaSuperior() != null ? entity.getCategoriaSuperior().getIdcat() : null)")
+//    @Mapping(target = "subcategorias", qualifiedByName = "toCategoriaSinHijos")
+//    CategoriaResponseDTO toCategoriaResponse(Categoria entity);
+//
+//    // Para evitar recursión infinita en subcategorías
+//    @Named("toCategoriaSinHijos")
+//    @Mapping(target = "idCategoriaSuperior", ignore = true)
+//    @Mapping(target = "subcategorias", ignore = true)
+//    CategoriaResponseDTO toCategoriaResponseSinHijos(Categoria entity);
 
     // --- Colores / Magnitudes / etc ---
     @Mapping(target = "id", source = "idcolor")
