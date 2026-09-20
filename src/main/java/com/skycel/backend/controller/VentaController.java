@@ -58,7 +58,15 @@ public class VentaController {
     public ResponseEntity<StandardApiResponse<List<VentaResponseDto>>> listarPorTienda(
             @PathVariable Integer codti,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime desde,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime hasta) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime hasta,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        // ROOT/ADMIN consultan cualquier tienda; un encargado, solo la suya
+        var usuario = usuarioRepository.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Usuario autenticado no encontrado"));
+        boolean admin = usuario.getRol() == com.skycel.backend.domain.enums.Rol.ROOT || usuario.getRol() == com.skycel.backend.domain.enums.Rol.ADMIN;
+        if (!admin && (usuario.getTienda() == null || !usuario.getTienda().getCodti().equals(codti))) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Solo puede consultar las ventas de su tienda.");
+        }
         return ResponseEntityBuilder.ok(ventaService.listarPorTienda(codti, desde, hasta), "ventas");
     }
 

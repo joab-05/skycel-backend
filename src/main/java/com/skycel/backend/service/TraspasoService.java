@@ -57,6 +57,7 @@ public class TraspasoService {
     private final ProductoRepository        productoRepository;
     private final ProductoImeiRepository    productoImeiRepository;
     private final ProductoService           productoService;
+    private final MovimientoInventarioService movimientoInventarioService;
 
     /** Renglón ya resuelto para despachar: producto de la tienda origen, cantidad y, en equipos, sus IMEI. */
     private record LineaDespacho(String codpro, BigDecimal cantidad, List<String> imeis) {}
@@ -161,7 +162,9 @@ public class TraspasoService {
             if (llego.signum() > 0) {
                 enDestino = destinoPorOrigen.computeIfAbsent(enOrigen.getIdproducto(),
                         k -> productoEnDestino(enOrigen, t.getTiendaDestino()));
-                enDestino.setStock(stockDe(enDestino).add(llego));
+                BigDecimal antes = stockDe(enDestino);
+                enDestino.setStock(antes.add(llego));
+                movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_ENTRADA", null, "Traspaso #" + id);
             }
             if (d.getImei() != null) {
                 ProductoImei pi = imeiDe(d);
@@ -263,8 +266,10 @@ public class TraspasoService {
             case ACCION_TARDE -> {
                 validarOpera(usuario, t.getTiendaDestino().getCodti());
                 Producto enDestino = productoEnDestino(enOrigen, t.getTiendaDestino());
-                enDestino.setStock(stockDe(enDestino).add(cantidad));
+                BigDecimal antes = stockDe(enDestino);
+                enDestino.setStock(antes.add(cantidad));
                 productoRepository.save(enDestino);
+                movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_FALTANTE", "Llegó tarde. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
                 d.setCantidadRecibida(d.getCantidadRecibida().add(cantidad));
                 if (d.getImei() != null) {
                     ProductoImei pi = imeiDe(d);
@@ -275,8 +280,10 @@ public class TraspasoService {
             }
             case ACCION_REINTEGRO -> {
                 validarOpera(usuario, t.getTiendaOrigen().getCodti());
-                enOrigen.setStock(stockDe(enOrigen).add(cantidad));
+                BigDecimal antes = stockDe(enOrigen);
+                enOrigen.setStock(antes.add(cantidad));
                 productoRepository.save(enOrigen);
+                movimientoInventarioService.registrar(enOrigen, antes, "TRASPASO_FALTANTE", "Regresó al origen. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
                 d.setCantidadReintegrada(d.getCantidadReintegrada().add(cantidad));
                 if (d.getImei() != null) {
                     ProductoImei pi = imeiDe(d);
@@ -388,8 +395,10 @@ public class TraspasoService {
                         }
                     });
                 }
-                p.setStock(stockDe(p).add(d.getCantidad()));
+                BigDecimal antes = stockDe(p);
+                p.setStock(antes.add(d.getCantidad()));
                 productoRepository.save(p);
+                movimientoInventarioService.registrar(p, antes, "TRASPASO_ANULADO", null, "Traspaso #" + id);
             }
         } else if (t.getEstado() != ENVIADO && t.getEstado() != LEIDO) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Una solicitud ya resuelta no se puede anular.");
@@ -539,6 +548,7 @@ public class TraspasoService {
             }
             p.setStock(stock.subtract(cantidad));
             productoRepository.save(p);
+            movimientoInventarioService.registrar(p, stock, "TRASPASO_SALIDA", null, "Traspaso #" + envio.getIdtraspaso());
         }
         return envio;
     }

@@ -65,6 +65,7 @@ public class VentaService {
     private final CuentaPorCobrarService   cuentaPorCobrarService;
     private final VentaPagoDetalleRepository ventaPagoDetalleRepository;
     private final OrdenServicioRepository  ordenServicioRepository;
+    private final MovimientoInventarioService movimientoInventarioService;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
@@ -158,7 +159,7 @@ public class VentaService {
         // 3) Aplicar el descuento de stock/IMEI y guardar cada línea.
         List<VentaDetalle> detallesGuardados = new ArrayList<>();
         for (LineaResuelta linea : lineas) {
-            aplicarDescuentoStock(linea);
+            aplicarDescuentoStock(linea, venta);
 
             VentaDetalle detalle = VentaDetalle.builder()
                     .venta(venta)
@@ -317,9 +318,9 @@ public class VentaService {
 
         for (VentaDetalle detalle : detalles) {
             if (detalle.getImei() != null) {
-                revertirImei(detalle.getImei());
+                revertirImei(detalle.getImei(), idventa);
             } else if (detalle.getCodpro() != null) {
-                revertirStockAccesorio(detalle.getCodpro(), detalle.getCantidad());
+                revertirStockAccesorio(detalle.getCodpro(), detalle.getCantidad(), idventa);
             }
         }
 
@@ -334,7 +335,7 @@ public class VentaService {
         return toResponseDto(venta, detalles);
     }
 
-    private void revertirImei(String imei) {
+    private void revertirImei(String imei, Integer idventa) {
         ProductoImei pi = productoImeiRepository.findByImei(imei)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
                         "El IMEI '" + imei + "' de esta venta ya no existe en el sistema."));
@@ -351,9 +352,10 @@ public class VentaService {
         BigDecimal stockActual = producto.getStock() != null ? producto.getStock() : BigDecimal.ZERO;
         producto.setStock(stockActual.add(BigDecimal.ONE));
         productoRepository.save(producto);
+        movimientoInventarioService.registrar(producto, stockActual, "CANCELACION_VENTA", null, "Venta #" + idventa);
     }
 
-    private void revertirStockAccesorio(String codpro, Short cantidad) {
+    private void revertirStockAccesorio(String codpro, Short cantidad, Integer idventa) {
         Producto producto = productoRepository.findByCodpro(codpro).orElse(null);
         if (producto == null || producto.getProductoMaster().getTipo() == TipoProducto.SERVICIO) {
             return; // no hay stock que revertir (producto ya no existe, o es un servicio)
@@ -361,6 +363,7 @@ public class VentaService {
         BigDecimal stockActual = producto.getStock() != null ? producto.getStock() : BigDecimal.ZERO;
         producto.setStock(stockActual.add(BigDecimal.valueOf(cantidad)));
         productoRepository.save(producto);
+        movimientoInventarioService.registrar(producto, stockActual, "CANCELACION_VENTA", null, "Venta #" + idventa);
     }
 
     // ── Resolución de líneas ─────────────────────────────────────────────────
@@ -490,7 +493,7 @@ public class VentaService {
         return candidatos.get(0);
     }
 
-    private void aplicarDescuentoStock(LineaResuelta linea) {
+    private void aplicarDescuentoStock(LineaResuelta linea, Venta venta) {
         if (linea.productoMaster.getTipo() == TipoProducto.CELULAR) {
             ProductoImei pi = productoImeiRepository.findByImei(linea.imei)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
@@ -501,6 +504,7 @@ public class VentaService {
             BigDecimal stockActual = linea.producto.getStock() != null ? linea.producto.getStock() : BigDecimal.ZERO;
             linea.producto.setStock(stockActual.subtract(BigDecimal.ONE));
             productoRepository.save(linea.producto);
+            movimientoInventarioService.registrar(linea.producto, stockActual, "VENTA", null, "Venta #" + venta.getIdventa());
 
         } else if (linea.productoMaster.getTipo() != TipoProducto.SERVICIO) {
             BigDecimal cantidad = BigDecimal.valueOf(linea.cantidadSolicitada);
@@ -514,6 +518,7 @@ public class VentaService {
             }
             linea.producto.setStock(nuevo);
             productoRepository.save(linea.producto);
+            movimientoInventarioService.registrar(linea.producto, stockActual, "VENTA", null, "Venta #" + venta.getIdventa());
         }
     }
 

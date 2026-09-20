@@ -51,6 +51,7 @@ class VentaServiceTest {
     @Mock private CuentaPorCobrarService   cuentaPorCobrarService;
     @Mock private VentaPagoDetalleRepository ventaPagoDetalleRepository;
     @Mock private OrdenServicioRepository  ordenServicioRepository;
+    @Mock private MovimientoInventarioService movimientoInventarioService;
 
     @InjectMocks
     private VentaService ventaService;

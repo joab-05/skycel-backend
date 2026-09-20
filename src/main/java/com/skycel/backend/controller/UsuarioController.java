@@ -37,6 +37,16 @@ public class UsuarioController {
         return ResponseEntity.ok(lista);
     }
 
+    // ── GET /api/usuarios/tecnicos ────────────────────────────────────────────
+
+    /** Técnicos activos, para asignarlos a las órdenes de servicio (también lo usa un encargado). */
+    @GetMapping("/tecnicos")
+    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN', 'ENCARGADO_TIENDA')")
+    public ResponseEntity<List<UsuarioResponseDto>> listarTecnicos(
+            @RequestParam(value = "codti", required = false) Integer codti) {
+        return ResponseEntity.ok(usuarioService.listarTecnicos(codti));
+    }
+
     // ── GET /api/usuarios/{id} ────────────────────────────────────────────────
 
     @GetMapping("/{id}")

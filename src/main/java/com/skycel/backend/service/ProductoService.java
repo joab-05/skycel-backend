@@ -33,6 +33,7 @@ public class ProductoService {
     private final ProductoImeiRepository   productoImeiRepository;
     private final CategoriaFolioRepository categoriaFolioRepository;
     private final ProductoMapper           productoMapper;
+    private final MovimientoInventarioService movimientoInventarioService;
 
     /** Contador reservado para los equipos (CEL-000001...). categoria_folio no tiene FK real, así que 0 no choca con ninguna categoría. */
     private static final short FOLIO_EQUIPOS = 0;
@@ -240,6 +241,7 @@ public class ProductoService {
         if (dto.getIdSeccion()   != null) producto.setSeccion(seccionRepository.findById(dto.getIdSeccion()).orElse(null));
 
         Producto saved = productoRepository.save(producto);
+        movimientoInventarioService.registrar(saved, BigDecimal.ZERO, "ALTA", "Stock inicial", null);
 
         // Registrar IMEIs si es celular y hay stock
         for (UnidadEquipoDTO u : unidades) {
@@ -456,6 +458,7 @@ public class ProductoService {
             }
         }
 
+        movimientoInventarioService.registrar(p, stockActual, dto.getTipo().toUpperCase(), dto.getComentario(), null);
         return toDto(productoRepository.save(p));
     }
 

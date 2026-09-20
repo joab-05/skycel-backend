@@ -53,6 +53,7 @@ class ProductoServiceTest {
     @Mock private SeccionRepository        seccionRepository;
     @Mock private ProductoImeiRepository   productoImeiRepository;
     @Mock private ProductoMapper           productoMapper;
+    @Mock private MovimientoInventarioService movimientoInventarioService;
 
     @InjectMocks
     private ProductoService productoService;

@@ -41,6 +41,17 @@ public class UsuarioService {
                 .collect(Collectors.toList());
     }
 
+    /** Técnicos activos (rol TECNICO); con {@code codti}, solo los de esa tienda. Para asignarlos a una orden de servicio. */
+    @Transactional(readOnly = true)
+    public List<UsuarioResponseDto> listarTecnicos(Integer codti) {
+        return usuarioRepository.findAll().stream()
+                .filter(u -> Boolean.TRUE.equals(u.getActivo()))
+                .filter(u -> u.getRol() == com.skycel.backend.domain.enums.Rol.TECNICO)
+                .filter(u -> codti == null || (u.getTienda() != null && u.getTienda().getCodti().equals(codti)))
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
+
     @Transactional(readOnly = true)
     public List<UsuarioResponseDto> listarActivos() {
         return usuarioRepository.findAll().stream()

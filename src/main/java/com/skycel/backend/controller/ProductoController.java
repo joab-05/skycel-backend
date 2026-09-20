@@ -21,6 +21,7 @@ import java.util.List;
 public class ProductoController {
 
     private final ProductoService productoService;
+    private final com.skycel.backend.service.MovimientoInventarioService movimientoInventarioService;
 
     // ── PRODUCTO MASTER ───────────────────────────────────────────────────────
 
@@ -74,6 +75,21 @@ public class ProductoController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ProductoResponseDTO>> getStockDisponible(@PathVariable Integer codti) {
         return ResponseEntity.ok(productoService.obtenerStockDisponiblePorTienda(codti));
+    }
+
+    @Operation(summary = "Historial de cambios de stock de una tienda",
+            description = "Entradas, salidas, ajustes, ventas y traspasos, con el stock antes y después, el motivo y quién lo hizo. " +
+                    "Por defecto los últimos 30 días; filtro opcional por producto. Un encargado solo consulta su tienda.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/tienda/{codti}/movimientos")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<List<com.skycel.backend.dto.producto.MovimientoInventarioResponseDto>> movimientos(
+            @PathVariable Integer codti,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime desde,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime hasta,
+            @RequestParam(required = false) String codpro,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(movimientoInventarioService.listar(codti, desde, hasta, codpro, user.getUsername()));
     }
 
     @Operation(summary = "Productos en bajo stock (stock <= stock mínimo) de una tienda")
