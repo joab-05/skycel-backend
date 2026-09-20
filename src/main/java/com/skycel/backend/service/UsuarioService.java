@@ -207,7 +207,7 @@ public class UsuarioService {
         } catch (Exception e) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "Rol inválido: " + rolStr +
-                    ". Valores válidos: ROOT, ADMIN, ENCARGADO_TIENDA, VENDEDOR");
+                    ". Valores válidos: ROOT, ADMIN, ENCARGADO_TIENDA, VENDEDOR, TECNICO");
         }
     }
 }
