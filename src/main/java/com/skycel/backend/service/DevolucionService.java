@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  *  - REEMBOLSO: se devuelve el dinero (el efectivo sale de la caja; tarjeta y transferencia se reembolsan por fuera);
  *  - CAMBIO: el cliente se lleva otro producto de igual o mayor valor. Se genera una venta nueva en la que lo devuelto
  *    cuenta como crédito (método 7) y, si lo nuevo vale más, el cliente paga la diferencia.
- * Una venta admite devoluciones durante {@value #DIAS_PLAZO} días, si no está cancelada, no es a crédito y no salió de una
+ * Una venta admite devoluciones durante los días que fija la configuración del negocio (15 por omisión), si no está cancelada, no es a crédito y no salió de una
  * orden de servicio. Los servicios y los regalos no se devuelven.
  */
 @Service
@@ -44,7 +44,6 @@ public class DevolucionService {
     public static final byte PROCESADA = 2;
     public static final byte RECHAZADA = 3;
 
-    public static final int DIAS_PLAZO = 15;
     private static final short FOLIO_DEVOLUCIONES = -3;
     private static final byte VENTA_COMPLETADA = 1;
     private static final byte METODO_CREDITO_DEVOLUCION = 7;
@@ -66,6 +65,7 @@ public class DevolucionService {
     private final MovimientoCajaService          movimientoCajaService;
     private final MovimientoInventarioService    movimientoInventarioService;
     private final VentaService                   ventaService;
+    private final ConfiguracionNegocioService    configuracionNegocioService;
 
     // ── Consultar qué se puede devolver de una venta ─────────────────────────
 
@@ -100,7 +100,7 @@ public class DevolucionService {
                 .descripcionMetodoPago(descripcionMetodo(venta.getMetodoPago()))
                 .total(venta.getTotal())
                 .elegible(motivo == null).motivo(motivo)
-                .devolucionHasta(venta.getFechaVenta().toLocalDate().plusDays(DIAS_PLAZO))
+                .devolucionHasta(venta.getFechaVenta().toLocalDate().plusDays(configuracionNegocioService.diasDevolucion()))
                 .lineas(lineas).build();
     }
 
@@ -355,9 +355,10 @@ public class DevolucionService {
         if (ordenServicioRepository.existsByVenta_Idventa(venta.getIdventa())) {
             return "La venta salió de una orden de servicio: use la garantía del trabajo.";
         }
-        LocalDate limite = venta.getFechaVenta().toLocalDate().plusDays(DIAS_PLAZO);
+        int dias = configuracionNegocioService.diasDevolucion();
+        LocalDate limite = venta.getFechaVenta().toLocalDate().plusDays(dias);
         if (LocalDate.now().isAfter(limite)) {
-            return "Ya pasó el plazo de " + DIAS_PLAZO + " días para devoluciones (venció el " + limite + ").";
+            return "Ya pasó el plazo de " + dias + " días para devoluciones (venció el " + limite + ").";
         }
         return null;
     }

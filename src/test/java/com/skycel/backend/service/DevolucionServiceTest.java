@@ -52,6 +52,7 @@ class DevolucionServiceTest {
     @Mock private MovimientoCajaService           movimientoCajaService;
     @Mock private MovimientoInventarioService     movimientoInventarioService;
     @Mock private VentaService                    ventaService;
+    @Mock private ConfiguracionNegocioService     configuracionNegocioService;
 
     @InjectMocks
     private DevolucionService service;
@@ -72,6 +73,7 @@ class DevolucionServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(configuracionNegocioService.diasDevolucion()).thenReturn(15);
         zocalo = Tienda.builder().codti(2).nombre("Zocalo").build();
         corpo = Tienda.builder().codti(3).nombre("Corpo").build();
         vendedor = Usuario.builder().idusuario(9).username("yamilet").nombreCompleto("Yamilet").rol(Rol.VENDEDOR).tienda(zocalo).build();
