@@ -18,6 +18,7 @@ import com.skycel.backend.repository.CajaRepository;
 import com.skycel.backend.repository.CatMotivoRepository;
 import com.skycel.backend.repository.MovimientoCajaRepository;
 import com.skycel.backend.repository.UsuarioRepository;
+import com.skycel.backend.security.SesionActual;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,7 @@ public class MovimientoCajaService {
     private final CajaRepository           cajaRepository;
     private final CatMotivoRepository      catMotivoRepository;
     private final UsuarioRepository        usuarioRepository;
+    private final SesionActual             sesionActual;
 
     // ── Movimientos manuales ─────────────────────────────────────────────────
 
@@ -226,6 +228,7 @@ public class MovimientoCajaService {
                 .monto(monto)
                 .idmovRef(idmovRef)
                 .observaciones(observaciones)
+                .sesion(sesionActual.actual())   // la sesión desde la que se hizo
                 .build());
     }
 

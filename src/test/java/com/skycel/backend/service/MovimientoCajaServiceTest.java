@@ -39,6 +39,7 @@ class MovimientoCajaServiceTest {
     @Mock private CajaRepository           cajaRepository;
     @Mock private CatMotivoRepository      catMotivoRepository;
     @Mock private UsuarioRepository        usuarioRepository;
+    @Mock private com.skycel.backend.security.SesionActual sesionActual;
 
     @InjectMocks
     private MovimientoCajaService service;
@@ -101,6 +102,23 @@ class MovimientoCajaServiceTest {
         assertThat(cap.getValue().getObservaciones()).isEqualTo("detalle");
         assertThat(cap.getValue().getUsuarioAdmin()).isNull();
         assertThat(r.getTipoDisplay()).isEqualTo("Salida");
+    }
+
+    @Test
+    @DisplayName("el movimiento guarda la sesión desde la que se hizo (y queda vacía si no hay sesión)")
+    void guardaLaSesion() {
+        motivo(gasto);
+        com.skycel.backend.domain.entity.UsuarioSesion sesion = new com.skycel.backend.domain.entity.UsuarioSesion();
+        sesion.setIdsesion(77);
+        org.mockito.Mockito.when(sesionActual.actual()).thenReturn(sesion, (com.skycel.backend.domain.entity.UsuarioSesion) null);
+
+        service.registrarManual(ID_CAJA, req(5, "10.00"), "abigail");
+        service.registrarManual(ID_CAJA, req(5, "10.00"), "abigail");
+
+        ArgumentCaptor<MovimientoCaja> cap = ArgumentCaptor.forClass(MovimientoCaja.class);
+        verify(movimientoCajaRepository, org.mockito.Mockito.times(2)).save(cap.capture());
+        assertThat(cap.getAllValues().get(0).getSesion().getIdsesion()).isEqualTo(77);
+        assertThat(cap.getAllValues().get(1).getSesion()).isNull();
     }
 
     @Test
