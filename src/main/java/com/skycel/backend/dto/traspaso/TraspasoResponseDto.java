@@ -31,5 +31,8 @@ public class TraspasoResponseDto {
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaActualizacion;
     private String motivoRechazo;
+    /** true si el envío se recibió con faltantes. */
+    private Boolean conFaltantes;
+    private String comentarioRecepcion;
     private List<TraspasoLineaResponseDto> lineas;
 }

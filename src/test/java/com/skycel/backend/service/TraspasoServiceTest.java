@@ -37,6 +37,7 @@ class TraspasoServiceTest {
 
     @Mock private TraspasoRepository        traspasoRepository;
     @Mock private TraspasoDetalleRepository detalleRepository;
+    @Mock private TraspasoFaltanteMovRepository faltanteMovRepository;
     @Mock private TiendaRepository          tiendaRepository;
     @Mock private UsuarioRepository         usuarioRepository;
     @Mock private ProductoRepository        productoRepository;
@@ -49,6 +50,7 @@ class TraspasoServiceTest {
     // "base de datos" en memoria
     private final Map<Integer, Traspaso> traspasos = new HashMap<>();
     private final List<TraspasoDetalle> detalles = new ArrayList<>();
+    private final List<TraspasoFaltanteMov> movs = new ArrayList<>();
     private final List<Producto> productos = new ArrayList<>();
     private final Map<String, ProductoImei> imeis = new HashMap<>();
     private int siguienteId = 100;
@@ -85,9 +87,25 @@ class TraspasoServiceTest {
         });
         lenient().when(traspasoRepository.findById(anyInt())).thenAnswer(inv -> Optional.ofNullable(traspasos.get((Integer) inv.getArgument(0))));
         lenient().when(detalleRepository.save(any(TraspasoDetalle.class))).thenAnswer(inv -> {
-            detalles.add(inv.getArgument(0));
+            TraspasoDetalle d = inv.getArgument(0);
+            if (d.getIddetalle() == null) d.setIddetalle(siguienteId++);
+            if (!detalles.contains(d)) detalles.add(d);
+            return d;
+        });
+        lenient().when(detalleRepository.findById(anyInt())).thenAnswer(inv ->
+                detalles.stream().filter(d -> d.getIddetalle().equals(inv.getArgument(0))).findFirst());
+        lenient().when(detalleRepository.faltantesPendientes(any())).thenAnswer(inv -> detalles.stream()
+                .filter(d -> Boolean.TRUE.equals(d.getTraspaso().getConFaltantes()) && d.getCantidadRecibida() != null
+                        && d.getCantidad().subtract(d.getCantidadRecibida()).subtract(d.getCantidadBaja()).subtract(d.getCantidadReintegrada()).signum() > 0)
+                .filter(d -> inv.getArgument(0) == null || d.getTraspaso().getTiendaOrigen().getCodti().equals(inv.getArgument(0))
+                        || d.getTraspaso().getTiendaDestino().getCodti().equals(inv.getArgument(0)))
+                .collect(Collectors.toList()));
+        lenient().when(faltanteMovRepository.save(any(TraspasoFaltanteMov.class))).thenAnswer(inv -> {
+            movs.add(inv.getArgument(0));
             return inv.getArgument(0);
         });
+        lenient().when(faltanteMovRepository.findByDetalle_IddetalleOrderByIdmov(anyInt())).thenAnswer(inv ->
+                movs.stream().filter(m -> m.getDetalle().getIddetalle().equals(inv.getArgument(0))).collect(Collectors.toList()));
         lenient().when(detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(anyInt())).thenAnswer(inv ->
                 detalles.stream().filter(d -> d.getTraspaso().getIdtraspaso().equals(inv.getArgument(0))).collect(Collectors.toList()));
 
@@ -385,6 +403,194 @@ class TraspasoServiceTest {
 
             assertThatThrownBy(() -> service.recibir(id, "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Solo se recibe un envío");
+        }
+    }
+
+    // ── Recepción parcial ────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("recepción parcial y faltantes")
+    class Faltantes {
+
+        private RecepcionRequestDto falta(String comentario, String codpro, String cantidad, String... imeisQueFaltan) {
+            RecepcionRequestDto.FaltanteDto f = new RecepcionRequestDto.FaltanteDto();
+            f.setCodpro(codpro);
+            f.setCantidad(cantidad == null ? null : new BigDecimal(cantidad));
+            f.setImeis(imeisQueFaltan.length == 0 ? null : List.of(imeisQueFaltan));
+            RecepcionRequestDto dto = new RecepcionRequestDto();
+            dto.setFaltantes(List.of(f));
+            dto.setComentario(comentario);
+            return dto;
+        }
+
+        private ResolverFaltanteRequestDto resolver(String accion, String cantidad, String nota) {
+            ResolverFaltanteRequestDto dto = new ResolverFaltanteRequestDto();
+            dto.setAccion(accion);
+            dto.setCantidad(cantidad == null ? null : new BigDecimal(cantidad));
+            dto.setNota(nota);
+            return dto;
+        }
+
+        private int idDetalle(String codpro) {
+            return detalles.stream().filter(d -> d.getCodpro().equals(codpro)).findFirst().orElseThrow().getIddetalle();
+        }
+
+        @Test
+        @DisplayName("accesorio: al destino solo entra lo que llegó; el origen sigue descontado y queda el faltante pendiente")
+        void accesorioParcial() {
+            Producto origen = stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "15")), "root").getIdtraspaso();
+
+            TraspasoResponseDto r = service.recibir(id, falta("Caja rota", "ACC-000001", "4"), "abigail");
+
+            assertThat(enTienda("ACC-000099", zocalo).getStock()).isEqualByComparingTo("11");
+            assertThat(origen.getStock()).isEqualByComparingTo("25");
+            assertThat(r.getConFaltantes()).isTrue();
+            assertThat(r.getLineas().get(0).getCantidadRecibida()).isEqualByComparingTo("11");
+            assertThat(r.getLineas().get(0).getFaltantePendiente()).isEqualByComparingTo("4");
+            assertThat(movs).hasSize(1);
+            assertThat(movs.get(0).getAccion()).isEqualTo("REPORTADO");
+        }
+
+        @Test
+        @DisplayName("si algo no llegó el comentario es obligatorio; y no puede faltar más de lo enviado ni todo")
+        void validaciones() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "15")), "root").getIdtraspaso();
+
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.recibir(id, falta(" ", "ACC-000001", "4"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.recibir(id, falta("x", "ACC-000001", "16"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.recibir(id, falta("x", "ACC-000001", "15"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.recibir(id, falta("x", "ACC-000777", "1"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.recibir(id, falta("x", "ACC-000001", null), "abigail"));
+            assertThat(traspasos.get(id).getEstado()).isEqualTo((byte) 1);   // nada se aplicó
+        }
+
+        @Test
+        @DisplayName("equipos: el IMEI que no llegó queda FALTANTE en el origen; el que llegó pasa a la destino")
+        void equipoParcial() {
+            Producto a15 = stock("CEL-000004", almacen, celular, "2", negro);
+            ProductoImei llega = unidad(a15, "350000000000011");
+            ProductoImei noLlega = unidad(a15, "350000000000029");
+            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "2", "350000000000011", "350000000000029")), "root").getIdtraspaso();
+
+            service.recibir(id, falta("Se quedó en la caja del repartidor", "CEL-000004", null, "350000000000029"), "abigail");
+
+            assertThat(llega.getEstado()).isEqualTo("DISPONIBLE");
+            assertThat(llega.getProducto()).isSameAs(enTienda("CEL-000099", zocalo));
+            assertThat(enTienda("CEL-000099", zocalo).getStock()).isEqualByComparingTo("1");
+            assertThat(noLlega.getEstado()).isEqualTo("FALTANTE");
+            assertThat(noLlega.getProducto()).isSameAs(a15);
+            assertThat(a15.getStock()).isEqualByComparingTo("0");
+        }
+
+        @Test
+        @DisplayName("un IMEI que no viene en el envío: 400")
+        void imeiInvalido() {
+            Producto a15 = stock("CEL-000004", almacen, celular, "1", negro);
+            unidad(a15, "350000000000011");
+            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "1", "350000000000011")), "root").getIdtraspaso();
+
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.recibir(id, falta("x", "CEL-000004", null, "350000000009999"), "abigail"));
+        }
+
+        @Test
+        @DisplayName("llegó tarde: entra al inventario del destino (solo lo confirma el destino) y se puede resolver por partes")
+        void llegoTarde() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "15")), "root").getIdtraspaso();
+            service.recibir(id, falta("Faltaron", "ACC-000001", "4"), "abigail");
+            int det = idDetalle("ACC-000001");
+
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.resolverFaltante(det, resolver("RECIBIDO_TARDE", "1", null), "guillermo"));
+            FaltanteResponseDto r = service.resolverFaltante(det, resolver("RECIBIDO_TARDE", "3", null), "abigail");
+
+            assertThat(enTienda("ACC-000099", zocalo).getStock()).isEqualByComparingTo("14");
+            assertThat(r.getPendiente()).isEqualByComparingTo("1");
+            assertThat(r.getCantidadRecibida()).isEqualByComparingTo("14");
+            assertThat(r.getHistorial()).extracting(FaltanteResponseDto.MovimientoDto::getAccion).containsExactly("REPORTADO", "RECIBIDO_TARDE");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.resolverFaltante(det, resolver("RECIBIDO_TARDE", "2", null), "abigail"));
+        }
+
+        @Test
+        @DisplayName("reintegrado al origen: el stock regresa al origen y solo lo confirma el origen (o un admin)")
+        void reintegrado() {
+            Producto a15 = stock("CEL-000004", almacen, celular, "1", negro);
+            ProductoImei u = unidad(a15, "350000000000011");
+            Producto extra = stock("CEL-000005", almacen, celular, "1", azul);
+            unidad(extra, "350000000000029");
+            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "1", "350000000000011"), linea("CEL-000005", "1", "350000000000029")), "root").getIdtraspaso();
+            service.recibir(id, falta("No estaba", "CEL-000004", null, "350000000000011"), "abigail");
+            int det = idDetalle("CEL-000004");
+
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.resolverFaltante(det, resolver("REINTEGRADO_ORIGEN", null, null), "abigail"));
+            service.resolverFaltante(det, resolver("REINTEGRADO_ORIGEN", null, "Estaba en bodega"), "root");
+
+            assertThat(a15.getStock()).isEqualByComparingTo("1");
+            assertThat(u.getEstado()).isEqualTo("DISPONIBLE");
+            assertThat(u.getProducto()).isSameAs(a15);
+            assertThat(service.listarFaltantes(null, "root")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("baja: solo ROOT/ADMIN, con nota; el equipo queda DEBAJA y el stock no vuelve")
+        void baja() {
+            Producto a15 = stock("CEL-000004", almacen, celular, "2", negro);
+            unidad(a15, "350000000000011");
+            ProductoImei perdido = unidad(a15, "350000000000029");
+            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "2", "350000000000011", "350000000000029")), "root").getIdtraspaso();
+            service.recibir(id, falta("Extraviado", "CEL-000004", null, "350000000000029"), "abigail");
+            int det = detalles.stream().filter(d -> "350000000000029".equals(d.getImei())).findFirst().orElseThrow().getIddetalle();
+
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.resolverFaltante(det, resolver("BAJA", null, "Extraviado"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.resolverFaltante(det, resolver("BAJA", null, " "), "root"));
+            service.resolverFaltante(det, resolver("BAJA", null, "Extraviado en ruta"), "root");
+
+            assertThat(perdido.getEstado()).isEqualTo("DEBAJA");
+            assertThat(a15.getStock()).isEqualByComparingTo("0");
+            assertThat(service.listarFaltantes(null, "root")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("acción inválida o renglón sin faltante: 400 / 409")
+        void invalidos() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            int completo = service.crearEnvio(envio(1, 2, linea("ACC-000001", "5")), "root").getIdtraspaso();
+            service.recibir(completo, "abigail");
+            int det = idDetalle("ACC-000001");
+
+            assertEstado(HttpStatus.CONFLICT, () -> service.resolverFaltante(det, resolver("BAJA", null, "x"), "root"));
+
+            int parcial = service.crearEnvio(envio(1, 2, linea("ACC-000001", "5")), "root").getIdtraspaso();
+            service.recibir(parcial, falta("x", "ACC-000001", "2"), "abigail");
+            int det2 = detalles.stream().filter(d -> d.getTraspaso().getIdtraspaso() == parcial).findFirst().orElseThrow().getIddetalle();
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.resolverFaltante(det2, resolver("REGALAR", null, null), "root"));
+        }
+
+        @Test
+        @DisplayName("listar: el admin ve todos; el encargado solo los de su tienda")
+        void listar() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "5")), "root").getIdtraspaso();
+            service.recibir(id, falta("x", "ACC-000001", "2"), "abigail");
+
+            assertThat(service.listarFaltantes(null, "root")).hasSize(1);
+            assertThat(service.listarFaltantes(null, "abigail")).hasSize(1);
+            assertThat(service.listarFaltantes(null, "guillermo")).isEmpty();   // solo ve los de su tienda (Corpo)
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.listarFaltantes(1, "abigail"));
+        }
+
+        @Test
+        @DisplayName("un envío recibido completo no tiene faltantes")
+        void completoNoTiene() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "5")), "root").getIdtraspaso();
+
+            TraspasoResponseDto r = service.recibir(id, "abigail");
+
+            assertThat(r.getConFaltantes()).isFalse();
+            assertThat(r.getLineas().get(0).getFaltantePendiente()).isEqualByComparingTo("0");
+            assertThat(service.listarFaltantes(null, "root")).isEmpty();
         }
     }
 

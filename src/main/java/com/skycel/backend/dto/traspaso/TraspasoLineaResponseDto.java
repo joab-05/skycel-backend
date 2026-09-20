@@ -16,4 +16,8 @@ public class TraspasoLineaResponseDto {
     private BigDecimal cantidad;
     /** Solo equipos en un envío: las unidades que viajan. */
     private List<String> imeis;
+    /** Lo que llegó (null mientras el envío no se recibe). */
+    private BigDecimal cantidadRecibida;
+    /** Lo que falta por resolver de este renglón. */
+    private BigDecimal faltantePendiente;
 }

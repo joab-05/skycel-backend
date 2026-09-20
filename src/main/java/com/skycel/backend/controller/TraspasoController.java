@@ -47,13 +47,41 @@ public class TraspasoController {
     }
 
     @Operation(summary = "Confirmar la recepción de un envío",
-            description = "La tienda destino confirma que llegó la mercancía: el stock y las unidades pasan a su inventario.")
+            description = "La tienda destino confirma que llegó la mercancía: el stock y las unidades pasan a su inventario. " +
+                    "Sin cuerpo se recibe completo; si algo no llegó, se indica en 'faltantes' (con un comentario obligatorio) " +
+                    "y queda pendiente de resolver.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/recibir")
     @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> recibir(
-            @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
-        return ResponseEntityBuilder.updated(traspasoService.recibir(id, user.getUsername()), "envío");
+            @PathVariable Integer id,
+            @Valid @RequestBody(required = false) RecepcionRequestDto request,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(traspasoService.recibir(id, request, user.getUsername()), "envío");
+    }
+
+    @Operation(summary = "Faltantes por resolver",
+            description = "Mercancía de envíos recibidos que no llegó y sigue pendiente. El administrador ve todas las tiendas " +
+                    "(o filtra por una); el encargado, solo los de la suya.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/faltantes")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<StandardApiResponse<List<FaltanteResponseDto>>> faltantes(
+            @RequestParam(required = false) Integer codti, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(traspasoService.listarFaltantes(codti, user.getUsername()), "faltantes");
+    }
+
+    @Operation(summary = "Resolver un faltante",
+            description = "accion: RECIBIDO_TARDE (llegó; lo confirma la tienda destino), REINTEGRADO_ORIGEN (nunca salió; lo confirma " +
+                    "el origen) o BAJA (solo ROOT/ADMIN, con nota). Se puede resolver por partes.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/faltantes/{iddetalle}/resolver")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<StandardApiResponse<FaltanteResponseDto>> resolverFaltante(
+            @PathVariable Integer iddetalle,
+            @Valid @RequestBody ResolverFaltanteRequestDto request,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(traspasoService.resolverFaltante(iddetalle, request, user.getUsername()), "faltante");
     }
 
     @Operation(summary = "Marcar una solicitud como leída")

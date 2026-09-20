@@ -41,9 +41,17 @@ public class TraspasoService {
 
     private static final String IMEI_EN_TRANSITO = "TRASPASADO";
     private static final String IMEI_DISPONIBLE  = "DISPONIBLE";
+    private static final String IMEI_FALTANTE    = "FALTANTE";
+    private static final String IMEI_DE_BAJA     = "DEBAJA";
+
+    private static final String ACCION_REPORTADO = "REPORTADO";
+    private static final String ACCION_TARDE     = "RECIBIDO_TARDE";
+    private static final String ACCION_REINTEGRO = "REINTEGRADO_ORIGEN";
+    private static final String ACCION_BAJA      = "BAJA";
 
     private final TraspasoRepository        traspasoRepository;
     private final TraspasoDetalleRepository detalleRepository;
+    private final TraspasoFaltanteMovRepository faltanteMovRepository;
     private final TiendaRepository          tiendaRepository;
     private final UsuarioRepository         usuarioRepository;
     private final ProductoRepository        productoRepository;
@@ -101,9 +109,19 @@ public class TraspasoService {
 
     // ── Envío: recibir / anular ──────────────────────────────────────────────
 
-    /** La tienda destino confirma la recepción física: el stock y las unidades pasan a su inventario. */
+    /** Recibe el envío completo. */
     @Transactional
     public TraspasoResponseDto recibir(Integer id, String username) {
+        return recibir(id, null, username);
+    }
+
+    /**
+     * La tienda destino confirma la recepción física: lo que llegó pasa a su inventario. Lo que no llegó (dicho en
+     * {@code dto.faltantes}) queda como faltante por resolver: sigue descontado del origen, las unidades quedan FALTANTE y
+     * se resuelve después (llegó tarde, regresó al origen o se da de baja).
+     */
+    @Transactional
+    public TraspasoResponseDto recibir(Integer id, RecepcionRequestDto dto, String username) {
         Usuario usuario = usuarioPorUsername(username);
         Traspaso t = obtenerActivo(id);
         if (t.getTipo() != TIPO_ENVIO) {
@@ -114,26 +132,232 @@ public class TraspasoService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "El envío " + id + " ya fue recibido.");
         }
 
+        List<TraspasoDetalle> detalles = detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(id);
+        Map<Integer, BigDecimal> faltaPorDetalle = faltantesDeLaRecepcion(detalles, dto);
+        boolean hayFaltantes = !faltaPorDetalle.isEmpty();
+        String comentario = dto == null || dto.getComentario() == null ? "" : dto.getComentario().trim();
+        if (hayFaltantes && comentario.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique en el comentario qué pasó con lo que no llegó.");
+        }
+        BigDecimal totalEnviado = detalles.stream().map(TraspasoDetalle::getCantidad).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalFalta = faltaPorDetalle.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (totalFalta.compareTo(totalEnviado) >= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "No llegó nada del envío: si no se va a recibir, anúlelo desde la tienda origen.");
+        }
+
         Map<Integer, Producto> destinoPorOrigen = new LinkedHashMap<>();
-        for (TraspasoDetalle d : detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(id)) {
+        for (TraspasoDetalle d : detalles) {
+            BigDecimal falta = faltaPorDetalle.getOrDefault(d.getIddetalle(), BigDecimal.ZERO);
+            BigDecimal llego = d.getCantidad().subtract(falta);
+            d.setCantidadRecibida(llego);
+            detalleRepository.save(d);
+
+            if (falta.signum() > 0) {
+                registrarMov(d, ACCION_REPORTADO, falta, usuario, comentario);
+            }
             Producto enOrigen = productoDe(d.getCodpro(), t.getTiendaOrigen().getCodti(), "la tienda origen");
-            Producto enDestino = destinoPorOrigen.computeIfAbsent(enOrigen.getIdproducto(),
-                    k -> productoEnDestino(enOrigen, t.getTiendaDestino()));
+            Producto enDestino = null;
+            if (llego.signum() > 0) {
+                enDestino = destinoPorOrigen.computeIfAbsent(enOrigen.getIdproducto(),
+                        k -> productoEnDestino(enOrigen, t.getTiendaDestino()));
+                enDestino.setStock(stockDe(enDestino).add(llego));
+            }
             if (d.getImei() != null) {
-                ProductoImei pi = productoImeiRepository.findByImei(d.getImei())
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
-                                "La unidad '" + d.getImei() + "' del envío ya no existe."));
-                pi.setProducto(enDestino);
-                pi.setEstado(IMEI_DISPONIBLE);
+                ProductoImei pi = imeiDe(d);
+                if (enDestino != null) {
+                    pi.setProducto(enDestino);
+                    pi.setEstado(IMEI_DISPONIBLE);
+                } else {
+                    pi.setEstado(IMEI_FALTANTE);
+                }
                 productoImeiRepository.save(pi);
             }
-            enDestino.setStock(stockDe(enDestino).add(d.getCantidad()));
         }
         destinoPorOrigen.values().forEach(productoRepository::save);
 
         t.setEstado(RECIBIDO);
         t.setUsuarioValida(usuario);
+        t.setConFaltantes(hayFaltantes);
+        t.setComentarioRecepcion(comentario.isEmpty() ? null : comentario);
         return toDto(traspasoRepository.save(t));
+    }
+
+    /** Traduce lo que reportó la tienda (por código, cantidad o IMEI) a lo que falta de cada renglón. */
+    private Map<Integer, BigDecimal> faltantesDeLaRecepcion(List<TraspasoDetalle> detalles, RecepcionRequestDto dto) {
+        Map<Integer, BigDecimal> falta = new LinkedHashMap<>();
+        if (dto == null || dto.getFaltantes() == null) return falta;
+        Set<String> imeisYaReportados = new HashSet<>();
+        for (RecepcionRequestDto.FaltanteDto f : dto.getFaltantes()) {
+            String codpro = f.getCodpro() == null ? "" : f.getCodpro().trim();
+            List<TraspasoDetalle> delProducto = detalles.stream().filter(d -> d.getCodpro().equals(codpro)).toList();
+            if (delProducto.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El producto '" + codpro + "' no está en el envío.");
+            }
+            boolean esEquipo = delProducto.get(0).getImei() != null;
+            if (esEquipo) {
+                if (f.getImeis() == null || f.getImeis().isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique los IMEI que no llegaron de '" + codpro + "'.");
+                }
+                for (String imei : f.getImeis()) {
+                    TraspasoDetalle d = delProducto.stream().filter(x -> imei.equals(x.getImei())).findFirst()
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                    "El IMEI '" + imei + "' no viene en el envío como '" + codpro + "'."));
+                    if (!imeisYaReportados.add(imei)) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI '" + imei + "' está repetido.");
+                    }
+                    falta.put(d.getIddetalle(), d.getCantidad());
+                }
+            } else {
+                if (f.getCantidad() == null || f.getCantidad().signum() <= 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique la cantidad que no llegó de '" + codpro + "'.");
+                }
+                BigDecimal restante = f.getCantidad();
+                for (TraspasoDetalle d : delProducto) {
+                    BigDecimal yaFalta = falta.getOrDefault(d.getIddetalle(), BigDecimal.ZERO);
+                    BigDecimal toma = restante.min(d.getCantidad().subtract(yaFalta));
+                    if (toma.signum() > 0) {
+                        falta.put(d.getIddetalle(), yaFalta.add(toma));
+                        restante = restante.subtract(toma);
+                    }
+                }
+                if (restante.signum() > 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Lo que no llegó de '" + codpro + "' es más de lo que se envió.");
+                }
+            }
+        }
+        return falta;
+    }
+
+    // ── Faltantes: resolver / consultar ──────────────────────────────────────
+
+    /**
+     * Resuelve (total o parcialmente) lo que faltó en un envío recibido:
+     *  RECIBIDO_TARDE — llegó después; entra al inventario del destino (lo confirma el destino);
+     *  REINTEGRADO_ORIGEN — nunca salió; regresa al inventario del origen (lo confirma el origen);
+     *  BAJA — se perdió o se dañó; solo ROOT o ADMIN, con nota.
+     */
+    @Transactional
+    public FaltanteResponseDto resolverFaltante(Integer iddetalle, ResolverFaltanteRequestDto dto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        TraspasoDetalle d = detalleRepository.findById(iddetalle)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Renglón no encontrado: " + iddetalle));
+        Traspaso t = d.getTraspaso();
+        BigDecimal pendiente = pendienteDe(d);
+        if (t.getTipo() != TIPO_ENVIO || !Boolean.TRUE.equals(t.getActivo()) || pendiente.signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este renglón no tiene faltantes por resolver.");
+        }
+        String accion = dto.getAccion() == null ? "" : dto.getAccion().trim().toUpperCase();
+        BigDecimal cantidad = dto.getCantidad() != null ? dto.getCantidad() : pendiente;
+        if (cantidad.signum() <= 0 || cantidad.compareTo(pendiente) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidad debe ser mayor a 0 y no exceder lo pendiente (" + pendiente + ").");
+        }
+        if (d.getImei() != null && cantidad.compareTo(d.getCantidad()) != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Un equipo se resuelve completo (1 unidad).");
+        }
+        String nota = dto.getNota() == null ? null : dto.getNota().trim();
+        Producto enOrigen = productoDe(d.getCodpro(), t.getTiendaOrigen().getCodti(), "la tienda origen");
+
+        switch (accion) {
+            case ACCION_TARDE -> {
+                validarOpera(usuario, t.getTiendaDestino().getCodti());
+                Producto enDestino = productoEnDestino(enOrigen, t.getTiendaDestino());
+                enDestino.setStock(stockDe(enDestino).add(cantidad));
+                productoRepository.save(enDestino);
+                d.setCantidadRecibida(d.getCantidadRecibida().add(cantidad));
+                if (d.getImei() != null) {
+                    ProductoImei pi = imeiDe(d);
+                    pi.setProducto(enDestino);
+                    pi.setEstado(IMEI_DISPONIBLE);
+                    productoImeiRepository.save(pi);
+                }
+            }
+            case ACCION_REINTEGRO -> {
+                validarOpera(usuario, t.getTiendaOrigen().getCodti());
+                enOrigen.setStock(stockDe(enOrigen).add(cantidad));
+                productoRepository.save(enOrigen);
+                d.setCantidadReintegrada(d.getCantidadReintegrada().add(cantidad));
+                if (d.getImei() != null) {
+                    ProductoImei pi = imeiDe(d);
+                    pi.setEstado(IMEI_DISPONIBLE);
+                    productoImeiRepository.save(pi);
+                }
+            }
+            case ACCION_BAJA -> {
+                if (usuario.getRol() != Rol.ROOT && usuario.getRol() != Rol.ADMIN) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador puede dar de baja un faltante.");
+                }
+                if (nota == null || nota.isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique en la nota el motivo de la baja.");
+                }
+                d.setCantidadBaja(d.getCantidadBaja().add(cantidad));
+                if (d.getImei() != null) {
+                    ProductoImei pi = imeiDe(d);
+                    pi.setEstado(IMEI_DE_BAJA);
+                    productoImeiRepository.save(pi);
+                }
+            }
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Acción no válida. Use RECIBIDO_TARDE, REINTEGRADO_ORIGEN o BAJA.");
+        }
+        detalleRepository.save(d);
+        registrarMov(d, accion, cantidad, usuario, nota);
+        return toFaltanteDto(d);
+    }
+
+    /** Faltantes sin resolver. Un administrador ve todas las tiendas (o una); un encargado, solo los de la suya. */
+    @Transactional(readOnly = true)
+    public List<FaltanteResponseDto> listarFaltantes(Integer codti, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        boolean admin = usuario.getRol() == Rol.ROOT || usuario.getRol() == Rol.ADMIN;
+        Integer filtro = codti;
+        if (!admin) {
+            Integer suya = usuario.getTienda() != null ? usuario.getTienda().getCodti() : null;
+            if (suya == null || (codti != null && !codti.equals(suya))) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a los faltantes de otras tiendas.");
+            }
+            filtro = suya;
+        }
+        return detalleRepository.faltantesPendientes(filtro).stream().map(this::toFaltanteDto).collect(Collectors.toList());
+    }
+
+    /** Lo que sigue sin resolverse de un renglón (0 si el envío se recibió completo). */
+    private BigDecimal pendienteDe(TraspasoDetalle d) {
+        if (d.getCantidadRecibida() == null || !Boolean.TRUE.equals(d.getTraspaso().getConFaltantes())) return BigDecimal.ZERO;
+        return d.getCantidad().subtract(d.getCantidadRecibida()).subtract(d.getCantidadBaja()).subtract(d.getCantidadReintegrada());
+    }
+
+    private ProductoImei imeiDe(TraspasoDetalle d) {
+        return productoImeiRepository.findByImei(d.getImei())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "La unidad '" + d.getImei() + "' del envío ya no existe."));
+    }
+
+    private void registrarMov(TraspasoDetalle d, String accion, BigDecimal cantidad, Usuario usuario, String nota) {
+        faltanteMovRepository.save(TraspasoFaltanteMov.builder()
+                .detalle(d).accion(accion).cantidad(cantidad).usuario(usuario)
+                .nota(nota == null || nota.isEmpty() ? null : nota).build());
+    }
+
+    private FaltanteResponseDto toFaltanteDto(TraspasoDetalle d) {
+        Traspaso t = d.getTraspaso();
+        Optional<Producto> p = productoRepository.findByCodproAndTienda_Codti(d.getCodpro(), t.getTiendaOrigen().getCodti());
+        return FaltanteResponseDto.builder()
+                .iddetalle(d.getIddetalle()).idtraspaso(t.getIdtraspaso())
+                .codtiOrigen(t.getTiendaOrigen().getCodti()).nombreTiendaOrigen(t.getTiendaOrigen().getNombre())
+                .codtiDestino(t.getTiendaDestino().getCodti()).nombreTiendaDestino(t.getTiendaDestino().getNombre())
+                .codpro(d.getCodpro())
+                .nombreProducto(p.map(x -> x.getProductoMaster().getNombreBase()).orElse(null))
+                .imei(d.getImei())
+                .cantidadEnviada(d.getCantidad()).cantidadRecibida(d.getCantidadRecibida())
+                .cantidadBaja(d.getCantidadBaja()).cantidadReintegrada(d.getCantidadReintegrada())
+                .pendiente(pendienteDe(d))
+                .comentarioRecepcion(t.getComentarioRecepcion())
+                .historial(faltanteMovRepository.findByDetalle_IddetalleOrderByIdmov(d.getIddetalle()).stream()
+                        .map(m -> FaltanteResponseDto.MovimientoDto.builder().accion(m.getAccion()).cantidad(m.getCantidad())
+                                .usuario(m.getUsuario().getNombreCompleto()).nota(m.getNota()).fecha(m.getFecha()).build())
+                        .collect(Collectors.toList()))
+                .build();
     }
 
     /**
@@ -439,8 +663,15 @@ public class TraspasoService {
         Map<String, TraspasoLineaResponseDto> lineas = new LinkedHashMap<>();
         Map<String, List<String>> imeisPorCodigo = new LinkedHashMap<>();
         Map<String, BigDecimal> cantidadPorCodigo = new LinkedHashMap<>();
+        Map<String, BigDecimal> recibidaPorCodigo = new LinkedHashMap<>();
+        Map<String, BigDecimal> pendientePorCodigo = new LinkedHashMap<>();
         for (TraspasoDetalle d : detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(t.getIdtraspaso())) {
             cantidadPorCodigo.merge(d.getCodpro(), d.getCantidad(), BigDecimal::add);
+            if (t.getTipo() == TIPO_ENVIO && t.getEstado() == RECIBIDO) {
+                BigDecimal recibida = d.getCantidadRecibida() != null ? d.getCantidadRecibida() : d.getCantidad();
+                recibidaPorCodigo.merge(d.getCodpro(), recibida, BigDecimal::add);
+                pendientePorCodigo.merge(d.getCodpro(), pendienteDe(d), BigDecimal::add);
+            }
             if (d.getImei() != null) imeisPorCodigo.computeIfAbsent(d.getCodpro(), k -> new ArrayList<>()).add(d.getImei());
         }
         for (Map.Entry<String, BigDecimal> e : cantidadPorCodigo.entrySet()) {
@@ -451,6 +682,8 @@ public class TraspasoService {
                     .tipoProducto(p.map(x -> x.getProductoMaster().getTipo().name()).orElse(null))
                     .cantidad(e.getValue())
                     .imeis(imeisPorCodigo.get(e.getKey()))
+                    .cantidadRecibida(recibidaPorCodigo.get(e.getKey()))
+                    .faltantePendiente(pendientePorCodigo.get(e.getKey()))
                     .build());
         }
 
@@ -473,6 +706,8 @@ public class TraspasoService {
                 .fechaCreacion(t.getFechaCreacion())
                 .fechaActualizacion(t.getFechaActualizacion())
                 .motivoRechazo(t.getMotivoRechazo())
+                .conFaltantes(Boolean.TRUE.equals(t.getConFaltantes()))
+                .comentarioRecepcion(t.getComentarioRecepcion())
                 .lineas(new ArrayList<>(lineas.values()))
                 .build();
     }

@@ -77,6 +77,15 @@ public class Traspaso {
     @Column(name = "motivo_rechazo", length = 255)
     private String motivoRechazo;
 
+    /** true si al recibir el envío faltó mercancía (ver TraspasoDetalle: cantidadRecibida). */
+    @Column(name = "con_faltantes", columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Builder.Default
+    private Boolean conFaltantes = false;
+
+    /** Lo que anotó quien recibió (obligatorio cuando hubo faltantes). */
+    @Column(name = "comentario_recepcion", length = 255)
+    private String comentarioRecepcion;
+
     @Version
     @Column(name = "version")
     private Integer version;

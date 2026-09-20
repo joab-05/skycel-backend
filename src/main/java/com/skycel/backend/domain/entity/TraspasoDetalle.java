@@ -34,4 +34,22 @@ public class TraspasoDetalle {
     /** Solo equipos, en un envío: la unidad que viaja. */
     @Column(name = "imei", length = 20)
     private String imei;
+
+    // ── Recepción parcial ─────────────────────────────────────────────────────
+    // Lo que no llegó (cantidad - cantidadRecibida) se resuelve después: llegó tarde (suma a lo recibido), regresó al origen
+    // o se dio de baja. Pendiente = cantidad - recibida - baja - reintegrada.
+
+    /** Lo que efectivamente llegó. Null mientras el envío no se ha recibido. */
+    @Column(name = "cantidad_recibida", precision = 10, scale = 2)
+    private BigDecimal cantidadRecibida;
+
+    /** De lo que faltó: lo que se dio de baja (extravío o daño). */
+    @Column(name = "cantidad_baja", nullable = false, precision = 10, scale = 2, columnDefinition = "DECIMAL(10,2) NOT NULL DEFAULT 0.00")
+    @Builder.Default
+    private BigDecimal cantidadBaja = BigDecimal.ZERO;
+
+    /** De lo que faltó: lo que se confirmó que nunca salió y regresó al inventario del origen. */
+    @Column(name = "cantidad_reintegrada", nullable = false, precision = 10, scale = 2, columnDefinition = "DECIMAL(10,2) NOT NULL DEFAULT 0.00")
+    @Builder.Default
+    private BigDecimal cantidadReintegrada = BigDecimal.ZERO;
 }
