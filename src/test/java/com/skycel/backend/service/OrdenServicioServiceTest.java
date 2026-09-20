@@ -753,4 +753,112 @@ class OrdenServicioServiceTest {
             assertEstado(HttpStatus.CONFLICT, () -> service.entregar(o, entrega(1), "abigail"));
         }
     }
+
+    // ── Consulta pública del cliente ─────────────────────────────────────────
+
+    @Nested
+    @DisplayName("consulta pública por folio")
+    class Publica {
+
+        /** Una orden con IMEI, técnico, renglones, anticipo y diagnóstico: mucha información interna que no debe salir. */
+        private int ordenConDatosInternos() {
+            OrdenServicioRequestDto dto = recepcion();
+            dto.setImei("352999000000001");
+            dto.setIdTecnico(20);
+            dto.setLineas(List.of(linea("SRV-000001", null, null, null)));
+            dto.setAnticipo(anticipo("500", 1));
+            int o = service.crear(dto, "abigail").getIdorden();
+            OrdenActualizarDto diag = new OrdenActualizarDto();
+            diag.setDiagnostico("Display y digitalizador dañados");
+            service.iniciar(o, "juan.perez");
+            service.actualizar(o, diag, "juan.perez");
+            return o;
+        }
+
+        @Test
+        @DisplayName("folio + últimos 4 dígitos del teléfono: equipo, IMEI enmascarado, estado con su mensaje y solo los cambios de estado")
+        void consulta() {
+            int o = ordenConDatosInternos();
+            service.marcarLista(o, "juan.perez");
+
+            OrdenServicioPublicaResponseDto r = service.consultaPublica("os-000001", "0001");
+
+            assertThat(r.getFolio()).isEqualTo("OS-000001");
+            assertThat(r.getEquipo()).isEqualTo("Apple iPhone 13");
+            assertThat(r.getImei()).isEqualTo("•••••••••••0001");
+            assertThat(r.getSucursal()).isEqualTo("Zocalo");
+            assertThat(r.getEstado()).isEqualTo("Lista para entrega");
+            assertThat(r.getMensaje()).isEqualTo("Tu equipo está listo. Pasa a recogerlo a la sucursal.");
+            // la bitácora interna tiene varias anotaciones en «Recibida» y en «En reparación»; aquí solo se ven los cambios
+            assertThat(r.getAvance()).extracting(OrdenServicioPublicaResponseDto.PasoDto::getEstado)
+                    .containsExactly("Recibida", "En reparación", "Lista para entrega");
+        }
+
+        @Test
+        @DisplayName("nunca expone técnico, importes, diagnóstico, falla, datos del cliente ni anotaciones de la bitácora")
+        void sinDatosInternos() {
+            ordenConDatosInternos();
+
+            String salida = service.consultaPublica("OS-000001", "0001").toString();
+
+            assertThat(salida).doesNotContain("JUAN.PEREZ", "ABIGAIL", "Sofia", "7571200001", "Pantalla estrellada",
+                    "digitalizador", "500", "1200", "Anticipo", "Técnico asignado", "Diagnóstico");
+        }
+
+        @Test
+        @DisplayName("acepta el teléfono con formato o completo; solo compara los últimos 4 dígitos")
+        void formatoDelTelefono() {
+            orden();
+
+            assertThat(service.consultaPublica("OS-000001", "757-120-0001").getFolio()).isEqualTo("OS-000001");
+            assertThat(service.consultaPublica("OS-000001", "7571200001").getFolio()).isEqualTo("OS-000001");
+        }
+
+        @Test
+        @DisplayName("teléfono que no coincide, folio inexistente, teléfono incompleto o cliente sin teléfono: siempre el mismo 404")
+        void noRevelaNada() {
+            orden();
+            when(clienteRepository.findById(8)).thenReturn(Optional.of(Cliente.builder().idcliente(8).nombreCompleto("Sin Telefono").build()));
+            OrdenServicioRequestDto sinTelefono = recepcion();
+            sinTelefono.setIdcliente(8);
+            service.crear(sinTelefono, "abigail");                       // OS-000002: su cliente no tiene teléfono
+
+            Set<String> mensajes = new HashSet<>();
+            int intentos = 0;
+            for (String[] i : new String[][]{{"OS-000001", "9999"}, {"OS-000777", "0001"}, {"OS-000001", "01"}, {"OS-000001", null}, {"OS-000002", "0000"}}) {
+                try {
+                    service.consultaPublica(i[0], i[1]);
+                } catch (ResponseStatusException e) {
+                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+                    mensajes.add(e.getReason());
+                    intentos++;
+                }
+            }
+
+            assertThat(intentos).isEqualTo(5);
+            assertThat(mensajes).hasSize(1);                             // los cinco casos dan exactamente el mismo mensaje
+        }
+
+        @Test
+        @DisplayName("la garantía del trabajo solo se muestra una vez entregada; cancelada muestra su mensaje")
+        void garantiaYCancelada() {
+            int o = orden(linea("SRV-000001", null, null, null));
+            hastaLista(o);
+            OrdenServicioPublicaResponseDto lista = service.consultaPublica("OS-000001", "0001");
+            assertThat(lista.getDiasGarantia()).isNull();
+
+            service.entregar(o, entrega(1), "abigail");
+            OrdenServicioPublicaResponseDto entregada = service.consultaPublica("OS-000001", "0001");
+            assertThat(entregada.getEstado()).isEqualTo("Entregada");
+            assertThat(entregada.getDiasGarantia()).isEqualTo(30);
+            assertThat(entregada.getGarantiaHasta()).isEqualTo(LocalDate.now().plusDays(30));
+            assertThat(entregada.getFechaEntrega()).isNotNull();
+
+            int c = orden();
+            CancelarOrdenRequestDto cancelar = new CancelarOrdenRequestDto();
+            cancelar.setMotivo("El cliente ya no la quiere");
+            service.cancelar(c, cancelar, "abigail");
+            assertThat(service.consultaPublica("OS-000002", "0001").getMensaje()).contains("cancelada");
+        }
+    }
 }

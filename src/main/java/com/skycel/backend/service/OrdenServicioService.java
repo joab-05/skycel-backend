@@ -345,6 +345,40 @@ public class OrdenServicioService {
         return ordenRepository.buscar(codti, estado, idTecnico).stream().map(this::toDto).collect(Collectors.toList());
     }
 
+    /**
+     * Consulta del cliente, sin iniciar sesión: folio + últimos 4 dígitos del teléfono del cliente de la orden. Cualquier
+     * falla (folio que no existe, teléfono que no coincide o cliente sin teléfono) da la misma respuesta 404. Solo se
+     * muestran los cambios de estado de la bitácora, nunca sus anotaciones internas (anticipos, diagnóstico...).
+     */
+    @Transactional(readOnly = true)
+    public OrdenServicioPublicaResponseDto consultaPublica(String folio, String telefono) {
+        String ultimos = ultimosCuatro(telefono);
+        OrdenServicio o = ordenRepository.findByFolio(folio == null ? "" : folio.trim().toUpperCase())
+                .filter(x -> ultimos != null && ultimos.equals(ultimosCuatro(x.getCliente().getTelefono())))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No encontramos una orden con ese folio y teléfono."));
+
+        List<OrdenServicioPublicaResponseDto.PasoDto> avance = new ArrayList<>();
+        Byte anterior = null;
+        for (OrdenServicioHistorial h : historialRepository.findByOrden_IdordenOrderByIdhistorial(o.getIdorden())) {
+            if (!h.getEstado().equals(anterior)) {
+                avance.add(OrdenServicioPublicaResponseDto.PasoDto.builder().estado(estadoDisplay(h.getEstado())).fecha(h.getFecha()).build());
+                anterior = h.getEstado();
+            }
+        }
+        String imei = o.getImei() == null ? null
+                : (o.getImei().length() > 4 ? "•".repeat(o.getImei().length() - 4) + o.getImei().substring(o.getImei().length() - 4) : o.getImei());
+        boolean entregada = o.getEstado() == ENTREGADA;
+        return OrdenServicioPublicaResponseDto.builder()
+                .folio(o.getFolio()).equipo(o.getMarca() + " " + o.getModelo()).imei(imei)
+                .sucursal(o.getTienda().getNombre())
+                .estado(estadoDisplay(o.getEstado())).mensaje(mensajeParaElCliente(o.getEstado()))
+                .fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa())
+                .fechaLista(o.getFechaLista()).fechaEntrega(o.getFechaEntrega())
+                .diasGarantia(entregada ? o.getDiasGarantia() : null).garantiaHasta(entregada ? o.getFechaGarantiaHasta() : null)
+                .avance(avance)
+                .build();
+    }
+
     /** Las órdenes abiertas asignadas al técnico que consulta. */
     @Transactional(readOnly = true)
     public List<OrdenServicioResponseDto> misOrdenes(String username) {
@@ -596,6 +630,23 @@ public class OrdenServicioService {
             case CANCELADA     -> "Cancelada";
             default            -> "Desconocido";
         };
+    }
+
+    private String mensajeParaElCliente(Byte estado) {
+        return switch (estado) {
+            case RECIBIDA      -> "Recibimos tu equipo y lo revisaremos pronto.";
+            case EN_REPARACION -> "Tu equipo está en reparación.";
+            case LISTA         -> "Tu equipo está listo. Pasa a recogerlo a la sucursal.";
+            case ENTREGADA     -> "Tu equipo ya fue entregado.";
+            case CANCELADA     -> "Tu orden fue cancelada. Pasa a la sucursal si tienes dudas.";
+            default            -> "";
+        };
+    }
+
+    /** Los últimos 4 dígitos de un teléfono, o null si tiene menos de 4. */
+    private String ultimosCuatro(String telefono) {
+        String digitos = telefono == null ? "" : telefono.replaceAll("\\D", "");
+        return digitos.length() < 4 ? null : digitos.substring(digitos.length() - 4);
     }
 
     private String descripcionMetodo(Byte metodo) {
