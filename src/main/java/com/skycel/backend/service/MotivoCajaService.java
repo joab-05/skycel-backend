@@ -40,9 +40,10 @@ public class MotivoCajaService {
     public static final String ABONO_CUENTA      = "Abono de cuenta por cobrar";
     public static final String ANTICIPO_SERVICIO = "Anticipo de servicio";
     public static final String DEVOLUCION_ANTICIPO = "Devolución de anticipo";
+    public static final String DEVOLUCION_VENTA = "Devolución de venta";
 
     private static final Set<String> DEL_SISTEMA =
-            Set.of(VENTA, CANCELACION_VENTA, ABONO_CUENTA, ANTICIPO_SERVICIO, DEVOLUCION_ANTICIPO);
+            Set.of(VENTA, CANCELACION_VENTA, ABONO_CUENTA, ANTICIPO_SERVICIO, DEVOLUCION_ANTICIPO, DEVOLUCION_VENTA);
 
     private record MotivoBase(String nombre, byte tipoMov, byte catSat) {}
 
@@ -52,6 +53,7 @@ public class MotivoCajaService {
             new MotivoBase(ABONO_CUENTA,         ENTRADA, CAT_OPERATIVO),
             new MotivoBase(ANTICIPO_SERVICIO,    ENTRADA, CAT_OPERATIVO),
             new MotivoBase(DEVOLUCION_ANTICIPO,  SALIDA,  CAT_OPERATIVO),
+            new MotivoBase(DEVOLUCION_VENTA,     SALIDA,  CAT_OPERATIVO),
             new MotivoBase("Fondo inicial",     ENTRADA, CAT_OPERATIVO),
             new MotivoBase("Otro ingreso",       ENTRADA, CAT_OPERATIVO),
             new MotivoBase("Gasto operativo",    SALIDA,  CAT_OPERATIVO),

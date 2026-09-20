@@ -49,6 +49,7 @@ public class VentaService {
     private static final byte METODO_MIXTO      = 4;
     /** Solo en el desglose de una venta de una orden de servicio: lo que el cliente ya pagó como anticipo. */
     private static final byte METODO_ANTICIPO   = 6;
+    private static final byte METODO_CREDITO_DEVOLUCION = 7;
     /** Métodos admitidos en las líneas de un pago Mixto: efectivo, tarjeta, transferencia y PayJoy. */
     private static final Set<Byte> METODOS_DESGLOSE = Set.of((byte) 1, (byte) 2, (byte) 3, (byte) 5);
 
@@ -66,6 +67,7 @@ public class VentaService {
     private final VentaPagoDetalleRepository ventaPagoDetalleRepository;
     private final OrdenServicioRepository  ordenServicioRepository;
     private final MovimientoInventarioService movimientoInventarioService;
+    private final DevolucionRepository devolucionRepository;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
@@ -82,6 +84,15 @@ public class VentaService {
      */
     @Transactional
     public VentaResponseDto crearDesdeOrdenServicio(VentaRequestDto dto, Integer idUsuarioVendedor) {
+        return crearVenta(dto, idUsuarioVendedor, true);
+    }
+
+    /**
+     * Uso interno: la venta que genera un cambio por devolución. Su desglose lleva una línea de crédito por devolución
+     * (método 7): el valor de lo que el cliente devolvió, que no mueve la caja (nunca entró efectivo nuevo).
+     */
+    @Transactional
+    public VentaResponseDto crearDesdeDevolucion(VentaRequestDto dto, Integer idUsuarioVendedor) {
         return crearVenta(dto, idUsuarioVendedor, true);
     }
 
@@ -212,14 +223,16 @@ public class VentaService {
 
         // Con anticipo basta una línea: puede ser que todo ya esté pagado.
         boolean conAnticipo = desdeOrden && hayPagos
-                && pagos.stream().anyMatch(p -> p.getMetodoPago() != null && p.getMetodoPago() == METODO_ANTICIPO);
+                && pagos.stream().anyMatch(p -> p.getMetodoPago() != null
+                        && (p.getMetodoPago() == METODO_ANTICIPO || p.getMetodoPago() == METODO_CREDITO_DEVOLUCION));
         if (!hayPagos || (pagos.size() < 2 && !conAnticipo)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Un pago Mixto requiere el desglose (pagos) con al menos 2 líneas.");
         }
         BigDecimal suma = BigDecimal.ZERO;
         for (VentaPagoDetalleRequestDto p : pagos) {
-            boolean esAnticipo = desdeOrden && p.getMetodoPago() != null && p.getMetodoPago() == METODO_ANTICIPO;
+            boolean esAnticipo = desdeOrden && p.getMetodoPago() != null
+                    && (p.getMetodoPago() == METODO_ANTICIPO || p.getMetodoPago() == METODO_CREDITO_DEVOLUCION);
             if (p.getMetodoPago() == null || (!esAnticipo && !METODOS_DESGLOSE.contains(p.getMetodoPago()))) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Método de pago no válido en el desglose: " + p.getMetodoPago()
@@ -309,6 +322,11 @@ public class VentaService {
         if (ordenServicioRepository.existsByVenta_Idventa(idventa)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "La venta " + idventa + " salió de una orden de servicio y no se puede cancelar por separado.");
+        }
+
+        if (devolucionRepository.existeVigenteDeVenta(idventa)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La venta " + idventa + " tiene una devolución pendiente o procesada y no se puede cancelar.");
         }
 
         // Antes de revertir nada: si la venta tiene una cuenta por cobrar con abonos, se bloquea.
@@ -590,6 +608,7 @@ public class VentaService {
             case 4 -> "Mixto";
             case 5 -> "PayJoy";
             case 6 -> "Anticipo";
+            case 7 -> "Crédito por devolución";
             default -> "Efectivo";
         };
     }

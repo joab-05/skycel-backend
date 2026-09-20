@@ -86,6 +86,7 @@ public class MovimientoInventarioService {
             case "TRASPASO_ENTRADA"  -> "Traspaso recibido";
             case "TRASPASO_ANULADO"  -> "Traspaso anulado";
             case "TRASPASO_FALTANTE" -> "Faltante de traspaso";
+            case "DEVOLUCION"        -> "Devolución de venta";
             default                  -> tipo;
         };
     }

@@ -52,6 +52,7 @@ class VentaServiceTest {
     @Mock private VentaPagoDetalleRepository ventaPagoDetalleRepository;
     @Mock private OrdenServicioRepository  ordenServicioRepository;
     @Mock private MovimientoInventarioService movimientoInventarioService;
+    @Mock private com.skycel.backend.repository.DevolucionRepository devolucionRepository;
 
     @InjectMocks
     private VentaService ventaService;

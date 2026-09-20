@@ -35,6 +35,7 @@ import static com.skycel.backend.service.MotivoCajaService.ABONO_CUENTA;
 import static com.skycel.backend.service.MotivoCajaService.ANTICIPO_SERVICIO;
 import static com.skycel.backend.service.MotivoCajaService.CANCELACION_VENTA;
 import static com.skycel.backend.service.MotivoCajaService.DEVOLUCION_ANTICIPO;
+import static com.skycel.backend.service.MotivoCajaService.DEVOLUCION_VENTA;
 import static com.skycel.backend.service.MotivoCajaService.CAT_PERSONAL;
 import static com.skycel.backend.service.MotivoCajaService.ENTRADA;
 import static com.skycel.backend.service.MotivoCajaService.SALIDA;
@@ -170,6 +171,18 @@ public class MovimientoCajaService {
         guardar(original.getCaja(), usuario, null, motivoSistema(DEVOLUCION_ANTICIPO), anticipo.getMonto(),
                 "Devolución de anticipo orden " + orden.getFolio() + " (anticipo #" + anticipo.getIdanticipo() + ")",
                 original.getIdmovimiento());
+    }
+
+    /** Salida de efectivo por el reembolso de una devolución de venta. La caja debe tener el efectivo. */
+    @Transactional
+    public void registrarDevolucionVenta(Caja caja, com.skycel.backend.domain.entity.Devolucion devolucion, Usuario usuario, BigDecimal monto) {
+        BigDecimal saldo = saldoDe(caja.getIdCaja());
+        if (monto.compareTo(saldo) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Saldo insuficiente en la caja para el reembolso. Disponible: $" + saldo + ", reembolso: $" + monto);
+        }
+        guardar(caja, usuario, null, motivoSistema(DEVOLUCION_VENTA), monto,
+                "Devolución " + devolucion.getFolio() + " (venta #" + devolucion.getVenta().getIdventa() + ")", null);
     }
 
     private Caja cajaPrincipalDe(Usuario usuario) {
