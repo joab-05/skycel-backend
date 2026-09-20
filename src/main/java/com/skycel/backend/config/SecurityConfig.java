@@ -60,7 +60,9 @@ public class SecurityConfig {
                         "/swagger-ui.html",
                         "/webjars/**",
                         // Los errores de validación (400) se reenvían a /error; sin esto se enmascaran como 401
-                        "/error"
+                        "/error",
+                        // Consulta del cliente por folio (sin iniciar sesión); ver PublicoGarantiaController
+                        "/api/publico/**"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
