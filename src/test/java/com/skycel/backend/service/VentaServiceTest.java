@@ -50,6 +50,7 @@ class VentaServiceTest {
     @Mock private MovimientoCajaService    movimientoCajaService;
     @Mock private CuentaPorCobrarService   cuentaPorCobrarService;
     @Mock private VentaPagoDetalleRepository ventaPagoDetalleRepository;
+    @Mock private OrdenServicioRepository  ordenServicioRepository;
 
     @InjectMocks
     private VentaService ventaService;
@@ -490,6 +491,110 @@ class VentaServiceTest {
             ArgumentCaptor<VentaDetalle> cap = ArgumentCaptor.forClass(VentaDetalle.class);
             verify(ventaDetalleRepository).save(cap.capture());
             assertThat(cap.getValue().getCostoUnitarioCompra()).isEqualByComparingTo("100");
+        }
+    }
+
+    // ── Venta de una orden de servicio (con anticipo) ────────────────────────
+
+    @Nested
+    @DisplayName("venta de una orden de servicio: línea de pago ANTICIPO")
+    class DesdeOrdenServicio {
+
+        private com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto pago(int metodo, String monto) {
+            var p = new com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto();
+            p.setMetodoPago((byte) metodo);
+            p.setMonto(new BigDecimal(monto));
+            return p;
+        }
+
+        /** Venta de 4 accesorios a $15 = $60 con método Mixto y el desglose indicado. */
+        private VentaRequestDto mixta(com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto... pagos) {
+            ProductoMaster master = masterAccesorio();
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(master, BigDecimal.TEN)));
+            VentaRequestDto request = ventaBase(List.of(lineaAccesorio((short) 4)));
+            request.setMetodoPago((byte) 4);
+            request.setPagos(List.of(pagos));
+            return request;
+        }
+
+        @Test
+        @DisplayName("anticipo + saldo en efectivo: la venta queda pagada y a la caja entra solo el efectivo del saldo")
+        void anticipoMasSaldo() {
+            VentaRequestDto request = mixta(pago(6, "20"), pago(1, "40"));
+
+            VentaResponseDto r = ventaService.crearDesdeOrdenServicio(request, ID_VENDEDOR);
+
+            assertThat(r.getMontoAbonado()).isEqualByComparingTo("60");
+            verify(movimientoCajaService).registrarEntradaVenta(any(Venta.class), eq(vendedor),
+                    argThat(m -> m.compareTo(new BigDecimal("40")) == 0));
+            verify(cuentaPorCobrarService, never()).crearDesdeVenta(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("si el anticipo cubre todo basta una línea, y a la caja no entra nada (ya entró al recibirlo)")
+        void soloAnticipo() {
+            VentaRequestDto request = mixta(pago(6, "60"));
+
+            ventaService.crearDesdeOrdenServicio(request, ID_VENDEDOR);
+
+            verify(movimientoCajaService).registrarEntradaVenta(any(Venta.class), eq(vendedor), argThat(m -> m.signum() == 0));
+        }
+
+        @Test
+        @DisplayName("la línea ANTICIPO se muestra en el desglose de la respuesta como \"Anticipo\"")
+        void seMuestraComoAnticipo() {
+            when(ventaPagoDetalleRepository.findByVenta_IdventaOrderByIdpagoDetalle(500)).thenReturn(List.of(
+                    VentaPagoDetalle.builder().metodoPago((byte) 6).monto(new BigDecimal("20")).build(),
+                    VentaPagoDetalle.builder().metodoPago((byte) 1).monto(new BigDecimal("40")).build()));
+
+            VentaResponseDto r = ventaService.crearDesdeOrdenServicio(mixta(pago(6, "20"), pago(1, "40")), ID_VENDEDOR);
+
+            assertThat(r.getPagos()).extracting(p -> p.getDescripcionMetodoPago()).containsExactly("Anticipo", "Efectivo");
+        }
+
+        @Test
+        @DisplayName("una venta normal (no de una orden) no admite líneas ANTICIPO: 400")
+        void ventaNormalNoAdmiteAnticipo() {
+            assertThatThrownBy(() -> ventaService.crear(mixta(pago(6, "20"), pago(1, "40")), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no válido");
+            verify(ventaRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("un regalo ya autorizado en la orden no se rechaza aunque quien entrega sea un vendedor")
+        void regaloYaAutorizado() {
+            vendedor.setRol(com.skycel.backend.domain.enums.Rol.VENDEDOR);
+            ProductoMaster master = masterAccesorio();
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(master, BigDecimal.TEN)));
+            VentaDetalleRequestDto regalo = lineaAccesorio((short) 1);
+            regalo.setPrecioUnitarioFinal(BigDecimal.ZERO);
+            regalo.setEsRegalo(true);
+            VentaRequestDto request = ventaBase(List.of(lineaAccesorio((short) 1), regalo));
+
+            assertThat(ventaService.crearDesdeOrdenServicio(request, ID_VENDEDOR).getTotal()).isEqualByComparingTo("15");
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            e -> assertThat(e.getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("una venta que salió de una orden de servicio no se cancela por separado: 409")
+        void noSeCancelaPorSeparado() {
+            Venta venta = Venta.builder().idventa(500).estado((byte) 1).build();
+            when(ventaRepository.findById(500)).thenReturn(Optional.of(venta));
+            when(ordenServicioRepository.existsByVenta_Idventa(500)).thenReturn(true);
+
+            assertThatThrownBy(() -> ventaService.cancelar(500, ID_VENDEDOR))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                        assertThat(e.getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+                        assertThat(e.getReason()).contains("orden de servicio");
+                    });
+            assertThat(venta.getEstado()).isEqualTo((byte) 1);
+            verifyNoInteractions(ventaDetalleRepository);
         }
     }
 

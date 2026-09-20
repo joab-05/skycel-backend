@@ -4,7 +4,10 @@ import com.skycel.backend.domain.entity.CatMotivo;
 import com.skycel.backend.domain.entity.Caja;
 import com.skycel.backend.domain.entity.CuentaPorCobrar;
 import com.skycel.backend.domain.entity.MovimientoCaja;
+import com.skycel.backend.domain.entity.OrdenServicio;
+import com.skycel.backend.domain.entity.OrdenServicioAnticipo;
 import com.skycel.backend.domain.entity.PagoCuenta;
+import com.skycel.backend.domain.entity.Tienda;
 import com.skycel.backend.domain.entity.Usuario;
 import com.skycel.backend.domain.entity.Venta;
 import com.skycel.backend.domain.enums.Rol;
@@ -28,7 +31,9 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.skycel.backend.service.MotivoCajaService.ABONO_CUENTA;
+import static com.skycel.backend.service.MotivoCajaService.ANTICIPO_SERVICIO;
 import static com.skycel.backend.service.MotivoCajaService.CANCELACION_VENTA;
+import static com.skycel.backend.service.MotivoCajaService.DEVOLUCION_ANTICIPO;
 import static com.skycel.backend.service.MotivoCajaService.CAT_PERSONAL;
 import static com.skycel.backend.service.MotivoCajaService.ENTRADA;
 import static com.skycel.backend.service.MotivoCajaService.SALIDA;
@@ -132,15 +137,52 @@ public class MovimientoCajaService {
                 "Abono a cuenta " + cuenta.getNoFactura() + " (pago #" + pago.getIdpago() + ")", null);
     }
 
+    /**
+     * Entrada por el anticipo en efectivo de una orden de servicio. La caja es la indicada o la principal de
+     * la tienda de la orden. Devuelve el id del movimiento, para poder devolver el anticipo si se cancela.
+     */
+    @Transactional
+    public Integer registrarAnticipoServicio(Integer idCaja, OrdenServicio orden, OrdenServicioAnticipo anticipo, Usuario usuario) {
+        Caja caja = cajaParaTienda(idCaja, orden.getTienda());
+        validarAcceso(usuario, caja);
+        return guardar(caja, usuario, null, motivoSistema(ANTICIPO_SERVICIO), anticipo.getMonto(),
+                "Anticipo orden " + orden.getFolio() + " (anticipo #" + anticipo.getIdanticipo() + ")", null).getIdmovimiento();
+    }
+
+    /** La caja indicada (que debe ser de la tienda) o, si no se indica, la principal de la tienda. */
+    public Caja cajaParaTienda(Integer idCaja, Tienda tienda) {
+        Caja caja = idCaja != null ? buscarCaja(idCaja) : cajaPrincipalDeTienda(tienda);
+        if (!caja.getTienda().getCodti().equals(tienda.getCodti())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La caja " + caja.getIdCaja() + " no pertenece a la tienda " + tienda.getCodti() + ".");
+        }
+        return caja;
+    }
+
+    /** Salida que devuelve al cliente un anticipo en efectivo, en la misma caja donde entró. */
+    @Transactional
+    public void registrarDevolucionAnticipo(OrdenServicio orden, OrdenServicioAnticipo anticipo, Usuario usuario) {
+        MovimientoCaja original = movimientoCajaRepository.findById(anticipo.getIdmovimientoCaja())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                        "No se encontró el movimiento de caja del anticipo #" + anticipo.getIdanticipo() + "."));
+        guardar(original.getCaja(), usuario, null, motivoSistema(DEVOLUCION_ANTICIPO), anticipo.getMonto(),
+                "Devolución de anticipo orden " + orden.getFolio() + " (anticipo #" + anticipo.getIdanticipo() + ")",
+                original.getIdmovimiento());
+    }
+
     private Caja cajaPrincipalDe(Usuario usuario) {
-        if (usuario.getTienda() != null) {
-            List<Caja> cajas = cajaRepository.findByTienda_Codti(usuario.getTienda().getCodti());
+        return cajaPrincipalDeTienda(usuario.getTienda());
+    }
+
+    private Caja cajaPrincipalDeTienda(Tienda tienda) {
+        if (tienda != null) {
+            List<Caja> cajas = cajaRepository.findByTienda_Codti(tienda.getCodti());
             Optional<Caja> principal = cajas.stream().filter(c -> Boolean.TRUE.equals(c.getEsCajaPrincipal())).findFirst();
             if (principal.isPresent()) return principal.get();
             if (cajas.size() == 1) return cajas.get(0);
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Un abono en efectivo entra a una caja: indique el parámetro idCaja.");
+                "Un pago en efectivo entra a una caja: indique el parámetro idCaja.");
     }
 
     // ── Consultas ────────────────────────────────────────────────────────────

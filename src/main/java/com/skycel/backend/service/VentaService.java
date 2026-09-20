@@ -47,6 +47,8 @@ public class VentaService {
     private static final byte ESTADO_CANCELADA  = 2;
     private static final byte METODO_EFECTIVO   = 1;
     private static final byte METODO_MIXTO      = 4;
+    /** Solo en el desglose de una venta de una orden de servicio: lo que el cliente ya pagó como anticipo. */
+    private static final byte METODO_ANTICIPO   = 6;
     /** Métodos admitidos en las líneas de un pago Mixto: efectivo, tarjeta, transferencia y PayJoy. */
     private static final Set<Byte> METODOS_DESGLOSE = Set.of((byte) 1, (byte) 2, (byte) 3, (byte) 5);
 
@@ -62,11 +64,27 @@ public class VentaService {
     private final MovimientoCajaService    movimientoCajaService;
     private final CuentaPorCobrarService   cuentaPorCobrarService;
     private final VentaPagoDetalleRepository ventaPagoDetalleRepository;
+    private final OrdenServicioRepository  ordenServicioRepository;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
     @Transactional
     public VentaResponseDto crear(VentaRequestDto dto, Integer idUsuarioVendedor) {
+        return crearVenta(dto, idUsuarioVendedor, false);
+    }
+
+    /**
+     * Uso interno: la venta que genera una orden de servicio al entregar el equipo. A diferencia de una venta
+     * normal, su desglose puede incluir una línea de pago ANTICIPO (método 6): lo que el cliente ya pagó al
+     * dejar el equipo. Esa línea queda en el desglose pero no mueve la caja (el efectivo ya entró al recibir
+     * el anticipo).
+     */
+    @Transactional
+    public VentaResponseDto crearDesdeOrdenServicio(VentaRequestDto dto, Integer idUsuarioVendedor) {
+        return crearVenta(dto, idUsuarioVendedor, true);
+    }
+
+    private VentaResponseDto crearVenta(VentaRequestDto dto, Integer idUsuarioVendedor, boolean desdeOrden) {
 
         Tienda tienda = tiendaRepository.findById(dto.getCodti())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -99,7 +117,7 @@ public class VentaService {
         List<LineaResuelta> lineas = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
         for (VentaDetalleRequestDto d : dto.getDetalles()) {
-            LineaResuelta linea = resolverLinea(d, tienda, vendedor);
+            LineaResuelta linea = resolverLinea(d, tienda, vendedor, desdeOrden);
             lineas.add(linea);
             total = total.add(linea.subtotal);
         }
@@ -108,7 +126,7 @@ public class VentaService {
                     "La venta no puede ser de $0: agregue al menos un artículo con precio.");
         }
 
-        BigDecimal montoAbonado = resolverMontoAbonado(dto, total);
+        BigDecimal montoAbonado = resolverMontoAbonado(dto, total, desdeOrden);
 
         if (montoAbonado.compareTo(total) < 0 && cliente == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -178,7 +196,7 @@ public class VentaService {
      * Monto abonado de la venta. En un pago Mixto es la suma del desglose (que no puede superar el total
      * ni contradecir un montoAbonado explícito); en los demás casos, lo indicado o el total.
      */
-    private BigDecimal resolverMontoAbonado(VentaRequestDto dto, BigDecimal total) {
+    private BigDecimal resolverMontoAbonado(VentaRequestDto dto, BigDecimal total, boolean desdeOrden) {
         boolean mixto = dto.getMetodoPago() != null && dto.getMetodoPago() == METODO_MIXTO;
         List<VentaPagoDetalleRequestDto> pagos = dto.getPagos();
         boolean hayPagos = pagos != null && !pagos.isEmpty();
@@ -191,13 +209,17 @@ public class VentaService {
             return dto.getMontoAbonado() != null ? dto.getMontoAbonado() : total;
         }
 
-        if (!hayPagos || pagos.size() < 2) {
+        // Con anticipo basta una línea: puede ser que todo ya esté pagado.
+        boolean conAnticipo = desdeOrden && hayPagos
+                && pagos.stream().anyMatch(p -> p.getMetodoPago() != null && p.getMetodoPago() == METODO_ANTICIPO);
+        if (!hayPagos || (pagos.size() < 2 && !conAnticipo)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Un pago Mixto requiere el desglose (pagos) con al menos 2 líneas.");
         }
         BigDecimal suma = BigDecimal.ZERO;
         for (VentaPagoDetalleRequestDto p : pagos) {
-            if (p.getMetodoPago() == null || !METODOS_DESGLOSE.contains(p.getMetodoPago())) {
+            boolean esAnticipo = desdeOrden && p.getMetodoPago() != null && p.getMetodoPago() == METODO_ANTICIPO;
+            if (p.getMetodoPago() == null || (!esAnticipo && !METODOS_DESGLOSE.contains(p.getMetodoPago()))) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Método de pago no válido en el desglose: " + p.getMetodoPago()
                                 + " (use 1 Efectivo, 2 Tarjeta, 3 Transferencia o 5 PayJoy).");
@@ -282,6 +304,12 @@ public class VentaService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La venta " + idventa + " ya está cancelada.");
         }
 
+        // Una venta que salió de una orden de servicio (con su anticipo) no se cancela por separado.
+        if (ordenServicioRepository.existsByVenta_Idventa(idventa)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La venta " + idventa + " salió de una orden de servicio y no se puede cancelar por separado.");
+        }
+
         // Antes de revertir nada: si la venta tiene una cuenta por cobrar con abonos, se bloquea.
         cuentaPorCobrarService.cancelarPorVenta(idventa);
 
@@ -350,7 +378,7 @@ public class VentaService {
         Boolean esRegalo;
     }
 
-    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor) {
+    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor, boolean desdeOrden) {
         ProductoMaster master = productoMasterRepository.findById(d.getIdprodmaster())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Producto maestro no encontrado: " + d.getIdprodmaster()));
@@ -418,7 +446,7 @@ public class VentaService {
         }
 
         linea.precioUnitarioFinal = d.getPrecioUnitarioFinal();
-        validarRegalo(linea, vendedor);
+        validarRegalo(linea, vendedor, desdeOrden);
         linea.subtotal = linea.precioUnitarioFinal.multiply(BigDecimal.valueOf(linea.cantidadSolicitada));
         return linea;
     }
@@ -427,14 +455,15 @@ public class VentaService {
      * Un precio de $0 solo es válido en un artículo marcado como regalo, y un regalo debe costar $0.
      * Los vendedores no pueden regalar: lo autoriza un encargado o un administrador.
      */
-    private void validarRegalo(LineaResuelta linea, Usuario vendedor) {
+    private void validarRegalo(LineaResuelta linea, Usuario vendedor, boolean regaloYaAutorizado) {
         boolean precioCero = linea.precioUnitarioFinal.signum() == 0;
         if (linea.esRegalo) {
             if (!precioCero) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Un artículo de regalo debe tener precio $0: '" + linea.productoMaster.getNombreBase() + "'.");
             }
-            if (vendedor.getRol() == Rol.VENDEDOR) {
+            // En la venta de una orden de servicio el regalo ya lo autorizó un encargado al agregarlo a la orden.
+            if (!regaloYaAutorizado && vendedor.getRol() == Rol.VENDEDOR) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                         "Solo un encargado o un administrador puede autorizar un regalo.");
             }
@@ -555,6 +584,7 @@ public class VentaService {
             case 3 -> "Transferencia";
             case 4 -> "Mixto";
             case 5 -> "PayJoy";
+            case 6 -> "Anticipo";
             default -> "Efectivo";
         };
     }

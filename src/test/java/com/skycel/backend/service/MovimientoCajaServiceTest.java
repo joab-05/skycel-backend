@@ -305,6 +305,100 @@ class MovimientoCajaServiceTest {
         assertThat(cap.getValue().getObservaciones()).isEqualTo("Venta #9");
     }
 
+    // ── Anticipos de órdenes de servicio ─────────────────────────────────────
+
+    private OrdenServicio orden() {
+        return OrdenServicio.builder().idorden(1).folio("OS-000001").tienda(tienda).build();
+    }
+
+    private OrdenServicioAnticipo anticipoDeOrden() {
+        return OrdenServicioAnticipo.builder().idanticipo(8).monto(new BigDecimal("500.00")).build();
+    }
+
+    private void motivos() {
+        lenient().when(catMotivoRepository.findByNombre("Anticipo de servicio")).thenReturn(Optional.of(
+                CatMotivo.builder().idmotivo(11).nombre("Anticipo de servicio").tipoMov((byte) 1).catSat((byte) 1).activo(true).build()));
+        lenient().when(catMotivoRepository.findByNombre("Devolución de anticipo")).thenReturn(Optional.of(
+                CatMotivo.builder().idmotivo(12).nombre("Devolución de anticipo").tipoMov((byte) 2).catSat((byte) 1).activo(true).build()));
+        lenient().when(movimientoCajaRepository.save(any(MovimientoCaja.class))).thenAnswer(inv -> {
+            MovimientoCaja m = inv.getArgument(0);
+            m.setIdmovimiento(77);
+            return m;
+        });
+    }
+
+    @Test
+    @DisplayName("anticipo en efectivo con caja indicada: entrada ligada a la orden y al anticipo; devuelve el id del movimiento")
+    void anticipoConCajaIndicada() {
+        motivos();
+
+        Integer id = service.registrarAnticipoServicio(ID_CAJA, orden(), anticipoDeOrden(), encargado);
+
+        ArgumentCaptor<MovimientoCaja> cap = ArgumentCaptor.forClass(MovimientoCaja.class);
+        verify(movimientoCajaRepository).save(cap.capture());
+        assertThat(id).isEqualTo(77);
+        assertThat(cap.getValue().getTipo()).isEqualTo((byte) 1);
+        assertThat(cap.getValue().getMonto()).isEqualByComparingTo("500.00");
+        assertThat(cap.getValue().getObservaciones()).isEqualTo("Anticipo orden OS-000001 (anticipo #8)");
+    }
+
+    @Test
+    @DisplayName("anticipo sin caja: usa la caja principal de la tienda de la orden (no la del usuario)")
+    void anticipoSinCaja() {
+        motivos();
+        caja.setEsCajaPrincipal(true);
+        when(cajaRepository.findByTienda_Codti(2)).thenReturn(List.of(caja));
+
+        service.registrarAnticipoServicio(null, orden(), anticipoDeOrden(), admin);
+
+        ArgumentCaptor<MovimientoCaja> cap = ArgumentCaptor.forClass(MovimientoCaja.class);
+        verify(movimientoCajaRepository).save(cap.capture());
+        assertThat(cap.getValue().getCaja()).isSameAs(caja);
+    }
+
+    @Test
+    @DisplayName("una caja de otra tienda no sirve para el anticipo de la orden: 400")
+    void anticipoCajaDeOtraTienda() {
+        motivos();
+        caja.setTienda(otraTienda);
+
+        assertThatThrownBy(() -> service.registrarAnticipoServicio(ID_CAJA, orden(), anticipoDeOrden(), admin))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no pertenece");
+        verify(movimientoCajaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("devolver un anticipo: salida en la misma caja, referenciando la entrada original")
+    void devolucionDeAnticipo() {
+        motivos();
+        MovimientoCaja original = MovimientoCaja.builder().idmovimiento(30).caja(caja).monto(new BigDecimal("500.00")).tipo((byte) 1).build();
+        when(movimientoCajaRepository.findById(30)).thenReturn(Optional.of(original));
+        OrdenServicioAnticipo anticipo = anticipoDeOrden();
+        anticipo.setIdmovimientoCaja(30);
+
+        service.registrarDevolucionAnticipo(orden(), anticipo, encargado);
+
+        ArgumentCaptor<MovimientoCaja> cap = ArgumentCaptor.forClass(MovimientoCaja.class);
+        verify(movimientoCajaRepository).save(cap.capture());
+        assertThat(cap.getValue().getTipo()).isEqualTo((byte) 2);
+        assertThat(cap.getValue().getCaja()).isSameAs(caja);
+        assertThat(cap.getValue().getIdmovRef()).isEqualTo(30);
+        assertThat(cap.getValue().getMonto()).isEqualByComparingTo("500.00");
+    }
+
+    @Test
+    @DisplayName("devolver un anticipo cuyo movimiento ya no existe: 409")
+    void devolucionSinMovimiento() {
+        motivos();
+        when(movimientoCajaRepository.findById(30)).thenReturn(Optional.empty());
+        OrdenServicioAnticipo anticipo = anticipoDeOrden();
+        anticipo.setIdmovimientoCaja(30);
+
+        assertThatThrownBy(() -> service.registrarDevolucionAnticipo(orden(), anticipo, encargado))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
     @Test
     @DisplayName("cancelar una venta sin movimiento (no fue efectivo / es anterior): no registra nada")
     void cancelacionSinMovimientoOriginal() {
