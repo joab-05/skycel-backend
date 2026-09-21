@@ -46,6 +46,14 @@ public class Usuario {
     @Column(name = "email", length = 100)
     private String email;
 
+    /**
+     * Solo para el rol TECNICO: el técnico encargado del equipo. Ve todas las órdenes de su tienda y es quien asigna la
+     * reparación a cada técnico.
+     */
+    @Column(name = "tecnico_encargado", columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Builder.Default
+    private Boolean tecnicoEncargado = false;
+
     @Column(name = "activo", columnDefinition = "TINYINT DEFAULT 1")
     private Boolean activo;
 

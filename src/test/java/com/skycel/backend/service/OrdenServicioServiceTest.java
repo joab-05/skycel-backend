@@ -66,7 +66,7 @@ class OrdenServicioServiceTest {
     private long folio = 0;
 
     private Tienda zocalo, corpo;
-    private Usuario root, encZocalo, vendZocalo, encCorpo, tecnico, otroTecnico, sinRol;
+    private Usuario root, encZocalo, vendZocalo, encCorpo, tecnico, otroTecnico, sinRol, tecnicoEncargado;
     private Cliente cliente;
     private ProductoMaster mServicio, mMica, mCelular;
     private Producto pantalla, mica, celular;
@@ -83,6 +83,8 @@ class OrdenServicioServiceTest {
         tecnico    = usuario(20, "juan.perez", Rol.TECNICO, zocalo);
         otroTecnico = usuario(21, "ana.lopez", Rol.TECNICO, corpo);
         sinRol     = usuario(22, "oscar", Rol.VENDEDOR, corpo);
+        tecnicoEncargado = usuario(23, "luis.tecnico", Rol.TECNICO, zocalo);
+        tecnicoEncargado.setTecnicoEncargado(true);
         cliente = Cliente.builder().idcliente(7).nombreCompleto("Sofia Ramirez").telefono("7571200001").build();
 
         mServicio = ProductoMaster.builder().idprodmaster(1).tipo(TipoProducto.SERVICIO).nombreBase("Cambio de Pantalla").diasGarantia(30).build();
@@ -95,7 +97,7 @@ class OrdenServicioServiceTest {
 
         for (Tienda t : List.of(zocalo, corpo)) lenient().when(tiendaRepository.findById(t.getCodti())).thenReturn(Optional.of(t));
         lenient().when(clienteRepository.findById(7)).thenReturn(Optional.of(cliente));
-        for (Usuario u : List.of(root, encZocalo, vendZocalo, encCorpo, tecnico, otroTecnico, sinRol)) {
+        for (Usuario u : List.of(root, encZocalo, vendZocalo, encCorpo, tecnico, otroTecnico, sinRol, tecnicoEncargado)) {
             lenient().when(usuarioRepository.findByUsername(u.getUsername())).thenReturn(Optional.of(u));
             lenient().when(usuarioRepository.findById(u.getIdusuario())).thenReturn(Optional.of(u));
         }
@@ -185,9 +187,10 @@ class OrdenServicioServiceTest {
     /** Recibe una orden (como encargado) con el técnico asignado y los renglones indicados. */
     private int orden(OrdenLineaRequestDto... lineas) {
         OrdenServicioRequestDto dto = recepcion();
-        dto.setIdTecnico(tecnico.getIdusuario());
         dto.setLineas(lineas.length == 0 ? null : List.of(lineas));
-        return service.crear(dto, "abigail").getIdorden();
+        int idorden = service.crear(dto, "abigail").getIdorden();
+        ordenes.get(idorden).setTecnico(tecnico);   // la asignación la hace el técnico encargado o un administrador
+        return idorden;
     }
 
     private OrdenServicio viva(int idorden) {
@@ -249,7 +252,8 @@ class OrdenServicioServiceTest {
             dto.setAnticipo(anticipo("500", 1));
             dto.getAnticipo().setIdCaja(1);
 
-            OrdenServicioResponseDto r = service.crear(dto, "abigail");
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.crear(dto, "abigail"));   // el encargado de la tienda no asigna técnico
+            OrdenServicioResponseDto r = service.crear(dto, "root");
 
             assertThat(r.getNombreTecnico()).isEqualTo("JUAN.PEREZ");
             assertThat(r.getLineas()).hasSize(2);
@@ -260,7 +264,7 @@ class OrdenServicioServiceTest {
             assertThat(r.getTotalAnticipos()).isEqualByComparingTo("500");
             assertThat(r.getSaldo()).isEqualByComparingTo("880");
             assertThat(r.getAnticipos().get(0).getIdmovimientoCaja()).isEqualTo(900);
-            verify(movimientoCajaService).registrarAnticipoServicio(eq(1), any(OrdenServicio.class), any(OrdenServicioAnticipo.class), eq(encZocalo));
+            verify(movimientoCajaService).registrarAnticipoServicio(eq(1), any(OrdenServicio.class), any(OrdenServicioAnticipo.class), eq(root));
         }
 
         @Test
@@ -291,16 +295,16 @@ class OrdenServicioServiceTest {
         void tecnicoInvalido() {
             OrdenServicioRequestDto noExiste = recepcion();
             noExiste.setIdTecnico(999);
-            assertThatThrownBy(() -> service.crear(noExiste, "abigail")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("no encontrado");
+            assertThatThrownBy(() -> service.crear(noExiste, "root")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("no encontrado");
 
             OrdenServicioRequestDto vendedor = recepcion();
             vendedor.setIdTecnico(9);
-            assertThatThrownBy(() -> service.crear(vendedor, "abigail")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("no tiene el rol TECNICO");
+            assertThatThrownBy(() -> service.crear(vendedor, "root")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("no tiene el rol TECNICO");
 
             tecnico.setActivo(false);
             OrdenServicioRequestDto inactivo = recepcion();
             inactivo.setIdTecnico(20);
-            assertThatThrownBy(() -> service.crear(inactivo, "abigail")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("inactivo");
+            assertThatThrownBy(() -> service.crear(inactivo, "root")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("inactivo");
         }
 
         @Test
@@ -342,9 +346,9 @@ class OrdenServicioServiceTest {
         void productosInvalidos() {
             int o = orden();
 
-            assertThatThrownBy(() -> service.agregarLinea(o, linea("CEL-000001", 1, null, null), "abigail"))
+            assertThatThrownBy(() -> service.agregarLinea(o, linea("CEL-000001", 1, null, null), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Un equipo no se agrega");
-            assertThatThrownBy(() -> service.agregarLinea(o, linea("NO-EXISTE", 1, null, null), "abigail"))
+            assertThatThrownBy(() -> service.agregarLinea(o, linea("NO-EXISTE", 1, null, null), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no existe en la tienda");
         }
 
@@ -353,23 +357,23 @@ class OrdenServicioServiceTest {
         void precios() {
             int o = orden();
 
-            OrdenServicioResponseDto r = service.agregarLinea(o, linea("SRV-000001", 1, "1000", null), "abigail");
+            OrdenServicioResponseDto r = service.agregarLinea(o, linea("SRV-000001", 1, "1000", null), "root");
             assertThat(r.getLineas().get(0).getPrecioUnitario()).isEqualByComparingTo("1000");
-            assertThatThrownBy(() -> service.agregarLinea(o, linea("ACC-000010", 1, "0", null), "abigail"))
+            assertThatThrownBy(() -> service.agregarLinea(o, linea("ACC-000010", 1, "0", null), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("solo se permite en artículos marcados como regalo");
         }
 
         @Test
-        @DisplayName("regalo: un encargado lo autoriza ($0 aunque no se indique precio); vendedor y técnico no (403)")
+        @DisplayName("regalo: un administrador lo autoriza ($0 aunque no se indique precio); vendedor y técnico no (403)")
         void regalo() {
             int o = orden();
 
-            OrdenServicioResponseDto r = service.agregarLinea(o, linea("ACC-000010", 1, null, true), "abigail");
+            OrdenServicioResponseDto r = service.agregarLinea(o, linea("ACC-000010", 1, null, true), "root");
             assertThat(r.getLineas().get(0).getPrecioUnitario()).isEqualByComparingTo("0");
             assertThat(r.getLineas().get(0).getEsRegalo()).isTrue();
             assertEstado(HttpStatus.FORBIDDEN, () -> service.agregarLinea(o, linea("ACC-000010", 1, null, true), "yamilet"));
             assertEstado(HttpStatus.FORBIDDEN, () -> service.agregarLinea(o, linea("ACC-000010", 1, null, true), "juan.perez"));
-            assertThatThrownBy(() -> service.agregarLinea(o, linea("ACC-000010", 1, "50", true), "abigail"))
+            assertThatThrownBy(() -> service.agregarLinea(o, linea("ACC-000010", 1, "50", true), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("debe tener precio $0");
         }
 
@@ -377,10 +381,10 @@ class OrdenServicioServiceTest {
         @DisplayName("se puede quitar un renglón; uno que no es de la orden da 404")
         void quitar() {
             int o = orden(linea("SRV-000001", null, null, null));
-            int iddetalle = service.obtener(o, "abigail").getLineas().get(0).getIddetalle();
+            int iddetalle = service.obtener(o, "root").getLineas().get(0).getIddetalle();
 
-            assertEstado(HttpStatus.NOT_FOUND, () -> service.eliminarLinea(o, 99999, "abigail"));
-            assertThat(service.eliminarLinea(o, iddetalle, "abigail").getLineas()).isEmpty();
+            assertEstado(HttpStatus.NOT_FOUND, () -> service.eliminarLinea(o, 99999, "root"));
+            assertThat(service.eliminarLinea(o, iddetalle, "root").getLineas()).isEmpty();
         }
 
         @Test
@@ -389,8 +393,8 @@ class OrdenServicioServiceTest {
             int o = orden(linea("SRV-000001", null, null, null));
             hastaLista(o);
 
-            assertEstado(HttpStatus.CONFLICT, () -> service.agregarLinea(o, linea("ACC-000010", 1, null, null), "abigail"));
-            assertEstado(HttpStatus.CONFLICT, () -> service.eliminarLinea(o, 1, "abigail"));
+            assertEstado(HttpStatus.CONFLICT, () -> service.agregarLinea(o, linea("ACC-000010", 1, null, null), "root"));
+            assertEstado(HttpStatus.CONFLICT, () -> service.eliminarLinea(o, 1, "root"));
         }
     }
 
@@ -404,7 +408,7 @@ class OrdenServicioServiceTest {
         @DisplayName("iniciar exige técnico asignado; se inicia una sola vez (409 después)")
         void iniciar() {
             int sinTecnico = service.crear(recepcion(), "abigail").getIdorden();
-            assertThatThrownBy(() -> service.iniciar(sinTecnico, "abigail"))
+            assertThatThrownBy(() -> service.iniciar(sinTecnico, "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Asigne un técnico");
 
             int o = orden();
@@ -446,10 +450,10 @@ class OrdenServicioServiceTest {
             int o = orden(linea("SRV-000001", null, null, null));
             ComentarioRequestDto motivo = new ComentarioRequestDto();
             motivo.setComentario("El cliente reporta que la bocina tambien falla");
-            assertEstado(HttpStatus.CONFLICT, () -> service.reabrir(o, motivo, "abigail"));
+            assertEstado(HttpStatus.CONFLICT, () -> service.reabrir(o, motivo, "juan.perez"));
 
             hastaLista(o);
-            OrdenServicioResponseDto r = service.reabrir(o, motivo, "abigail");
+            OrdenServicioResponseDto r = service.reabrir(o, motivo, "juan.perez");
 
             assertThat(r.getEstadoDisplay()).isEqualTo("En reparación");
             assertThat(r.getFechaLista()).isNull();
@@ -475,16 +479,105 @@ class OrdenServicioServiceTest {
         }
 
         @Test
-        @DisplayName("asignar técnico: lo hace un encargado o un administrador, no un vendedor (403)")
+        @DisplayName("asignar técnico: lo hace el técnico encargado (de su tienda) o un administrador; ni el encargado de la tienda ni un vendedor ni otro técnico (403)")
         void asignarTecnico() {
             int o = service.crear(recepcion(), "abigail").getIdorden();
             AsignarTecnicoDto dto = new AsignarTecnicoDto();
             dto.setIdTecnico(20);
 
             assertEstado(HttpStatus.FORBIDDEN, () -> service.asignarTecnico(o, dto, "yamilet"));
-            OrdenServicioResponseDto r = service.asignarTecnico(o, dto, "abigail");
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.asignarTecnico(o, dto, "abigail"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.asignarTecnico(o, dto, "juan.perez"));
+            OrdenServicioResponseDto r = service.asignarTecnico(o, dto, "luis.tecnico");
             assertThat(r.getNombreTecnico()).isEqualTo("JUAN.PEREZ");
             assertThat(r.getHistorial().get(r.getHistorial().size() - 1).getComentario()).contains("Técnico asignado");
+            assertThat(service.asignarTecnico(o, dto, "root").getNombreTecnico()).isEqualTo("JUAN.PEREZ");
+        }
+
+        @Test
+        @DisplayName("el taller atiende a todas las sucursales: el técnico encargado asigna a cualquier técnico, de cualquier tienda")
+        void tecnicoEncargadoTodasLasTiendas() {
+            int o = service.crear(recepcion(), "abigail").getIdorden();   // recibida en Zócalo
+            AsignarTecnicoDto deOtraTienda = new AsignarTecnicoDto();
+            deOtraTienda.setIdTecnico(21);   // ana.lopez, registrada en Corpo
+
+            assertThat(service.asignarTecnico(o, deOtraTienda, "luis.tecnico").getNombreTecnico()).isEqualTo("ANA.LOPEZ");
+        }
+
+        @Test
+        @DisplayName("tomar: un técnico toma una orden libre (recoge el equipo) y queda asignada; con el encargado ausente, cualquiera puede")
+        void tomar() {
+            int o = service.crear(recepcion(), "abigail").getIdorden();
+
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.tomar(o, "abigail"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.tomar(o, "yamilet"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.iniciar(o, "juan.perez"));   // antes de tomarla no se trabaja
+            OrdenServicioResponseDto r = service.tomar(o, "ana.lopez");   // un técnico de otra tienda, en el taller
+
+            assertThat(r.getNombreTecnico()).isEqualTo("ANA.LOPEZ");
+            assertThat(r.getHistorial().get(r.getHistorial().size() - 1).getComentario()).contains("Equipo recogido en Zocalo").contains("taller");
+            assertEstado(HttpStatus.CONFLICT, () -> service.tomar(o, "juan.perez"));   // ya la tomó otro
+            assertEstado(HttpStatus.CONFLICT, () -> service.tomar(o, "ana.lopez"));
+            assertThat(service.iniciar(o, "ana.lopez").getEstadoDisplay()).isEqualTo("En reparación");
+            assertEstado(HttpStatus.CONFLICT, () -> service.tomar(o, "luis.tecnico"));   // ya no está recibida
+        }
+
+        @Test
+        @DisplayName("taller: el administrador y el técnico encargado ven todas las abiertas; un técnico, las libres y las suyas; el mostrador no")
+        void taller() {
+            OrdenServicio libre = OrdenServicio.builder().idorden(1).folio("OS-1").tienda(zocalo).cliente(Cliente.builder().idcliente(7).nombreCompleto("Sofia").build()).usuarioRecibe(encZocalo).estado((byte) 1).build();
+            OrdenServicio mia = OrdenServicio.builder().idorden(2).folio("OS-2").tienda(corpo).cliente(Cliente.builder().idcliente(7).nombreCompleto("Sofia").build()).usuarioRecibe(encCorpo).tecnico(tecnico).estado((byte) 2).build();
+            when(ordenRepository.abiertasDeTodas()).thenReturn(List.of(libre, mia));
+            when(ordenRepository.abiertasPorTomarODelTecnico(20)).thenReturn(List.of(libre, mia));
+            when(ordenRepository.abiertasPorTomarODelTecnico(21)).thenReturn(List.of(libre));
+            lenient().when(anticipoRepository.findByOrden_IdordenOrderByIdanticipo(anyInt())).thenReturn(List.of());
+
+            assertThat(service.taller("root")).hasSize(2);
+            assertThat(service.taller("luis.tecnico")).hasSize(2);
+            assertThat(service.taller("juan.perez")).hasSize(2);
+            assertThat(service.taller("ana.lopez")).hasSize(1);
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.taller("abigail"));
+        }
+
+        @Test
+        @DisplayName("el taller (estados, diagnóstico, renglones y observaciones) es de administradores y técnicos: el personal de mostrador, 403")
+        void soloAdminYTecnicos() {
+            int o = orden(linea("SRV-000001", null, null, null));
+            ComentarioRequestDto nota = new ComentarioRequestDto();
+            nota.setComentario("El cliente pidió que no se borren los datos");
+            OrdenActualizarDto diag = new OrdenActualizarDto();
+            diag.setDiagnostico("Flex dañado");
+
+            for (String quien : List.of("abigail", "yamilet")) {
+                assertEstado(HttpStatus.FORBIDDEN, () -> service.iniciar(o, quien));
+                assertEstado(HttpStatus.FORBIDDEN, () -> service.agregarNota(o, nota, quien));
+                assertEstado(HttpStatus.FORBIDDEN, () -> service.actualizar(o, diag, quien));
+                assertEstado(HttpStatus.FORBIDDEN, () -> service.agregarLinea(o, linea("ACC-000010", 1, null, null), quien));
+                assertEstado(HttpStatus.FORBIDDEN, () -> service.eliminarLinea(o, 1, quien));
+            }
+            // el personal sí corrige los datos de recepción (no el diagnóstico)
+            OrdenActualizarDto datos = new OrdenActualizarDto();
+            datos.setModelo("iPhone 13 Pro");
+            assertThat(service.actualizar(o, datos, "abigail").getModelo()).isEqualTo("iPhone 13 Pro");
+
+            assertThat(service.agregarNota(o, nota, "juan.perez").getHistorial()).extracting(OrdenServicioResponseDto.HistorialResponseDto::getComentario)
+                    .anyMatch(c -> c.startsWith("Observación: El cliente pidió"));
+            assertThat(service.iniciar(o, "root").getEstadoDisplay()).isEqualTo("En reparación");
+            assertThat(service.actualizar(o, diag, "luis.tecnico").getDiagnostico()).isEqualTo("Flex dañado");
+        }
+
+        @Test
+        @DisplayName("el técnico encargado ve y trabaja todas las órdenes (de cualquier sucursal); otro técnico solo las suyas y las libres")
+        void tecnicoEncargadoVeTodo() {
+            int o = orden(linea("SRV-000001", null, null, null));   // asignada a juan.perez, recibida en Zócalo
+
+            assertThat(service.obtener(o, "luis.tecnico").getIdorden()).isEqualTo(o);
+            when(ordenRepository.buscar(2, null, null)).thenReturn(List.of(viva(o)));
+            assertThat(service.listar(2, null, null, "luis.tecnico")).hasSize(1);
+            assertThat(service.listar(3, null, null, "luis.tecnico")).isEmpty();   // también las de otras tiendas
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.listar(2, null, null, "juan.perez"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.obtener(o, "ana.lopez"));   // asignada a otro técnico
+            assertThat(service.iniciar(o, "luis.tecnico").getEstadoDisplay()).isEqualTo("En reparación");
         }
     }
 
@@ -767,7 +860,7 @@ class OrdenServicioServiceTest {
             dto.setIdTecnico(20);
             dto.setLineas(List.of(linea("SRV-000001", null, null, null)));
             dto.setAnticipo(anticipo("500", 1));
-            int o = service.crear(dto, "abigail").getIdorden();
+            int o = service.crear(dto, "root").getIdorden();
             OrdenActualizarDto diag = new OrdenActualizarDto();
             diag.setDiagnostico("Display y digitalizador dañados");
             service.iniciar(o, "juan.perez");

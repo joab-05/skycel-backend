@@ -41,10 +41,11 @@ public class UsuarioController {
 
     /** Técnicos activos, para asignarlos a las órdenes de servicio (también lo usa un encargado). */
     @GetMapping("/tecnicos")
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN', 'ENCARGADO_TIENDA')")
+    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN', 'ENCARGADO_TIENDA', 'TECNICO')")
     public ResponseEntity<List<UsuarioResponseDto>> listarTecnicos(
-            @RequestParam(value = "codti", required = false) Integer codti) {
-        return ResponseEntity.ok(usuarioService.listarTecnicos(codti));
+            @RequestParam(value = "codti", required = false) Integer codti,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(usuarioService.listarTecnicos(codti, user.getUsername()));
     }
 
     // ── GET /api/usuarios/{id} ────────────────────────────────────────────────

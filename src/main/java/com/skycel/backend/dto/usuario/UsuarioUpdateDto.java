@@ -20,6 +20,7 @@ public class UsuarioUpdateDto {
     private String  telefono;
     private String  email;
     private Boolean activo;         // activar / desactivar
+    private Boolean tecnicoEncargado; // solo aplica al rol TECNICO
 
     // ── EmpleadoPerfil ────────────────────────────────────────────────────────
     private BigDecimal sueldoBase;

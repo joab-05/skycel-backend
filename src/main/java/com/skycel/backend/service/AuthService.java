@@ -59,6 +59,7 @@ public class AuthService {
                 .nombreCompleto(usuario.getNombreCompleto())
                 .rol(usuario.getRol().name())
                 .codti(usuario.getTienda().getCodti())
+                .tecnicoEncargado(Boolean.TRUE.equals(usuario.getTecnicoEncargado()))
                 .build();
     }
 

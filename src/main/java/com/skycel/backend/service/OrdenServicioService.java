@@ -81,6 +81,10 @@ public class OrdenServicioService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cliente no encontrado: " + dto.getIdcliente()));
         validarFechaPromesa(dto.getFechaPromesa());
         String imei = validarImei(dto.getImei());
+        if (dto.getIdTecnico() != null && !esSuperior(usuario)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "La reparación la asigna el técnico encargado: deje el técnico sin asignar al recibir el equipo.");
+        }
         Usuario tecnico = dto.getIdTecnico() != null ? tecnicoValido(dto.getIdTecnico()) : null;
 
         OrdenServicio orden = ordenRepository.save(OrdenServicio.builder()
@@ -112,6 +116,7 @@ public class OrdenServicioService {
         OrdenServicio orden = orden(id);
         exigirPuedeTrabajar(usuario, orden);
         exigirEstado(orden, "modificar", RECIBIDA, EN_REPARACION, LISTA);
+        if (dto.getDiagnostico() != null) exigirTaller(usuario, orden);
 
         if (dto.getMarca() != null && !dto.getMarca().isBlank()) orden.setMarca(dto.getMarca().trim());
         if (dto.getModelo() != null && !dto.getModelo().isBlank()) orden.setModelo(dto.getModelo().trim());
@@ -128,13 +133,63 @@ public class OrdenServicioService {
         return toDto(ordenRepository.save(orden));
     }
 
+    /**
+     * Un técnico toma una orden que nadie ha tomado: pasa a la tienda por el equipo y lo lleva al taller. Queda asignada a él y
+     * en la bitácora consta la recolección. Sirve también cuando el técnico encargado no está: cualquier técnico puede tomar
+     * una orden libre y luego iniciarla.
+     */
+    @Transactional
+    public OrdenServicioResponseDto tomar(Integer id, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        if (usuario.getRol() != Rol.TECNICO) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un técnico toma órdenes; un administrador las asigna.");
+        }
+        if (!Boolean.TRUE.equals(usuario.getActivo())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Su usuario está inactivo.");
+        }
+        OrdenServicio orden = orden(id);
+        exigirEstado(orden, "tomar", RECIBIDA);
+        if (orden.getTecnico() != null) {
+            String quien = orden.getTecnico().getIdusuario().equals(usuario.getIdusuario()) ? "usted" : orden.getTecnico().getNombreCompleto();
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La orden " + orden.getFolio() + " ya la tomó " + quien + ".");
+        }
+        orden.setTecnico(usuario);
+        registrar(orden, usuario, "Equipo recogido en " + orden.getTienda().getNombre() + " por " + usuario.getNombreCompleto() + " (pasa al taller)");
+        return toDto(ordenRepository.save(orden));
+    }
+
+    /**
+     * Las órdenes abiertas del taller, de todas las sucursales. Un administrador y el técnico encargado ven todas; un técnico,
+     * las que aún nadie ha tomado y las suyas.
+     */
+    @Transactional(readOnly = true)
+    public List<OrdenServicioResponseDto> taller(String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        List<OrdenServicio> lista;
+        if (esSuperior(usuario) || esTecnicoEncargado(usuario)) lista = ordenRepository.abiertasDeTodas();
+        else if (usuario.getRol() == Rol.TECNICO) lista = ordenRepository.abiertasPorTomarODelTecnico(usuario.getIdusuario());
+        else throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador o un técnico consulta el taller.");
+        return lista.stream().map(this::toDto).collect(Collectors.toList());
+    }
+
+    /** Agrega una observación a la bitácora de la orden (sin cambiar su estado). */
+    @Transactional
+    public OrdenServicioResponseDto agregarNota(Integer id, ComentarioRequestDto dto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirTaller(usuario, orden);
+        exigirEstado(orden, "agregar observaciones", RECIBIDA, EN_REPARACION, LISTA);
+        registrar(orden, usuario, "Observación: " + dto.getComentario().trim());
+        return toDto(orden);
+    }
+
     @Transactional
     public OrdenServicioResponseDto asignarTecnico(Integer id, AsignarTecnicoDto dto, String username) {
         Usuario usuario = usuarioPorUsername(username);
         OrdenServicio orden = orden(id);
-        // Asignar técnicos es del encargado de la tienda o de un administrador (no de un vendedor)
-        if (!(esSuperior(usuario) || (usuario.getRol() == Rol.ENCARGADO_TIENDA && mismaTienda(usuario, orden.getTienda().getCodti())))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un encargado de la tienda o un administrador asigna técnicos.");
+        // Asignar la reparación es del técnico encargado o de un administrador (el taller atiende a todas las sucursales)
+        if (!(esSuperior(usuario) || esTecnicoEncargado(usuario))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el técnico encargado o un administrador asigna la reparación a un técnico.");
         }
         exigirEstado(orden, "asignar técnico", RECIBIDA, EN_REPARACION, LISTA);
         Usuario tecnico = tecnicoValido(dto.getIdTecnico());
@@ -147,7 +202,7 @@ public class OrdenServicioService {
     public OrdenServicioResponseDto agregarLinea(Integer id, OrdenLineaRequestDto dto, String username) {
         Usuario usuario = usuarioPorUsername(username);
         OrdenServicio orden = orden(id);
-        exigirPuedeTrabajar(usuario, orden);
+        exigirTaller(usuario, orden);
         exigirEstado(orden, "agregar renglones", RECIBIDA, EN_REPARACION);
         OrdenServicioDetalle linea = nuevaLinea(orden, dto, usuario);
         registrar(orden, usuario, "Se agregó: " + linea.getProductoMaster().getNombreBase() + " ×" + linea.getCantidad()
@@ -159,7 +214,7 @@ public class OrdenServicioService {
     public OrdenServicioResponseDto eliminarLinea(Integer id, Integer iddetalle, String username) {
         Usuario usuario = usuarioPorUsername(username);
         OrdenServicio orden = orden(id);
-        exigirPuedeTrabajar(usuario, orden);
+        exigirTaller(usuario, orden);
         exigirEstado(orden, "quitar renglones", RECIBIDA, EN_REPARACION);
         OrdenServicioDetalle linea = detalleRepository.findById(iddetalle)
                 .filter(d -> d.getOrden().getIdorden().equals(id))
@@ -174,7 +229,7 @@ public class OrdenServicioService {
     public OrdenServicioResponseDto iniciar(Integer id, String username) {
         Usuario usuario = usuarioPorUsername(username);
         OrdenServicio orden = orden(id);
-        exigirPuedeTrabajar(usuario, orden);
+        exigirTaller(usuario, orden);
         exigirEstado(orden, "iniciar la reparación", RECIBIDA);
         if (orden.getTecnico() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Asigne un técnico antes de iniciar la reparación.");
@@ -189,7 +244,7 @@ public class OrdenServicioService {
     public OrdenServicioResponseDto marcarLista(Integer id, String username) {
         Usuario usuario = usuarioPorUsername(username);
         OrdenServicio orden = orden(id);
-        exigirPuedeTrabajar(usuario, orden);
+        exigirTaller(usuario, orden);
         exigirEstado(orden, "marcar como lista", EN_REPARACION);
 
         List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(id);
@@ -217,7 +272,7 @@ public class OrdenServicioService {
     public OrdenServicioResponseDto reabrir(Integer id, ComentarioRequestDto dto, String username) {
         Usuario usuario = usuarioPorUsername(username);
         OrdenServicio orden = orden(id);
-        exigirPuedeTrabajar(usuario, orden);
+        exigirTaller(usuario, orden);
         exigirEstado(orden, "reabrir", LISTA);
         orden.setEstado(EN_REPARACION);
         orden.setFechaLista(null);
@@ -341,7 +396,7 @@ public class OrdenServicioService {
     @Transactional(readOnly = true)
     public List<OrdenServicioResponseDto> listar(Integer codti, Byte estado, Integer idTecnico, String username) {
         Usuario usuario = usuarioPorUsername(username);
-        validarGestionaTienda(usuario, codti);
+        if (!esTecnicoEncargado(usuario)) validarGestionaTienda(usuario, codti);
         return ordenRepository.buscar(codti, estado, idTecnico).stream().map(this::toDto).collect(Collectors.toList());
     }
 
@@ -551,6 +606,31 @@ public class OrdenServicioService {
         return esSuperior(u) || ((u.getRol() == Rol.ENCARGADO_TIENDA || u.getRol() == Rol.VENDEDOR) && mismaTienda(u, codti));
     }
 
+    /** El técnico encargado del equipo: ve todas las órdenes de su tienda y asigna las reparaciones. */
+    private boolean esTecnicoEncargado(Usuario u) {
+        return u.getRol() == Rol.TECNICO && Boolean.TRUE.equals(u.getTecnicoEncargado());
+    }
+
+    /**
+     * El trabajo del taller (cambiar el estado, diagnosticar, agregar servicios u observaciones): un administrador, el técnico
+     * asignado o el técnico encargado (de cualquier sucursal: el taller atiende a todas). El personal de mostrador no.
+     */
+    private boolean puedeTrabajarTaller(Usuario u, OrdenServicio o) {
+        return esSuperior(u) || esTecnicoAsignado(u, o) || esTecnicoEncargado(u);
+    }
+
+    private void exigirTaller(Usuario u, OrdenServicio o) {
+        if (!puedeTrabajarTaller(u, o)) {
+            if (u.getRol() == Rol.TECNICO && o.getTecnico() == null) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "La orden " + o.getFolio() + " no tiene técnico: primero tómela (recoja el equipo) para trabajarla.");
+            }
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Los estados, el diagnóstico, los servicios y las observaciones de la orden " + o.getFolio()
+                            + " los registran un administrador o los técnicos.");
+        }
+    }
+
     private boolean esTecnicoAsignado(Usuario u, OrdenServicio o) {
         return u.getRol() == Rol.TECNICO && o.getTecnico() != null && o.getTecnico().getIdusuario().equals(u.getIdusuario());
     }
@@ -568,7 +648,9 @@ public class OrdenServicioService {
 
     /** Ver y trabajar la orden: el personal de la tienda o el técnico asignado. */
     private void exigirPuedeTrabajar(Usuario u, OrdenServicio o) {
-        if (!puedeGestionarTienda(u, o.getTienda().getCodti()) && !esTecnicoAsignado(u, o)) {
+        // un técnico también ve las órdenes libres (para decidir cuál tomar)
+        boolean libreParaTecnico = u.getRol() == Rol.TECNICO && o.getTecnico() == null;
+        if (!puedeGestionarTienda(u, o.getTienda().getCodti()) && !puedeTrabajarTaller(u, o) && !libreParaTecnico) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a la orden " + o.getFolio() + ".");
         }
     }

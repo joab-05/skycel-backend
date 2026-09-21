@@ -43,11 +43,21 @@ public class UsuarioService {
 
     /** Técnicos activos (rol TECNICO); con {@code codti}, solo los de esa tienda. Para asignarlos a una orden de servicio. */
     @Transactional(readOnly = true)
-    public List<UsuarioResponseDto> listarTecnicos(Integer codti) {
+    public List<UsuarioResponseDto> listarTecnicos(Integer codti, String username) {
+        Usuario quien = usuarioRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario autenticado no encontrado"));
+        if (quien.getRol() == Rol.TECNICO) {
+            // solo el técnico encargado, y de su tienda
+            if (!Boolean.TRUE.equals(quien.getTecnicoEncargado())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el técnico encargado consulta la lista de técnicos.");
+            }
+            // el taller atiende a todas las sucursales: ve a todos los técnicos
+        }
+        final Integer tienda = codti;
         return usuarioRepository.findAll().stream()
                 .filter(u -> Boolean.TRUE.equals(u.getActivo()))
                 .filter(u -> u.getRol() == com.skycel.backend.domain.enums.Rol.TECNICO)
-                .filter(u -> codti == null || (u.getTienda() != null && u.getTienda().getCodti().equals(codti)))
+                .filter(u -> tienda == null || (u.getTienda() != null && u.getTienda().getCodti().equals(tienda)))
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
@@ -94,6 +104,7 @@ public class UsuarioService {
                 .nombreCompleto(dto.getNombreCompleto())
                 .tienda(tienda)
                 .rol(rol)
+                .tecnicoEncargado(rol == Rol.TECNICO && Boolean.TRUE.equals(dto.getTecnicoEncargado()))
                 .telefono(dto.getTelefono())
                 .email(dto.getEmail())
                 .activo(true)
@@ -142,6 +153,11 @@ public class UsuarioService {
 
         if (dto.getRol() != null)
             usuario.setRol(parseRol(dto.getRol()));
+
+        if (dto.getTecnicoEncargado() != null)
+            usuario.setTecnicoEncargado(dto.getTecnicoEncargado());
+        if (usuario.getRol() != Rol.TECNICO)
+            usuario.setTecnicoEncargado(false);   // solo un técnico puede ser el técnico encargado
 
         if (dto.getTelefono() != null)
             usuario.setTelefono(dto.getTelefono());
@@ -195,6 +211,7 @@ public class UsuarioService {
                 .telefono(u.getTelefono())
                 .email(u.getEmail())
                 .activo(u.getActivo())
+                .tecnicoEncargado(Boolean.TRUE.equals(u.getTecnicoEncargado()))
                 .fechaAlta(u.getFechaAlta())
                 .codti(u.getTienda() != null ? u.getTienda().getCodti() : null)
                 .nombreTienda(u.getTienda() != null ? u.getTienda().getNombre() : null);

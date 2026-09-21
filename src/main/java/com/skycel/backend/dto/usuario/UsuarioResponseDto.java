@@ -23,6 +23,8 @@ public class UsuarioResponseDto {
     private String  telefono;
     private String  email;
     private Boolean activo;
+    /** Solo un TECNICO: es el técnico encargado (asigna las reparaciones). */
+    private Boolean tecnicoEncargado;
     private LocalDateTime fechaAlta;
 
     // ── Tienda ────────────────────────────────────────────────────────────────

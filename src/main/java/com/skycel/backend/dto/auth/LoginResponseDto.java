@@ -12,4 +12,6 @@ public class LoginResponseDto {
     private String nombreCompleto;
     private String rol;
     private Integer codti;
+    /** Solo un TECNICO: es el técnico encargado. */
+    private Boolean tecnicoEncargado;
 }
