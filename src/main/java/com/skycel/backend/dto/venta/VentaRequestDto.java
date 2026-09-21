@@ -53,6 +53,37 @@ public class VentaRequestDto {
     @Valid
     private List<VentaPagoDetalleRequestDto> pagos;
 
+    // ── Ventas hechas sin conexión (las envía el equipo cuando vuelve el internet) ─────────────────────────
+
+    /**
+     * UUID de la venta que genera el equipo. Si ya se registró con esta clave se devuelve la misma venta (no se duplica),
+     * así que un envío que se repite (p. ej. se cortó la respuesta) es seguro. Lo mandan todas las ventas del POS.
+     */
+    @jakarta.validation.constraints.Size(max = 64, message = "La clave no puede exceder los 64 caracteres")
+    private String claveOffline;
+
+    /** Folio provisional del ticket impreso sin conexión (OFF-...). */
+    @jakarta.validation.constraints.Size(max = 40, message = "El folio local no puede exceder los 40 caracteres")
+    private String folioLocal;
+
+    /**
+     * true = la venta se hizo sin conexión y se envía después. Solo entonces se conserva la fecha en que ocurrió y no se rechaza
+     * por stock insuficiente (ya sucedió; el encargado revisa las diferencias).
+     */
+    private Boolean sinConexion;
+
+    /** Cuándo ocurrió la venta (solo si sinConexion; no puede ser futura ni de hace más de 45 días). */
+    private java.time.LocalDateTime fechaVenta;
+
+    /** Quién vendió (solo si sinConexion). Lo puede indicar quien envía si es él mismo o un encargado o administrador. */
+    private String usernameVendedor;
+
+    /** Cliente que no estaba registrado al vender sin conexión: se busca por teléfono y, si no existe, se crea. */
+    @jakarta.validation.constraints.Size(max = 150)
+    private String clienteNombre;
+    @jakarta.validation.constraints.Size(max = 15)
+    private String clienteTelefono;
+
     @NotEmpty(message = "La venta debe tener al menos un artículo")
     @Valid
     private List<VentaDetalleRequestDto> detalles;

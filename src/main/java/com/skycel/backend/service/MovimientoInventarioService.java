@@ -34,6 +34,12 @@ public class MovimientoInventarioService {
      */
     @Transactional
     public void registrar(Producto p, BigDecimal stockAntes, String tipo, String motivo, String referencia) {
+        registrar(p, stockAntes, tipo, motivo, referencia, null);
+    }
+
+    /** {@code fecha} null = ahora (una venta hecha sin conexión conserva la fecha en que ocurrió). */
+    @Transactional
+    public void registrar(Producto p, BigDecimal stockAntes, String tipo, String motivo, String referencia, LocalDateTime fecha) {
         BigDecimal antes = stockAntes != null ? stockAntes : BigDecimal.ZERO;
         BigDecimal despues = p.getStock() != null ? p.getStock() : BigDecimal.ZERO;
         BigDecimal delta = despues.subtract(antes);
@@ -42,6 +48,7 @@ public class MovimientoInventarioService {
                 .producto(p).tipo(tipo).cantidad(delta).stockAntes(antes).stockDespues(despues)
                 .motivo(motivo == null || motivo.isBlank() ? null : recortar(motivo.trim(), 255))
                 .referencia(referencia)
+                .fecha(fecha)
                 .usuario(usuarioActual())
                 .build());
     }

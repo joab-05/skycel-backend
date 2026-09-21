@@ -53,6 +53,7 @@ class VentaServiceTest {
     @Mock private OrdenServicioRepository  ordenServicioRepository;
     @Mock private MovimientoInventarioService movimientoInventarioService;
     @Mock private com.skycel.backend.repository.DevolucionRepository devolucionRepository;
+    @Mock private ClienteService clienteService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -858,6 +859,130 @@ class VentaServiceTest {
             assertThatThrownBy(() -> ventaService.cancelar(999, ID_VENDEDOR))
                     .isInstanceOf(ResponseStatusException.class)
                     .hasMessageContaining("no encontrada");
+        }
+    }
+
+    // ── Ventas hechas sin conexión ───────────────────────────────────────────
+
+    @Nested
+    @DisplayName("ventas hechas sin conexión (se envían después)")
+    class SinConexion {
+
+        private VentaRequestDto sinConexion(short cantidad) {
+            VentaRequestDto r = ventaBase(List.of(lineaAccesorio(cantidad)));
+            r.setClaveOffline("3f6c0c9e-1111-4222-8333-444455556666");
+            r.setSinConexion(true);
+            r.setFolioLocal("OFF-ZOC1-000007");
+            r.setFechaVenta(java.time.LocalDateTime.now().minusHours(5));
+            return r;
+        }
+
+        private Producto accesorioConStock(String stock) {
+            ProductoMaster master = masterAccesorio();
+            Producto p = productoAccesorio(master, new BigDecimal(stock));
+            lenient().when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            lenient().when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI)).thenReturn(List.of(p));
+            return p;
+        }
+
+        @Test
+        @DisplayName("conserva la fecha en que ocurrió, la clave y el folio provisional; el efectivo entra a caja con esa fecha")
+        void conservaLaFecha() {
+            accesorioConStock("10");
+            VentaRequestDto r = sinConexion((short) 2);
+
+            VentaResponseDto resp = ventaService.crear(r, ID_VENDEDOR);
+
+            verify(ventaRepository).save(ventaCaptor.capture());
+            assertThat(ventaCaptor.getValue().getFechaVenta()).isEqualTo(r.getFechaVenta());
+            assertThat(ventaCaptor.getValue().getClaveOffline()).isEqualTo("3f6c0c9e-1111-4222-8333-444455556666");
+            assertThat(resp.getFolioLocal()).isEqualTo("OFF-ZOC1-000007");
+        }
+
+        @Test
+        @DisplayName("idempotente: si la clave ya se registró, devuelve la misma venta y no descuenta stock otra vez")
+        void idempotente() {
+            Producto p = accesorioConStock("10");
+            Venta yaEstaba = Venta.builder().idventa(321).tienda(tienda).caja(caja).usuarioVendedor(vendedor).metodoPago((byte) 1)
+                    .estado((byte) 1).total(new BigDecimal("30")).claveOffline("3f6c0c9e-1111-4222-8333-444455556666").build();
+            when(ventaRepository.findByClaveOffline("3f6c0c9e-1111-4222-8333-444455556666")).thenReturn(Optional.of(yaEstaba));
+
+            VentaResponseDto resp = ventaService.crear(sinConexion((short) 2), ID_VENDEDOR);
+
+            assertThat(resp.getIdventa()).isEqualTo(321);
+            verify(ventaRepository, never()).save(any());
+            assertThat(p.getStock()).isEqualByComparingTo("10");
+        }
+
+        @Test
+        @DisplayName("ya ocurrió: no se rechaza por stock insuficiente (queda negativo para que el encargado lo revise)")
+        void stockNegativoPermitido() {
+            Producto p = accesorioConStock("1");
+
+            ventaService.crear(sinConexion((short) 3), ID_VENDEDOR);
+
+            assertThat(p.getStock()).isEqualByComparingTo("-2");
+        }
+
+        @Test
+        @DisplayName("una venta hecha CON conexión pero con clave (para reintentos seguros) sigue validando stock y usa la fecha de ahora")
+        void conClaveEnLineaValidaNormal() {
+            accesorioConStock("1");
+            VentaRequestDto enLinea = ventaBase(List.of(lineaAccesorio((short) 3)));
+            enLinea.setClaveOffline("aaaaaaaa-1111-4222-8333-444455556666");
+            enLinea.setFechaVenta(java.time.LocalDateTime.now().minusDays(10));   // se ignora: no es sin conexión
+
+            assertThatThrownBy(() -> ventaService.crear(enLinea, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Stock insuficiente");
+
+            accesorioConStock("10");
+            ventaService.crear(enLinea, ID_VENDEDOR);
+            verify(ventaRepository).save(ventaCaptor.capture());
+            assertThat(ventaCaptor.getValue().getFechaVenta()).isNull();   // la asigna la base (ahora)
+            assertThat(ventaCaptor.getValue().getFolioLocal()).isNull();
+            assertThat(ventaCaptor.getValue().getClaveOffline()).isEqualTo("aaaaaaaa-1111-4222-8333-444455556666");
+        }
+
+        @Test
+        @DisplayName("una venta normal (sin clave) sigue rechazándose por stock insuficiente")
+        void ventaNormalSigueValidando() {
+            accesorioConStock("1");
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 3))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Stock insuficiente");
+        }
+
+        @Test
+        @DisplayName("fecha futura o de hace más de 45 días: 400")
+        void fechasInvalidas() {
+            accesorioConStock("10");
+            VentaRequestDto futura = sinConexion((short) 1);
+            futura.setFechaVenta(java.time.LocalDateTime.now().plusHours(2));
+            VentaRequestDto vieja = sinConexion((short) 1);
+            vieja.setFechaVenta(java.time.LocalDateTime.now().minusDays(46));
+
+            assertThatThrownBy(() -> ventaService.crear(futura, ID_VENDEDOR)).isInstanceOf(ResponseStatusException.class).hasMessageContaining("futura");
+            assertThatThrownBy(() -> ventaService.crear(vieja, ID_VENDEDOR)).isInstanceOf(ResponseStatusException.class).hasMessageContaining("45 días");
+            verify(ventaRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("cliente no registrado al vender: se busca por teléfono y, si no existe, se crea (permite vender a crédito)")
+        void clienteNuevo() {
+            accesorioConStock("10");
+            VentaRequestDto r = sinConexion((short) 2);
+            r.setClienteNombre("Rosa Meza");
+            r.setClienteTelefono("7571110000");
+            r.setMontoAbonado(new BigDecimal("10"));
+            Cliente creado = Cliente.builder().idcliente(88).nombreCompleto("Rosa Meza").telefono("7571110000").build();
+            when(clienteRepository.findByTelefono("7571110000")).thenReturn(Optional.empty());
+            when(clienteService.crear(any())).thenReturn(com.skycel.backend.dto.cliente.ClienteResponseDto.builder().idcliente(88).build());
+            when(clienteRepository.findById(88)).thenReturn(Optional.of(creado));
+
+            VentaResponseDto resp = ventaService.crear(r, ID_VENDEDOR);
+
+            assertThat(resp.getNombreCliente()).isEqualTo("Rosa Meza");
+            verify(cuentaPorCobrarService).crearDesdeVenta(any(Venta.class), eq(new BigDecimal("20")), isNull());
         }
     }
 }

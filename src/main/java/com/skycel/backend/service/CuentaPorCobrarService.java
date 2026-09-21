@@ -111,7 +111,7 @@ public class CuentaPorCobrarService {
         if (cpcRepository.existsByNoFactura(noFactura)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una cuenta con el folio: " + noFactura);
         }
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = venta.getFechaVenta() != null ? venta.getFechaVenta().toLocalDate() : LocalDate.now();
         LocalDate vencimiento = fechaVencimiento != null ? fechaVencimiento : hoy.plusDays(DIAS_CREDITO_DEFAULT);
 
         CuentaPorCobrar cpc = CuentaPorCobrar.builder()

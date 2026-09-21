@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -68,6 +69,7 @@ public class VentaService {
     private final OrdenServicioRepository  ordenServicioRepository;
     private final MovimientoInventarioService movimientoInventarioService;
     private final DevolucionRepository devolucionRepository;
+    private final com.skycel.backend.service.ClienteService clienteService;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
@@ -98,6 +100,27 @@ public class VentaService {
 
     private VentaResponseDto crearVenta(VentaRequestDto dto, Integer idUsuarioVendedor, boolean desdeOrden) {
 
+        // Venta hecha sin conexión: idempotente por su clave; conserva su fecha y no se rechaza por stock (ya ocurrió).
+        boolean conClave = dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank();
+        boolean offline = conClave && Boolean.TRUE.equals(dto.getSinConexion());
+        LocalDateTime fechaOffline = null;
+        if (conClave) {
+            Optional<Venta> yaRegistrada = ventaRepository.findByClaveOffline(dto.getClaveOffline().trim());
+            if (yaRegistrada.isPresent()) {
+                Venta v = yaRegistrada.get();
+                return toResponseDto(v, ventaDetalleRepository.findByVenta_Idventa(v.getIdventa()));
+            }
+        }
+        if (offline) {
+            fechaOffline = dto.getFechaVenta() != null ? dto.getFechaVenta() : LocalDateTime.now();
+            if (fechaOffline.isAfter(LocalDateTime.now().plusMinutes(10))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha de la venta no puede ser futura.");
+            }
+            if (fechaOffline.isBefore(LocalDateTime.now().minusDays(45))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una venta hecha sin conexión no puede tener más de 45 días sin enviarse.");
+            }
+        }
+
         Tienda tienda = tiendaRepository.findById(dto.getCodti())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Tienda no encontrada: " + dto.getCodti()));
@@ -118,6 +141,15 @@ public class VentaService {
         if (dto.getIdcliente() != null) {
             cliente = clienteRepository.findById(dto.getIdcliente())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cliente no encontrado"));
+        } else if (offline && dto.getClienteTelefono() != null && !dto.getClienteTelefono().isBlank()
+                && dto.getClienteNombre() != null && !dto.getClienteNombre().isBlank()) {
+            // Cliente que no estaba registrado al vender sin conexión: se busca por teléfono y, si no existe, se crea
+            cliente = clienteRepository.findByTelefono(dto.getClienteTelefono().trim()).orElseGet(() -> {
+                com.skycel.backend.dto.cliente.ClienteRequestDto nuevo = new com.skycel.backend.dto.cliente.ClienteRequestDto();
+                nuevo.setNombreCompleto(dto.getClienteNombre().trim());
+                nuevo.setTelefono(dto.getClienteTelefono().trim());
+                return clienteRepository.findById(clienteService.crear(nuevo).getIdcliente()).orElseThrow();
+            });
         }
 
         if (dto.getDetalles() == null || dto.getDetalles().isEmpty()) {
@@ -129,7 +161,7 @@ public class VentaService {
         List<LineaResuelta> lineas = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
         for (VentaDetalleRequestDto d : dto.getDetalles()) {
-            LineaResuelta linea = resolverLinea(d, tienda, vendedor, desdeOrden);
+            LineaResuelta linea = resolverLinea(d, tienda, vendedor, desdeOrden, offline);
             lineas.add(linea);
             total = total.add(linea.subtotal);
         }
@@ -146,7 +178,8 @@ public class VentaService {
                             "). Una venta a crédito requiere un cliente registrado.");
         }
 
-        if (dto.getFechaVencimientoCredito() != null && dto.getFechaVencimientoCredito().isBefore(LocalDate.now())) {
+        LocalDate hoyDeLaVenta = fechaOffline != null ? fechaOffline.toLocalDate() : LocalDate.now();
+        if (dto.getFechaVencimientoCredito() != null && dto.getFechaVencimientoCredito().isBefore(hoyDeLaVenta)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "La fecha de vencimiento del crédito no puede ser anterior a hoy.");
         }
@@ -163,6 +196,11 @@ public class VentaService {
                 .total(total)
                 .montoAbonado(montoAbonado)
                 .observaciones(dto.getObservaciones())
+                .fechaVenta(fechaOffline)
+                .claveOffline(conClave ? dto.getClaveOffline().trim() : null)
+                .folioLocal(!offline ? null : (dto.getFolioLocal() != null && !dto.getFolioLocal().isBlank()
+                        ? dto.getFolioLocal().trim().toUpperCase()
+                        : "OFF-" + dto.getClaveOffline().trim().replace("-", "").substring(0, Math.min(8, dto.getClaveOffline().trim().replace("-", "").length())).toUpperCase()))
                 .build();
         venta = ventaRepository.save(venta);
         guardarDesglose(venta, dto);
@@ -170,7 +208,7 @@ public class VentaService {
         // 3) Aplicar el descuento de stock/IMEI y guardar cada línea.
         List<VentaDetalle> detallesGuardados = new ArrayList<>();
         for (LineaResuelta linea : lineas) {
-            aplicarDescuentoStock(linea, venta);
+            aplicarDescuentoStock(linea, venta, offline);
 
             VentaDetalle detalle = VentaDetalle.builder()
                     .venta(venta)
@@ -290,6 +328,14 @@ public class VentaService {
         return toResponseDto(venta, ventaDetalleRepository.findByVenta_Idventa(idventa));
     }
 
+    /** La venta hecha sin conexión con ese folio provisional del ticket. */
+    @Transactional(readOnly = true)
+    public VentaResponseDto obtenerPorFolioLocal(String folioLocal) {
+        Venta v = ventaRepository.findByFolioLocal(folioLocal == null ? "" : folioLocal.trim().toUpperCase())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No hay una venta con el folio " + folioLocal + " (quizá aún no se envía desde la sucursal)."));
+        return toResponseDto(v, ventaDetalleRepository.findByVenta_Idventa(v.getIdventa()));
+    }
+
     @Transactional(readOnly = true)
     public List<VentaResponseDto> listarPorTienda(Integer codti, LocalDateTime desde, LocalDateTime hasta) {
         LocalDateTime desdeEfectivo = desde != null ? desde : LocalDateTime.now().toLocalDate().atStartOfDay();
@@ -399,7 +445,7 @@ public class VentaService {
         Boolean esRegalo;
     }
 
-    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor, boolean desdeOrden) {
+    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor, boolean desdeOrden, boolean sinConexion) {
         ProductoMaster master = productoMasterRepository.findById(d.getIdprodmaster())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Producto maestro no encontrado: " + d.getIdprodmaster()));
@@ -454,7 +500,7 @@ public class VentaService {
             if (master.getTipo() != TipoProducto.SERVICIO) {
                 BigDecimal cantidad = BigDecimal.valueOf(d.getCantidad());
                 BigDecimal stockActual = producto.getStock() != null ? producto.getStock() : BigDecimal.ZERO;
-                if (stockActual.subtract(cantidad).compareTo(BigDecimal.ZERO) < 0) {
+                if (!sinConexion && stockActual.subtract(cantidad).compareTo(BigDecimal.ZERO) < 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "Stock insuficiente para '" + master.getNombreBase() + "'. Disponible: " +
                                     stockActual + ", solicitado: " + cantidad);
@@ -511,7 +557,7 @@ public class VentaService {
         return candidatos.get(0);
     }
 
-    private void aplicarDescuentoStock(LineaResuelta linea, Venta venta) {
+    private void aplicarDescuentoStock(LineaResuelta linea, Venta venta, boolean sinConexion) {
         if (linea.productoMaster.getTipo() == TipoProducto.CELULAR) {
             ProductoImei pi = productoImeiRepository.findByImei(linea.imei)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
@@ -522,13 +568,14 @@ public class VentaService {
             BigDecimal stockActual = linea.producto.getStock() != null ? linea.producto.getStock() : BigDecimal.ZERO;
             linea.producto.setStock(stockActual.subtract(BigDecimal.ONE));
             productoRepository.save(linea.producto);
-            movimientoInventarioService.registrar(linea.producto, stockActual, "VENTA", null, "Venta #" + venta.getIdventa());
+            movimientoInventarioService.registrar(linea.producto, stockActual, "VENTA", venta.getFolioLocal() != null ? "Venta hecha sin conexión (" + venta.getFolioLocal() + ")" : null,
+                    "Venta #" + venta.getIdventa(), venta.getFechaVenta());
 
         } else if (linea.productoMaster.getTipo() != TipoProducto.SERVICIO) {
             BigDecimal cantidad = BigDecimal.valueOf(linea.cantidadSolicitada);
             BigDecimal stockActual = linea.producto.getStock() != null ? linea.producto.getStock() : BigDecimal.ZERO;
             BigDecimal nuevo = stockActual.subtract(cantidad);
-            if (nuevo.compareTo(BigDecimal.ZERO) < 0) {
+            if (!sinConexion && nuevo.compareTo(BigDecimal.ZERO) < 0) {
                 // Reconfirmar al momento de aplicar (defensa extra ante concurrencia).
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Stock insuficiente para '" + linea.productoMaster.getNombreBase() +
@@ -536,7 +583,8 @@ public class VentaService {
             }
             linea.producto.setStock(nuevo);
             productoRepository.save(linea.producto);
-            movimientoInventarioService.registrar(linea.producto, stockActual, "VENTA", null, "Venta #" + venta.getIdventa());
+            movimientoInventarioService.registrar(linea.producto, stockActual, "VENTA", venta.getFolioLocal() != null ? "Venta hecha sin conexión (" + venta.getFolioLocal() + ")" : null,
+                    "Venta #" + venta.getIdventa(), venta.getFechaVenta());
         }
     }
 
@@ -558,6 +606,7 @@ public class VentaService {
                 .nombreCliente(venta.getCliente() != null ? venta.getCliente().getNombreCompleto() : null)
                 .telefonoCliente(venta.getCliente() != null ? venta.getCliente().getTelefono() : null)
                 .usernameVendedor(venta.getUsuarioVendedor().getUsername())
+                .folioLocal(venta.getFolioLocal())
                 .nombreVendedor(venta.getUsuarioVendedor().getNombreCompleto())
                 .tipoComprobante(venta.getTipoComprobante())
                 .descripcionComprobante(descripcionComprobante(venta.getTipoComprobante()))

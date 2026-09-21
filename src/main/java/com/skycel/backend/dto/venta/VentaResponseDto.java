@@ -24,6 +24,8 @@ public class VentaResponseDto {
 
     // ── Vendedor ──────────────────────────────────────────────────────────────
     private String usernameVendedor;
+    /** Folio provisional del ticket impreso sin conexión (si la venta se hizo sin conexión). */
+    private String folioLocal;
     private String nombreVendedor;
 
     // ── Comprobante ───────────────────────────────────────────────────────────

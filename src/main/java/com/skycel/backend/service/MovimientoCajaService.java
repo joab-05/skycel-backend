@@ -112,7 +112,7 @@ public class MovimientoCajaService {
     @Transactional
     public void registrarEntradaVenta(Venta venta, Usuario vendedor, BigDecimal monto) {
         if (monto == null || monto.signum() <= 0) return;
-        guardar(venta.getCaja(), vendedor, null, motivoSistema(VENTA), monto, referenciaVenta(venta.getIdventa()), null);
+        guardar(venta.getCaja(), vendedor, null, motivoSistema(VENTA), monto, referenciaVenta(venta.getIdventa()), null, venta.getFechaVenta());
     }
 
     /**
@@ -232,7 +232,14 @@ public class MovimientoCajaService {
 
     private MovimientoCaja guardar(Caja caja, Usuario encargado, Usuario admin, CatMotivo motivo,
                                    BigDecimal monto, String observaciones, Integer idmovRef) {
+        return guardar(caja, encargado, admin, motivo, monto, observaciones, idmovRef, null);
+    }
+
+    /** {@code fecha} null = ahora; una venta hecha sin conexión deja su movimiento con la fecha en que ocurrió. */
+    private MovimientoCaja guardar(Caja caja, Usuario encargado, Usuario admin, CatMotivo motivo,
+                                   BigDecimal monto, String observaciones, Integer idmovRef, java.time.LocalDateTime fecha) {
         return movimientoCajaRepository.save(MovimientoCaja.builder()
+                .fechaMov(fecha)
                 .caja(caja)
                 .usuarioEncargado(encargado)
                 .usuarioAdmin(admin)

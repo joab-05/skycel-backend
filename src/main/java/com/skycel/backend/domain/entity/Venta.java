@@ -56,9 +56,24 @@ public class Venta {
     @Column(name = "monto_abonado", precision = 12, scale = 2, columnDefinition = "DECIMAL(12,2) DEFAULT 0.00")
     private BigDecimal montoAbonado;
 
-    @CreationTimestamp
+    /** Cuándo se hizo la venta. Una venta hecha sin conexión conserva la fecha en que ocurrió, no la de la sincronización. */
     @Column(name = "fecha_venta", updatable = false)
     private LocalDateTime fechaVenta;
+
+    /**
+     * Identificador único (UUID) que genera el equipo que hizo la venta sin conexión. Evita duplicarla si el envío se repite.
+     */
+    @Column(name = "clave_offline", length = 64, unique = true)
+    private String claveOffline;
+
+    /** Folio provisional del ticket impreso sin conexión (p. ej. OFF-ZOC1-000123): con él se localiza la venta. */
+    @Column(name = "folio_local", length = 40)
+    private String folioLocal;
+
+    @PrePersist
+    void alGuardar() {
+        if (fechaVenta == null) fechaVenta = LocalDateTime.now();
+    }
 
     @Column(name = "observaciones", length = 255)
     private String observaciones;

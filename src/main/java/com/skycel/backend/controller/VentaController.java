@@ -40,7 +40,30 @@ public class VentaController {
             @AuthenticationPrincipal UserDetails userDetails) {
 
         Integer idVendedor = idUsuarioAutenticado(userDetails);
+        // Una venta hecha sin conexión se envía después: conserva a quien vendió (él mismo, o un encargado/administrador que la envía)
+        if (Boolean.TRUE.equals(request.getSinConexion()) && request.getUsernameVendedor() != null
+                && !request.getUsernameVendedor().equalsIgnoreCase(userDetails.getUsername())) {
+            var quien = usuarioRepository.findByUsername(userDetails.getUsername()).orElseThrow();
+            boolean superior = quien.getRol() == com.skycel.backend.domain.enums.Rol.ROOT || quien.getRol() == com.skycel.backend.domain.enums.Rol.ADMIN
+                    || quien.getRol() == com.skycel.backend.domain.enums.Rol.ENCARGADO_TIENDA;
+            if (!superior) {
+                throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                        "Solo un encargado o administrador puede enviar ventas hechas por otra persona.");
+            }
+            idVendedor = usuarioRepository.findByUsername(request.getUsernameVendedor())
+                    .map(u -> u.getIdusuario())
+                    .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                            "El vendedor '" + request.getUsernameVendedor() + "' no existe."));
+        }
         return ResponseEntityBuilder.created(ventaService.crear(request, idVendedor), "venta");
+    }
+
+    @Operation(summary = "Buscar una venta por el folio provisional de un ticket impreso sin conexión (OFF-...)")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/local/{folio}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<StandardApiResponse<VentaResponseDto>> obtenerPorFolioLocal(@PathVariable String folio) {
+        return ResponseEntityBuilder.ok(ventaService.obtenerPorFolioLocal(folio), "venta");
     }
 
     @Operation(summary = "Obtener una venta por ID")

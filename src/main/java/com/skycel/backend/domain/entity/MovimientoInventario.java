@@ -55,7 +55,11 @@ public class MovimientoInventario {
     @JoinColumn(name = "idusuario")
     private Usuario usuario;
 
-    @CreationTimestamp
     @Column(name = "fecha", updatable = false)
     private LocalDateTime fecha;
+
+    @PrePersist
+    void alGuardar() {
+        if (fecha == null) fecha = LocalDateTime.now();
+    }
 }

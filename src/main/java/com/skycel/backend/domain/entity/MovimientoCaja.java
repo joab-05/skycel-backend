@@ -55,9 +55,13 @@ public class MovimientoCaja {
     @Column(name = "idmov_ref")
     private Integer idmovRef;
 
-    @CreationTimestamp
     @Column(name = "fecha_mov", updatable = false)
     private LocalDateTime fechaMov;
+
+    @PrePersist
+    void alGuardar() {
+        if (fechaMov == null) fechaMov = LocalDateTime.now();
+    }
 
     @Column(name = "observaciones", columnDefinition = "TEXT")
     private String observaciones;
