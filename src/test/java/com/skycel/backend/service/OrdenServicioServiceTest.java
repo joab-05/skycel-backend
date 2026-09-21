@@ -799,7 +799,9 @@ class OrdenServicioServiceTest {
         void sinDatosInternos() {
             ordenConDatosInternos();
 
-            String salida = service.consultaPublica("OS-000001", "0001").toString();
+            // sin las fechas: sus fracciones de segundo pueden contener por casualidad "500" o "1200"
+            String salida = service.consultaPublica("OS-000001", "0001").toString()
+                    .replaceAll("\\d{4}-\\d{2}-\\d{2}(T[0-9:.]+)?", "");
 
             assertThat(salida).doesNotContain("JUAN.PEREZ", "ABIGAIL", "Sofia", "7571200001", "Pantalla estrellada",
                     "digitalizador", "500", "1200", "Anticipo", "Técnico asignado", "Diagnóstico");
