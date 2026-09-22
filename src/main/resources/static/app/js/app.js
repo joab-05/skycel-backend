@@ -154,6 +154,7 @@ async function render() {
     if (ruta === 'caja') return pantallaCaja();
     if (ruta === 'empleados') return pantallaEmpleados();
     if (ruta === 'empleado' && param) return pantallaEmpleadoDetalle(param);
+    if (ruta === 'pos') return pantallaPOS();
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -218,6 +219,7 @@ async function pantallaMenu() {
   tarjetas.push({ h: '#/inventario', i: '📦', t: 'Inventario' });
   if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/caja', i: '🧾', t: 'Caja' });
   if (SUPERIOR.includes(s.rol)) tarjetas.push({ h: '#/empleados', i: '🧑‍💼', t: 'Empleados' });
+  if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/pos', i: '💰', t: 'Punto de venta' });
   tarjetas.push({ h: '#/clientes', i: '👥', t: 'Clientes' });
   if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar' });
   if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/garantias', i: '🛡️', t: 'Garantías' });
@@ -1763,6 +1765,287 @@ async function pantallaEmpleadoDetalle(id) {
     if (!confirm('¿Desactivar a ' + u.nombreCompleto + '? Ya no podrá iniciar sesión.')) return;
     try { await api('DELETE', '/api/usuarios/' + id); navegar('#/empleados'); }
     catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+  };
+}
+
+// ── Punto de venta ───────────────────────────────────────────────────────
+// v1: solo en línea (sin cola sin conexión todavía; si no hay servidor, usa JSystem en la tienda).
+// Sin pago Mixto ni ventas a crédito — para eso, JSystem.
+
+let posCarrito = [];
+
+async function pantallaPOS() {
+  const s = Sesion.obtener();
+  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para vender.</div>'; return; }
+  const codti = s.codti;
+  if (codti == null) { root.innerHTML = '<div class="tarjeta">Tu usuario no tiene una sucursal fija: usa JSystem en la tienda para vender.</div>'; return; }
+  posCarrito = [];
+
+  root.innerHTML = `
+    <h1>💰 Punto de venta</h1>
+    <div class="buscador">
+      <input id="pv-buscar" placeholder="Buscar producto...">
+    </div>
+    <div id="pv-resultados"></div>
+
+    <h2 style="margin-top:16px;">Carrito</h2>
+    <div id="pv-carrito"><div class="vacio">Agrega productos arriba.</div></div>
+    <div id="pv-total" class="tarjeta" style="text-align:right; font-size:20px; font-weight:800;">Total: $0.00</div>
+
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Cliente</h2>
+      <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+        <input type="checkbox" id="pv-con-cliente" style="width:auto;"> Registrar cliente (si no, venta de mostrador)
+      </label>
+      <div id="pv-cliente-cont" class="oculto"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Pago</h2>
+      <label class="obligatorio">Método</label>
+      <select id="pv-metodo">
+        <option value="1">Efectivo</option>
+        <option value="2">Tarjeta</option>
+        <option value="3">Transferencia</option>
+        <option value="5">PayJoy</option>
+      </select>
+      <div id="pv-efectivo-cont">
+        <label>Monto recibido</label>
+        <input id="pv-recibido" type="number" inputmode="decimal" min="0" step="0.01">
+        <div id="pv-cambio" class="ayuda"></div>
+      </div>
+      <label>Observaciones</label>
+      <input id="pv-obs" placeholder="Opcional">
+      <button id="pv-cobrar" class="btn btn-verde">Cobrar</button>
+    </div>`;
+
+  // Productos disponibles de la tienda (una sola carga; se filtra en el cliente)
+  let productos = [];
+  try {
+    productos = await api('GET', `/api/productos/tienda/${codti}/disponibles`);
+  } catch (err) {
+    document.getElementById('pv-resultados').innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor: el punto de venta necesita conexión.' : err.message)}</div>`;
+    return;
+  }
+
+  // Caja de la tienda
+  let idCaja = null;
+  try {
+    const cajas = await api('GET', '/api/cajas/tienda/' + codti);
+    idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0]?.idCaja ?? null;
+  } catch { /* se valida al cobrar */ }
+
+  const contResultados = document.getElementById('pv-resultados');
+  document.getElementById('pv-buscar').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (q.length < 2) { contResultados.innerHTML = ''; return; }
+    const encontrados = productos.filter(p =>
+      (p.nombreProductoMaster || '').toLowerCase().includes(q) || (p.codpro || '').toLowerCase().includes(q)
+      || (p.marca || '').toLowerCase().includes(q) || (p.modelo || '').toLowerCase().includes(q)
+    ).slice(0, 20);
+    dibujarResultadosPOS(contResultados, encontrados);
+  });
+
+  // Cliente
+  const chkCliente = document.getElementById('pv-con-cliente');
+  const contCliente = document.getElementById('pv-cliente-cont');
+  let clienteSel = null;
+  chkCliente.onchange = () => {
+    contCliente.classList.toggle('oculto', !chkCliente.checked);
+    if (chkCliente.checked && !contCliente.innerHTML) dibujarSelectorClientePOS(contCliente, (c) => { clienteSel = c; });
+  };
+
+  // Pago
+  const selMetodo = document.getElementById('pv-metodo');
+  const contEfectivo = document.getElementById('pv-efectivo-cont');
+  const actualizarMetodo = () => contEfectivo.classList.toggle('oculto', selMetodo.value !== '1');
+  selMetodo.onchange = actualizarMetodo;
+  actualizarMetodo();
+  document.getElementById('pv-recibido').addEventListener('input', actualizarCambioPOS);
+
+  actualizarCarritoPOS();
+
+  document.getElementById('pv-cobrar').onclick = async (e) => {
+    if (posCarrito.length === 0) { mostrarMensaje(root, 'Agrega al menos un producto.', 'error'); return; }
+    if (!idCaja) { mostrarMensaje(root, 'No se encontró una caja para tu sucursal.', 'error'); return; }
+    const metodoPago = Number(selMetodo.value);
+    const total = posCarrito.reduce((sum, i) => sum + i.cantidad * i.precioUnitarioFinal, 0);
+    let montoAbonado = total;
+    if (metodoPago === 1) {
+      montoAbonado = Number(document.getElementById('pv-recibido').value);
+      if (!montoAbonado || montoAbonado < total) { mostrarMensaje(root, 'El monto recibido debe cubrir el total.', 'error'); return; }
+    }
+    if (chkCliente.checked && !clienteSel) { mostrarMensaje(root, 'Busca o registra al cliente, o desmarca la casilla.', 'error'); return; }
+
+    const payload = {
+      codti, idCaja,
+      idcliente: clienteSel?.idcliente ?? null,
+      tipoComprobante: 1,
+      metodoPago,
+      montoAbonado,
+      observaciones: document.getElementById('pv-obs').value.trim() || null,
+      claveOffline: uuid(),
+      detalles: posCarrito.map(i => ({
+        idprodmaster: i.idprodmaster, codpro: i.codpro, cantidad: i.cantidad,
+        precioUnitarioFinal: i.precioUnitarioFinal, imei: i.imei || null, esRegalo: false,
+      })),
+    };
+
+    e.target.disabled = true;
+    e.target.innerHTML = '<span class="spinner"></span> Cobrando...';
+    try {
+      const venta = await api('POST', '/api/ventas', payload);
+      mostrarMensaje(root, `Venta #${venta.idventa} registrada. Total ${formatoDinero(venta.total)}${metodoPago === 1 ? ' · Cambio ' + formatoDinero(venta.cambio) : ''}.`, 'ok');
+      posCarrito = [];
+      setTimeout(() => pantallaPOS(), 1200);
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: esta venta no se guardó. Usa JSystem en la tienda mientras tanto.' : err.message, 'error');
+      e.target.disabled = false;
+      e.target.textContent = 'Cobrar';
+    }
+  };
+}
+
+function dibujarResultadosPOS(cont, productos) {
+  if (productos.length === 0) { cont.innerHTML = '<div class="vacio">Sin resultados.</div>'; return; }
+  cont.innerHTML = productos.map(p => `
+    <div class="orden-item" data-codpro="${escapar(p.codpro)}">
+      <div class="orden-cab">
+        <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
+        <span style="font-weight:700;">${formatoDinero(p.preciopub)}</span>
+      </div>
+      <div class="orden-cliente">${escapar(p.codpro)}${p.tipo !== 'SERVICIO' ? ' · Stock: ' + Number(p.stock) : ''}</div>
+      ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
+        <div class="grupo-botones" style="margin-top:8px;">
+          ${p.imeisDisponibles.map(u => `<button class="btn btn-azul btn-chico pv-agregar-imei" data-imei="${escapar(u.imei)}">${escapar(u.imei)} · ${formatoDinero(u.precioVenta)}</button>`).join('')}
+        </div>` : ''}
+    </div>`).join('');
+
+  cont.querySelectorAll('.orden-item').forEach(el => {
+    const p = productos.find(x => x.codpro === el.dataset.codpro);
+    if (p.tipo === 'CELULAR') {
+      el.querySelectorAll('.pv-agregar-imei').forEach(btn => btn.onclick = (ev) => {
+        ev.stopPropagation();
+        const unidad = p.imeisDisponibles.find(u => u.imei === btn.dataset.imei);
+        agregarAlCarritoPOS(p, 1, unidad.precioVenta, unidad.imei);
+      });
+    } else {
+      el.onclick = () => agregarAlCarritoPOS(p, 1, p.preciopub, null);
+    }
+  });
+}
+
+function agregarAlCarritoPOS(p, cantidad, precio, imei) {
+  const existente = imei ? null : posCarrito.find(i => i.codpro === p.codpro && !i.imei);
+  if (existente) { existente.cantidad += cantidad; }
+  else {
+    posCarrito.push({
+      idprodmaster: p.idProductoMaster, codpro: p.codpro, nombre: p.nombreProductoMaster,
+      cantidad, precioUnitarioFinal: Number(precio), imei, tipo: p.tipo, stockMax: p.tipo === 'ACCESORIO' ? Number(p.stock) : null,
+    });
+  }
+  actualizarCarritoPOS();
+}
+
+function actualizarCarritoPOS() {
+  const cont = document.getElementById('pv-carrito');
+  const contTotal = document.getElementById('pv-total');
+  if (!cont) return;
+  if (posCarrito.length === 0) { cont.innerHTML = '<div class="vacio">Agrega productos arriba.</div>'; }
+  else {
+    cont.innerHTML = posCarrito.map((i, idx) => `
+      <div class="orden-item">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(i.nombre)}</span>
+          <button class="btn btn-rojo btn-chico pv-quitar" data-idx="${idx}">Quitar</button>
+        </div>
+        ${i.imei ? `<div class="orden-cliente">IMEI: ${escapar(i.imei)}</div>` : ''}
+        <div class="fila" style="margin-top:8px; align-items:center;">
+          ${!i.imei ? `<div><label style="margin:0 0 2px 0;">Cantidad</label><input type="number" min="1" ${i.stockMax ? 'max="' + i.stockMax + '"' : ''} value="${i.cantidad}" class="pv-cantidad" data-idx="${idx}"></div>` : ''}
+          <div><label style="margin:0 0 2px 0;">Precio unitario</label><input type="number" min="0" step="0.01" value="${i.precioUnitarioFinal}" class="pv-precio" data-idx="${idx}"></div>
+        </div>
+        <div class="orden-meta"><span></span><span style="font-weight:700;">${formatoDinero(i.cantidad * i.precioUnitarioFinal)}</span></div>
+      </div>`).join('');
+
+    cont.querySelectorAll('.pv-quitar').forEach(b => b.onclick = () => { posCarrito.splice(Number(b.dataset.idx), 1); actualizarCarritoPOS(); });
+    cont.querySelectorAll('.pv-cantidad').forEach(inp => inp.onchange = () => {
+      const idx = Number(inp.dataset.idx);
+      let v = Math.max(1, Number(inp.value) || 1);
+      if (posCarrito[idx].stockMax) v = Math.min(v, posCarrito[idx].stockMax);
+      posCarrito[idx].cantidad = v;
+      actualizarCarritoPOS();
+    });
+    cont.querySelectorAll('.pv-precio').forEach(inp => inp.onchange = () => {
+      posCarrito[Number(inp.dataset.idx)].precioUnitarioFinal = Math.max(0, Number(inp.value) || 0);
+      actualizarCarritoPOS();
+    });
+  }
+  const total = posCarrito.reduce((sum, i) => sum + i.cantidad * i.precioUnitarioFinal, 0);
+  contTotal.textContent = 'Total: ' + formatoDinero(total);
+  actualizarCambioPOS();
+}
+
+function actualizarCambioPOS() {
+  const inp = document.getElementById('pv-recibido');
+  const contCambio = document.getElementById('pv-cambio');
+  if (!inp || !contCambio) return;
+  const total = posCarrito.reduce((sum, i) => sum + i.cantidad * i.precioUnitarioFinal, 0);
+  const recibido = Number(inp.value) || 0;
+  contCambio.textContent = recibido > 0 ? 'Cambio: ' + formatoDinero(Math.max(0, recibido - total)) : '';
+}
+
+function dibujarSelectorClientePOS(cont, alSeleccionar) {
+  const s = Sesion.obtener();
+  const puedeRegistrar = GESTOR_ROLES.includes(s.rol);
+  cont.innerHTML = `
+    <label>Teléfono</label>
+    <div class="fila">
+      <input id="pv-cli-tel" inputmode="tel" placeholder="10 dígitos">
+      <button id="pv-cli-buscar" class="btn btn-azul btn-chico" style="flex:0 0 auto;">Buscar</button>
+    </div>
+    <div id="pv-cli-resultado" class="ayuda"></div>
+    <div id="pv-cli-nuevo-cont" class="oculto">
+      ${puedeRegistrar ? `
+        <label class="obligatorio">Nombre del cliente nuevo</label>
+        <div class="fila">
+          <input id="pv-cli-nombre">
+          <button id="pv-cli-registrar" class="btn btn-verde btn-chico" style="flex:0 0 auto;">Registrar</button>
+        </div>
+      ` : `<div class="ayuda">No tienes permiso para registrar clientes nuevos. Pide a un encargado que lo registre primero, o continúa la venta sin cliente.</div>`}
+    </div>`;
+  document.getElementById('pv-cli-buscar').onclick = async () => {
+    const tel = document.getElementById('pv-cli-tel').value.trim();
+    const out = document.getElementById('pv-cli-resultado');
+    const contNuevo = document.getElementById('pv-cli-nuevo-cont');
+    if (!tel) return;
+    out.textContent = 'Buscando...';
+    try {
+      const c = await api('GET', '/api/clientes/telefono/' + encodeURIComponent(tel));
+      out.innerHTML = `✅ <strong>${escapar(c.nombreCompleto)}</strong>`;
+      contNuevo.classList.add('oculto');
+      alSeleccionar({ idcliente: c.idcliente });
+    } catch {
+      out.innerHTML = '⚠️ No se encontró.';
+      contNuevo.classList.remove('oculto');
+      alSeleccionar(null);
+      const btnRegistrar = document.getElementById('pv-cli-registrar');
+      if (btnRegistrar) {
+        btnRegistrar.onclick = async () => {
+          const nombre = document.getElementById('pv-cli-nombre').value.trim();
+          if (!nombre) return;
+          btnRegistrar.disabled = true;
+          try {
+            const nuevo = await api('POST', '/api/clientes', { nombreCompleto: nombre, telefono: tel });
+            out.innerHTML = `✅ <strong>${escapar(nuevo.nombreCompleto)}</strong> (registrado)`;
+            contNuevo.classList.add('oculto');
+            alSeleccionar({ idcliente: nuevo.idcliente });
+          } catch (err) {
+            out.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+            btnRegistrar.disabled = false;
+          }
+        };
+      }
+    }
   };
 }
 
