@@ -1,0 +1,14 @@
+# Caddy sirve skycelsys.ddns.net con HTTPS automático (Let's Encrypt: pide, instala y renueva el
+# certificado solo) y reenvía todo al backend de Spring Boot, que sigue escuchando en localhost:8080
+# sin cambios. Cubre tanto la API (/api/...) como la web /app.
+
+skycelsys.ddns.net {
+	reverse_proxy localhost:8080
+
+	log {
+		output file C:\caddy\logs\access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}

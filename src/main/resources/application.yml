@@ -53,6 +53,9 @@ springdoc:
 
 server:
   port: 8080
+  # Detrás de Caddy (HTTPS en /app y en la API): toma el esquema/host reales de los encabezados
+  # X-Forwarded-* en vez de ver siempre "http" y el puerto 8080.
+  forward-headers-strategy: framework
   error:
     include-message: always
     include-binding-errors: always
