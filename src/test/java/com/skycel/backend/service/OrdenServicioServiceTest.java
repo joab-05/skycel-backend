@@ -265,6 +265,18 @@ class OrdenServicioServiceTest {
         }
 
         @Test
+        @DisplayName("el anticipo conserva la fecha real de la recepción, no la de sincronización")
+        void anticipoConservaFecha() {
+            OrdenServicioRequestDto d = sinConexion("clave-anticipo");
+            d.setAnticipo(anticipo("300", 1));
+
+            OrdenServicioResponseDto r = service.crear(d, "abigail");
+
+            assertThat(r.getAnticipos()).hasSize(1);
+            assertThat(r.getAnticipos().get(0).getFecha()).isEqualTo(d.getFechaRecepcion());
+        }
+
+        @Test
         @DisplayName("crea el cliente por teléfono si no existía, y sin clave no se acepta cliente nuevo")
         void clienteNuevo() {
             Cliente nuevo = Cliente.builder().idcliente(50).nombreCompleto("Cliente Nuevo").telefono("7570000000").build();

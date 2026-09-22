@@ -137,7 +137,7 @@ public class OrdenServicioService {
             for (OrdenLineaRequestDto l : dto.getLineas()) nuevaLinea(orden, l, usuario);
         }
         if (dto.getAnticipo() != null) {
-            registrarAnticipoInterno(orden, dto.getAnticipo(), usuario);
+            registrarAnticipoInterno(orden, dto.getAnticipo(), usuario, fechaRecepcion);
         }
         return toDto(orden);
     }
@@ -516,13 +516,18 @@ public class OrdenServicioService {
     }
 
     private OrdenServicioAnticipo registrarAnticipoInterno(OrdenServicio orden, AnticipoRequestDto dto, Usuario usuario) {
+        return registrarAnticipoInterno(orden, dto, usuario, null);
+    }
+
+    /** {@code fecha} solo se usa al recibir un equipo sin conexión: el anticipo conserva el momento real, no el de la sincronización. */
+    private OrdenServicioAnticipo registrarAnticipoInterno(OrdenServicio orden, AnticipoRequestDto dto, Usuario usuario, LocalDateTime fecha) {
         if (dto.getMetodoPago() == null || !METODOS_ANTICIPO.contains(dto.getMetodoPago())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Método del anticipo no válido: " + dto.getMetodoPago() + " (use 1 Efectivo, 2 Tarjeta o 3 Transferencia).");
         }
         OrdenServicioAnticipo anticipo = anticipoRepository.save(OrdenServicioAnticipo.builder()
                 .orden(orden).monto(dto.getMonto()).metodoPago(dto.getMetodoPago())
-                .folioOperacion(trimOrNull(dto.getFolioOperacion())).usuario(usuario).build());
+                .folioOperacion(trimOrNull(dto.getFolioOperacion())).usuario(usuario).fecha(fecha).build());
         if (dto.getMetodoPago() == METODO_EFECTIVO) {
             // Solo el efectivo entra a la caja; se guarda el movimiento para poder devolverlo si se cancela
             Integer idMovimiento = movimientoCajaService.registrarAnticipoServicio(dto.getIdCaja(), orden, anticipo, usuario);
