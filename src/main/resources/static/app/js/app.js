@@ -119,42 +119,63 @@ function dibujarNavInferior() {
   navInferior.querySelectorAll('button').forEach(b => b.onclick = () => navegar(b.dataset.h));
 }
 
-/** Lista completa de módulos según el rol — la usan tanto la pantalla de Inicio (celular) como la barra lateral (escritorio). */
-function itemsMenu(s, pend, err) {
+/** Cuenta de productos bajo stock para el badge de Inventario — se cachea 60s para no pedirla en cada navegación. */
+let bajoStockCache = { codti: null, valor: null, expira: 0 };
+async function obtenerBajoStock(codti) {
+  if (codti == null) return null;
+  if (bajoStockCache.codti === codti && Date.now() < bajoStockCache.expira) return bajoStockCache.valor;
+  try {
+    const productos = await api('GET', `/api/productos/tienda/${codti}/bajo-stock`);
+    bajoStockCache = { codti, valor: productos.length, expira: Date.now() + 60000 };
+  } catch { /* se deja el valor cacheado anterior (o null) si falla */ }
+  return bajoStockCache.codti === codti ? bajoStockCache.valor : null;
+}
+
+/**
+ * Lista completa de módulos según el rol, agrupada por área de trabajo — la usan tanto la pantalla de
+ * Inicio (celular) como la barra lateral (escritorio). `grupo: null` deja el ítem sin encabezado de grupo.
+ */
+function itemsMenu(s, pend, err, bajoStock) {
   const items = [];
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: '📥', t: 'Recibir equipo' });
-  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: '🔧', t: 'Taller' });
-  items.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden' });
-  items.push({ h: '#/inventario', i: '📦', t: 'Inventario' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: '🧾', t: 'Caja' });
-  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: '🧑‍💼', t: 'Empleados' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/pos', i: '💰', t: 'Punto de venta' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: '↩️', t: 'Devoluciones' });
-  items.push({ h: '#/clientes', i: '👥', t: 'Clientes' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: '🛡️', t: 'Garantías' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: '📊', t: 'Reporte de ventas' });
-  items.push({ h: '#/pendientes', i: '📤', t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: '📥', t: 'Recibir equipo', grupo: 'Taller' });
+  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: '🔧', t: 'Taller', grupo: 'Taller' });
+  items.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden', grupo: 'Taller' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/pos', i: '💰', t: 'Punto de venta', grupo: 'Ventas' });
+  items.push({ h: '#/inventario', i: '📦', t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Ventas' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: '↩️', t: 'Devoluciones', grupo: 'Ventas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: '🧾', t: 'Caja', grupo: 'Finanzas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar', grupo: 'Finanzas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: '📊', t: 'Reporte de ventas', grupo: 'Finanzas' });
+  items.push({ h: '#/clientes', i: '👥', t: 'Clientes', grupo: 'Clientes' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: '🛡️', t: 'Garantías', grupo: 'Clientes' });
+  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: '🧑‍💼', t: 'Empleados', grupo: 'Administración' });
+  items.push({ h: '#/pendientes', i: '📤', t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
   return items;
 }
 
-/** Barra lateral de escritorio: los mismos módulos que la pantalla de Inicio, siempre visibles (CSS la oculta en celular/tablet). */
+/** Barra lateral de escritorio: los mismos módulos que la pantalla de Inicio, agrupados, siempre visibles (CSS la oculta en celular/tablet). */
 async function dibujarSidebar() {
   const s = Sesion.obtener();
   if (!s) return;
   const pend = await Net.cantidadPendiente();
   const err = await Net.cantidadConError();
-  const items = itemsMenu(s, pend, err);
+  const bajoStock = await obtenerBajoStock(s.codti);
+  const items = itemsMenu(s, pend, err, bajoStock);
   const ruta = location.hash.split('/')[1] || 'menu';
+  let grupoAnterior;
+  const filas = items.map(it => {
+    const encabezadoGrupo = it.grupo !== grupoAnterior
+      ? (grupoAnterior = it.grupo, it.grupo ? `<div class="sidebar-grupo">${escapar(it.grupo)}</div>` : '<div class="sidebar-separador"></div>')
+      : '';
+    return encabezadoGrupo + `
+      <button data-h="${it.h}" class="${ruta === it.h.slice(2) ? 'activo' : ''}">
+        <span class="icono">${it.i}</span><span class="texto">${escapar(it.t)}</span>
+        ${it.badge ? `<span class="badge">${it.badge}</span>` : ''}
+      </button>`;
+  }).join('');
   sidebar.innerHTML = `
     <div class="sidebar-marca" id="sidebar-inicio"><span class="logo">📱</span> Skycel</div>
-    <div class="sidebar-items">
-      ${items.map(it => `
-        <button data-h="${it.h}" class="${ruta === it.h.slice(2) ? 'activo' : ''}">
-          <span class="icono">${it.i}</span><span class="texto">${escapar(it.t)}</span>
-          ${it.badge ? `<span class="badge">${it.badge}</span>` : ''}
-        </button>`).join('')}
-    </div>`;
+    <div class="sidebar-items">${filas}</div>`;
   sidebar.querySelectorAll('button[data-h]').forEach(b => b.onclick = () => navegar(b.dataset.h));
   document.getElementById('sidebar-inicio').onclick = () => navegar('#/menu');
 }
@@ -258,7 +279,8 @@ async function pantallaMenu() {
   const s = Sesion.obtener();
   const pend = await Net.cantidadPendiente();
   const err = await Net.cantidadConError();
-  const tarjetas = itemsMenu(s, pend, err);
+  const bajoStock = await obtenerBajoStock(s.codti);
+  const tarjetas = itemsMenu(s, pend, err, bajoStock);
 
   root.innerHTML = `
     <h1>Hola, ${escapar((s.nombreCompleto || s.username).split(' ')[0])}</h1>
@@ -1303,6 +1325,7 @@ const TIPO_ICONO = { CELULAR: '📱', ACCESORIO: '🎧', SERVICIO: '🛠️' };
 
 async function pantallaInventario() {
   const s = Sesion.obtener();
+  bajoStockCache.expira = 0; // se refresca el badge del menú la próxima vez que se dibuje, por si aquí cambia el stock
   root.innerHTML = `
     <h1>📦 Inventario</h1>
     <div id="iv-tienda"></div>

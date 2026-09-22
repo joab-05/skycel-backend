@@ -1,9 +1,11 @@
 :root {
-  --azul: #3b82f6;
-  --verde: #16a34a;
+  /* Azul/verde/gris ajustados sobre los tonos originales para llegar a un contraste AA (4.5:1) de
+     texto blanco sobre el color en botones; --rojo y --ambar ya cumplían. */
+  --azul: #2563eb;
+  --verde: #15803d;
   --rojo: #dc2626;
   --ambar: #a16207;
-  --gris: #64748b;
+  --gris: #475569;
   --gris-claro: #f1f5f9;
   --borde: #e2e8f0;
   --oscuro: #0f172a;
@@ -203,6 +205,12 @@ button { -webkit-appearance: none; appearance: none; touch-action: manipulation;
 }
 .sidebar-marca .logo { font-size: 20px; }
 .sidebar-items { display: flex; flex-direction: column; gap: 2px; }
+.sidebar-grupo {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--gris); padding: 14px 10px 4px 10px;
+}
+.sidebar-items .sidebar-grupo:first-child { padding-top: 4px; }
+.sidebar-separador { height: 1px; background: var(--borde); margin: 10px 6px; }
 .sidebar button {
   display: flex; align-items: center; gap: 10px;
   background: none; border: none; border-radius: 10px; padding: 10px 10px;
