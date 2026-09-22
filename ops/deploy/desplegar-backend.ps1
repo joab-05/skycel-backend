@@ -47,7 +47,7 @@ Write-Host ""
 Write-Host "Credenciales de MySQL para skyceldb2 (las del usuario 'skycel_app' que creaste con el .sql):" -ForegroundColor Cyan
 $dbUser = Read-Host "Usuario"
 $dbPassSecura = Read-Host "Contrasena" -AsSecureString
-$dbPass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($dbPassSecura))
+$dbPass = [System.Net.NetworkCredential]::new("", $dbPassSecura).Password
 
 $jwtInput = Read-Host "JWT_SECRET (Enter para generar uno nuevo automaticamente)"
 if ([string]::IsNullOrWhiteSpace($jwtInput)) {
