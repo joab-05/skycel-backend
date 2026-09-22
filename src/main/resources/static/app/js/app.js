@@ -34,6 +34,11 @@ function formatoDinero(n) {
   const v = Number(n || 0);
   return '$' + v.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+/** Fecha/hora local del dispositivo en el formato que espera el backend (sin 'Z': es hora local, no UTC). */
+function fechaLocalISO(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -411,7 +416,7 @@ async function pantallaRecepcion() {
       if (err.network) {
         // Sin conexión: se guarda en este dispositivo con folio y fecha provisionales
         payload.folioLocal = 'WEB-' + Math.random().toString(16).slice(2, 8).toUpperCase();
-        payload.fechaRecepcion = new Date().toISOString().slice(0, 19);
+        payload.fechaRecepcion = fechaLocalISO(new Date());
         await DB.put({
           clave: payload.claveOffline,
           payload,
