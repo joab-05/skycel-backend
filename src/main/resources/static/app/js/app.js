@@ -1282,6 +1282,11 @@ async function pantallaInventario() {
     <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
       <input type="checkbox" id="iv-bajo-stock" style="width:auto;"> Solo bajo stock
     </label>
+    ${GESTOR_ROLES.includes(s.rol) ? `
+      <div class="grupo-botones" style="margin: 10px 0;">
+        <button id="iv-nuevo" class="btn btn-verde">+ Nuevo producto</button>
+      </div>
+      <div id="iv-form" class="oculto"></div>` : ''}
     <div id="iv-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
 
   let codti = s.codti;
@@ -1325,6 +1330,116 @@ async function pantallaInventario() {
       el.style.display = !q || el.dataset.buscar.includes(q) ? '' : 'none';
     });
   }
+
+  if (GESTOR_ROLES.includes(s.rol)) {
+    let categorias = null;
+    document.getElementById('iv-nuevo').onclick = async () => {
+      const cont = document.getElementById('iv-form');
+      cont.classList.toggle('oculto');
+      if (cont.classList.contains('oculto')) return;
+      if (categorias === null) {
+        try {
+          const planas = [];
+          const aplanar = (lista) => { for (const c of lista) { planas.push(c); if (c.subcategorias) aplanar(c.subcategorias); } };
+          aplanar(await api('GET', '/api/categorias'));
+          categorias = planas;
+        } catch { categorias = []; }
+      }
+      dibujarFormularioProducto(cont, categorias, () => codti, () => { cont.classList.add('oculto'); cargar(); });
+    };
+  }
+}
+
+function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Nuevo producto</h2>
+      <div class="segmentado">
+        <button id="np-seg-accesorio" class="activo">Accesorio</button>
+        <button id="np-seg-celular">Celular</button>
+      </div>
+      <div id="np-campos-accesorio">
+        <label class="obligatorio">Descripción</label>
+        <input id="np-descripcion" placeholder="Funda Silicon iPhone 16 Pro">
+        <label>Compatible con</label>
+        <input id="np-compatibilidad" placeholder="Opcional, ej. iPhone 16 Pro">
+        <label class="obligatorio">Stock inicial</label>
+        <input id="np-stock" type="number" inputmode="decimal" min="0" step="1" value="1">
+      </div>
+      <div id="np-campos-celular" class="oculto">
+        <label class="obligatorio">Marca</label>
+        <input id="np-marca" placeholder="Samsung, Apple...">
+        <label class="obligatorio">Modelo</label>
+        <input id="np-modelo" placeholder="A54, iPhone 13...">
+        <label class="obligatorio">IMEIs (uno por línea)</label>
+        <textarea id="np-imeis" placeholder="Un IMEI o serie por línea. El stock inicial es la cantidad que captures aquí."></textarea>
+      </div>
+      <label class="obligatorio">Categoría</label>
+      <select id="np-categoria">${categorias.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías</option>'}</select>
+      <label class="obligatorio">Precio de compra</label>
+      <input id="np-precio-compra" type="number" inputmode="decimal" min="0" step="0.01">
+      <label class="obligatorio">Precio de venta</label>
+      <input id="np-precio-venta" type="number" inputmode="decimal" min="0" step="0.01">
+      <label>Días de garantía</label>
+      <input id="np-garantia" type="number" inputmode="numeric" min="0" placeholder="Opcional">
+      <button id="np-guardar" class="btn btn-verde">Guardar producto</button>
+    </div>`;
+
+  let tipo = 'ACCESORIO';
+  const segAcc = document.getElementById('np-seg-accesorio');
+  const segCel = document.getElementById('np-seg-celular');
+  const camposAcc = document.getElementById('np-campos-accesorio');
+  const camposCel = document.getElementById('np-campos-celular');
+  segAcc.onclick = () => { tipo = 'ACCESORIO'; segAcc.classList.add('activo'); segCel.classList.remove('activo'); camposAcc.classList.remove('oculto'); camposCel.classList.add('oculto'); };
+  segCel.onclick = () => { tipo = 'CELULAR'; segCel.classList.add('activo'); segAcc.classList.remove('activo'); camposCel.classList.remove('oculto'); camposAcc.classList.add('oculto'); };
+
+  document.getElementById('np-guardar').onclick = async (e) => {
+    const categoriaMaster = document.getElementById('np-categoria').value;
+    const precioCompra = Number(document.getElementById('np-precio-compra').value);
+    const precioVenta = Number(document.getElementById('np-precio-venta').value);
+    if (!precioCompra || precioCompra < 0) { mostrarMensaje(root, 'Indica el precio de compra.', 'error'); return; }
+    if (!precioVenta || precioVenta <= 0) { mostrarMensaje(root, 'Indica el precio de venta.', 'error'); return; }
+
+    const payload = {
+      tipoMaster: tipo,
+      categoriaMaster,
+      codti: obtenerCodti(),
+      precioCompra,
+      precioVenta,
+      diasGarantia: document.getElementById('np-garantia').value ? Number(document.getElementById('np-garantia').value) : null,
+    };
+    if (tipo === 'CELULAR') {
+      const marca = document.getElementById('np-marca').value.trim();
+      const modelo = document.getElementById('np-modelo').value.trim();
+      const imeis = document.getElementById('np-imeis').value.split('\n').map(s => s.trim()).filter(Boolean);
+      if (!marca || !modelo) { mostrarMensaje(root, 'Indica marca y modelo.', 'error'); return; }
+      if (imeis.length === 0) { mostrarMensaje(root, 'Captura al menos un IMEI.', 'error'); return; }
+      payload.marca = marca;
+      payload.modelo = modelo;
+      payload.imeis = imeis;
+      payload.stock = imeis.length;
+    } else {
+      const descripcion = document.getElementById('np-descripcion').value.trim();
+      const stock = Number(document.getElementById('np-stock').value);
+      if (!descripcion) { mostrarMensaje(root, 'Indica la descripción del producto.', 'error'); return; }
+      if (!stock || stock < 0) { mostrarMensaje(root, 'Indica el stock inicial.', 'error'); return; }
+      payload.descripcion = descripcion;
+      payload.compatibilidad = document.getElementById('np-compatibilidad').value.trim() || null;
+      payload.stock = stock;
+    }
+
+    e.target.disabled = true;
+    e.target.innerHTML = '<span class="spinner"></span> Guardando...';
+    try {
+      const nuevo = await api('POST', '/api/productos', payload);
+      mostrarMensaje(root, `Producto "${nuevo.nombreProductoMaster}" registrado.`, 'ok');
+      alGuardar();
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+      e.target.textContent = 'Guardar producto';
+    }
+  };
 }
 
 function dibujarInventario(cont, productos) {
