@@ -4,6 +4,13 @@ Deja el backend (API y la web `/app`) accesible desde fuera de la tienda con HTT
 usando el dominio dinámico que ya se tenía (`skycelsys.ddns.net`, apunta a la IP pública de Corpo,
 `187.171.172.10` con Telmex Empresarial, PPPoE).
 
+**Estado (2026-09-22): la parte de HTTPS ya está lista y probada de punta a punta** (Caddy consigue
+su certificado real de Let's Encrypt y responde en el dominio). Lo que falta es aparte y más
+grande: **skycel-backend todavía no está desplegado en esa PC** — las tiendas siguen operando con
+el sistema anterior ("softhards", una app Dropwizard/Java 11 distinta, corriendo en el puerto 8081
+de esa misma PC). El Caddyfile ya apunta a `localhost:8080`, que es donde debe quedar escuchando
+skycel-backend el día que se despliegue ahí — no hay que tocarlo de nuevo para eso.
+
 ## Qué se necesita (una sola vez, en el servidor de Corpo — 192.168.1.105)
 
 1. **DNS dinámico**: ya está bien — `skycelsys.ddns.net` ya resuelve a la IP pública actual del
