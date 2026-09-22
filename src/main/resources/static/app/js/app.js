@@ -149,6 +149,8 @@ async function render() {
     if (ruta === 'garantias') return pantallaGarantias();
     if (ruta === 'garantia' && param) return pantallaGarantiaDetalle(param);
     if (ruta === 'reportes') return pantallaReportes();
+    if (ruta === 'inventario') return pantallaInventario();
+    if (ruta === 'producto' && param) return pantallaProductoDetalle(param);
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -210,6 +212,7 @@ async function pantallaMenu() {
   if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/recepcion', i: '📥', t: 'Recibir equipo' });
   if (TALLER_ROLES.includes(s.rol)) tarjetas.push({ h: '#/taller', i: '🔧', t: 'Taller' });
   tarjetas.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden' });
+  tarjetas.push({ h: '#/inventario', i: '📦', t: 'Inventario' });
   tarjetas.push({ h: '#/clientes', i: '👥', t: 'Clientes' });
   if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar' });
   if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/garantias', i: '🛡️', t: 'Garantías' });
@@ -1251,6 +1254,213 @@ async function pantallaReportes() {
   botonesPeriodo['7dias'].onclick = () => { periodo = '7dias'; cargar(); };
   botonesPeriodo.mes.onclick = () => { periodo = 'mes'; cargar(); };
   cargar();
+}
+
+// ── Inventario ───────────────────────────────────────────────────────────
+
+const TIPO_ICONO = { CELULAR: '📱', ACCESORIO: '🎧', SERVICIO: '🛠️' };
+
+async function pantallaInventario() {
+  const s = Sesion.obtener();
+  root.innerHTML = `
+    <h1>📦 Inventario</h1>
+    <div id="iv-tienda"></div>
+    <div class="buscador">
+      <input id="iv-buscar" placeholder="Nombre, código, marca o modelo">
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+      <input type="checkbox" id="iv-bajo-stock" style="width:auto;"> Solo bajo stock
+    </label>
+    <div id="iv-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
+
+  let codti = s.codti;
+  const contTienda = document.getElementById('iv-tienda');
+  const cargar = async () => {
+    if (codti == null) return;
+    const cont = document.getElementById('iv-lista');
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const soloBajo = document.getElementById('iv-bajo-stock').checked;
+      const productos = await api('GET', `/api/productos/tienda/${codti}${soloBajo ? '/bajo-stock' : ''}`);
+      dibujarInventario(cont, productos);
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  };
+
+  if (SUPERIOR.includes(s.rol)) {
+    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="iv-codti"><option>Cargando...</option></select>`;
+    try {
+      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const sel = document.getElementById('iv-codti');
+      sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
+      if (codti != null) sel.value = codti;
+      sel.onchange = () => { codti = Number(sel.value); cargar(); };
+    } catch {
+      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    }
+  } else {
+    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
+  }
+
+  document.getElementById('iv-buscar').addEventListener('input', () => filtrarInventario());
+  document.getElementById('iv-bajo-stock').addEventListener('change', cargar);
+  cargar();
+
+  function filtrarInventario() {
+    const q = document.getElementById('iv-buscar').value.trim().toLowerCase();
+    document.querySelectorAll('#iv-lista .orden-item').forEach(el => {
+      el.style.display = !q || el.dataset.buscar.includes(q) ? '' : 'none';
+    });
+  }
+}
+
+function dibujarInventario(cont, productos) {
+  if (productos.length === 0) { cont.innerHTML = '<div class="vacio">No hay productos que mostrar.</div>'; return; }
+  cont.innerHTML = productos.slice(0, 150).map(p => {
+    const buscar = `${p.nombreProductoMaster || ''} ${p.codpro || ''} ${p.marca || ''} ${p.modelo || ''}`.toLowerCase();
+    return `
+    <div class="orden-item" data-codti="${p.codti}~${escapar(p.codpro)}" data-buscar="${escapar(buscar)}">
+      <div class="orden-cab">
+        <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
+        ${p.bajoStock ? '<span class="pastilla error">⚠️ Bajo stock</span>' : ''}
+      </div>
+      <div class="orden-cliente">${escapar(p.codpro)} · ${escapar(p.nombreCategoria || '')}</div>
+      <div class="orden-meta">
+        <span class="orden-fecha">${formatoDinero(p.preciopub)}</span>
+        <span style="font-weight:700;">${p.tipo === 'SERVICIO' ? '' : 'Stock: ' + Number(p.stock)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/producto/' + el.dataset.codti));
+}
+
+async function pantallaProductoDetalle(param) {
+  const [codti, codpro] = param.split('~');
+  const s = Sesion.obtener();
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let p;
+  try {
+    const productos = await api('GET', `/api/productos/tienda/${codti}`);
+    p = productos.find(x => x.codpro === codpro);
+    if (!p) throw new ApiError('No se encontró el producto.', {});
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/inventario')">Ir a inventario</button></div>`;
+    return;
+  }
+
+  const puedeEditar = GESTOR_ROLES.includes(s.rol);
+  root.innerHTML = `
+    <h1>${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</h1>
+    <div class="tarjeta">
+      ${p.bajoStock ? '<span class="pastilla error">⚠️ Bajo stock</span>' : ''}
+      <div class="detalle-fila"><span class="k">Código</span><span class="v">${escapar(p.codpro)}</span></div>
+      ${p.marca ? `<div class="detalle-fila"><span class="k">Marca / Modelo</span><span class="v">${escapar(p.marca)} ${escapar(p.modelo)}</span></div>` : ''}
+      <div class="detalle-fila"><span class="k">Categoría</span><span class="v">${escapar(p.nombreCategoria || '—')}</span></div>
+      ${p.descripcion ? `<div class="detalle-fila"><span class="k">Descripción</span><span class="v">${escapar(p.descripcion)}</span></div>` : ''}
+      ${p.compatibilidad ? `<div class="detalle-fila"><span class="k">Compatibilidad</span><span class="v">${escapar(p.compatibilidad)}</span></div>` : ''}
+      ${p.tipo !== 'SERVICIO' ? `<div class="detalle-fila"><span class="k">Stock</span><span class="v">${Number(p.stock)}${Number(p.stockMinimo) > 0 ? ' (mínimo ' + Number(p.stockMinimo) + ')' : ''}</span></div>` : ''}
+      <div class="detalle-fila"><span class="k">Precio compra</span><span class="v">${formatoDinero(p.preciopro)}</span></div>
+      <div class="detalle-fila"><span class="k">Precio venta</span><span class="v">${formatoDinero(p.preciopub)}</span></div>
+      ${p.diasGarantia ? `<div class="detalle-fila"><span class="k">Garantía</span><span class="v">${p.diasGarantia} días</span></div>` : ''}
+    </div>
+
+    ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
+    <div class="tarjeta">
+      <h2>Unidades disponibles (${p.imeisDisponibles.length})</h2>
+      ${p.imeisDisponibles.map(u => `
+        <div class="detalle-fila"><span class="k">${escapar(u.imei)} · ${escapar(u.condicion)}</span><span class="v">${formatoDinero(u.precioVenta)}</span></div>
+      `).join('')}
+    </div>` : ''}
+
+    ${puedeEditar ? `
+    <div class="tarjeta">
+      <h2>Editar precios</h2>
+      <label>Precio de compra</label>
+      <input id="pd-precompra" type="number" inputmode="decimal" step="0.01" value="${p.preciopro ?? ''}">
+      <label>Precio de venta</label>
+      <input id="pd-preventa" type="number" inputmode="decimal" step="0.01" value="${p.preciopub ?? ''}">
+      <label>Stock mínimo (alerta)</label>
+      <input id="pd-stockmin" type="number" inputmode="decimal" step="1" value="${p.stockMinimo ?? 0}">
+      <button id="pd-guardar-precio" class="btn btn-azul">Guardar</button>
+    </div>
+    ${p.tipo === 'ACCESORIO' ? `
+    <div class="tarjeta">
+      <h2>Ajustar stock</h2>
+      <label class="obligatorio">Tipo de movimiento</label>
+      <select id="pd-tipo-mov">
+        <option value="ENTRADA">Entrada (suma al stock)</option>
+        <option value="SALIDA">Salida (resta del stock)</option>
+        <option value="AJUSTE">Ajuste (deja el valor exacto)</option>
+      </select>
+      <label class="obligatorio">Cantidad</label>
+      <input id="pd-cantidad" type="number" inputmode="decimal" min="0" step="1">
+      <label class="obligatorio">Motivo</label>
+      <input id="pd-comentario" placeholder="Ej. conteo físico, mercancía dañada...">
+      <button id="pd-guardar-stock" class="btn btn-verde">Registrar movimiento</button>
+    </div>` : ''}
+    <div id="pd-historial-cont" class="tarjeta">
+      <h2>Últimos movimientos</h2>
+      <div id="pd-historial"><div class="vacio">Cargando...</div></div>
+    </div>` : ''}`;
+
+  if (puedeEditar) {
+    document.getElementById('pd-guardar-precio').onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        await api('PUT', `/api/productos/${encodeURIComponent(codpro)}`, {
+          precioCompra: Number(document.getElementById('pd-precompra').value) || null,
+          precioVenta: Number(document.getElementById('pd-preventa').value) || null,
+          stockMinimo: Number(document.getElementById('pd-stockmin').value) || 0,
+        });
+        mostrarMensaje(root, 'Precios actualizados.', 'ok');
+        setTimeout(() => pantallaProductoDetalle(param), 600);
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        e.target.disabled = false;
+      }
+    };
+
+    const btnStock = document.getElementById('pd-guardar-stock');
+    if (btnStock) {
+      btnStock.onclick = async (e) => {
+        const cantidad = Number(document.getElementById('pd-cantidad').value);
+        const comentario = document.getElementById('pd-comentario').value.trim();
+        if (!cantidad || cantidad < 0) { mostrarMensaje(root, 'Indica una cantidad válida.', 'error'); return; }
+        if (!comentario) { mostrarMensaje(root, 'Indica el motivo del movimiento.', 'error'); return; }
+        e.target.disabled = true;
+        try {
+          await api('PATCH', `/api/productos/${encodeURIComponent(codpro)}/stock`, {
+            tipo: document.getElementById('pd-tipo-mov').value, cantidad, comentario,
+          });
+          mostrarMensaje(root, 'Movimiento registrado.', 'ok');
+          setTimeout(() => pantallaProductoDetalle(param), 600);
+        } catch (err) {
+          mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+          e.target.disabled = false;
+        }
+      };
+    }
+
+    cargarHistorialInventario(codti, codpro);
+  }
+}
+
+async function cargarHistorialInventario(codti, codpro) {
+  const cont = document.getElementById('pd-historial');
+  if (!cont) return;
+  try {
+    const movs = await api('GET', `/api/productos/tienda/${codti}/movimientos?codpro=${encodeURIComponent(codpro)}`);
+    cont.innerHTML = movs.length === 0 ? '<div class="vacio">Sin movimientos en los últimos 30 días.</div>' : movs.slice(0, 20).map(m => `
+      <div class="historial-item">
+        <div class="historial-comentario">${escapar(m.tipoDisplay)}: ${m.cantidad > 0 ? '+' : ''}${Number(m.cantidad)} (${Number(m.stockAntes)} → ${Number(m.stockDespues)})</div>
+        <div class="historial-meta">${escapar(m.usuario)} · ${formatoFecha(m.fecha)}${m.motivo ? ' · ' + escapar(m.motivo) : ''}</div>
+      </div>`).join('');
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
 }
 
 // ── Arranque ──────────────────────────────────────────────────────────────
