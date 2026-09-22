@@ -2,7 +2,6 @@ package com.skycel.backend.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -37,7 +36,15 @@ public class PagoCuenta {
     @Column(name = "notas", columnDefinition = "TEXT")
     private String notas;
 
-    @CreationTimestamp
     @Column(name = "fecha_pago", updatable = false)
     private LocalDateTime fechaPago;
+
+    @PrePersist
+    void alGuardar() {
+        if (fechaPago == null) fechaPago = LocalDateTime.now();
+    }
+
+    /** Clave única de un abono hecho sin conexión: reenviarla no duplica el pago. */
+    @Column(name = "clave_offline", length = 64, unique = true)
+    private String claveOffline;
 }

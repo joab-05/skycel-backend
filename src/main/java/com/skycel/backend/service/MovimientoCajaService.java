@@ -134,10 +134,16 @@ public class MovimientoCajaService {
      */
     @Transactional
     public void registrarAbonoCuenta(Integer idCaja, CuentaPorCobrar cuenta, PagoCuenta pago, Usuario usuario) {
+        registrarAbonoCuenta(idCaja, cuenta, pago, usuario, null);
+    }
+
+    /** {@code fecha}: solo si el abono se hizo sin conexión, para que el movimiento conserve el momento real. */
+    @Transactional
+    public void registrarAbonoCuenta(Integer idCaja, CuentaPorCobrar cuenta, PagoCuenta pago, Usuario usuario, java.time.LocalDateTime fecha) {
         Caja caja = idCaja != null ? buscarCaja(idCaja) : cajaPrincipalDe(usuario);
         validarAcceso(usuario, caja);
         guardar(caja, usuario, null, motivoSistema(ABONO_CUENTA), pago.getMonto(),
-                "Abono a cuenta " + cuenta.getNoFactura() + " (pago #" + pago.getIdpago() + ")", null);
+                "Abono a cuenta " + cuenta.getNoFactura() + " (pago #" + pago.getIdpago() + ")", null, fecha);
     }
 
     /**

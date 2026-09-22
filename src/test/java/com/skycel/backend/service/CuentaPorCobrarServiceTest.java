@@ -24,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -172,9 +173,9 @@ class CuentaPorCobrarServiceTest {
                 .montoTotal(new BigDecimal("149.00")).montoPagado(BigDecimal.ZERO)
                 .fechaVencimiento(LocalDate.now().plusDays(20)).estado((byte) 0).build();
         Usuario usuario = Usuario.builder().idusuario(4).build();
-        when(cpcRepository.findById(5)).thenReturn(Optional.of(cuenta));
-        when(usuarioRepository.findById(4)).thenReturn(Optional.of(usuario));
-        when(pagoRepository.save(any(PagoCuenta.class))).thenAnswer(i -> {
+        lenient().when(cpcRepository.findById(5)).thenReturn(Optional.of(cuenta));
+        lenient().when(usuarioRepository.findById(4)).thenReturn(Optional.of(usuario));
+        lenient().when(pagoRepository.save(any(PagoCuenta.class))).thenAnswer(i -> {
             PagoCuenta p = i.getArgument(0);
             p.setIdpago(77);
             return p;
@@ -190,7 +191,7 @@ class CuentaPorCobrarServiceTest {
         service.registrarPago(5, new BigDecimal("30.00"), (byte) 1, null, 4, 3);
 
         ArgumentCaptor<PagoCuenta> cap = ArgumentCaptor.forClass(PagoCuenta.class);
-        verify(movimientoCajaService).registrarAbonoCuenta(eq(3), eq(cuenta), cap.capture(), any(Usuario.class));
+        verify(movimientoCajaService).registrarAbonoCuenta(eq(3), eq(cuenta), cap.capture(), any(Usuario.class), isNull());
         assertThat(cap.getValue().getIdpago()).isEqualTo(77);
         assertThat(cap.getValue().getMonto()).isEqualByComparingTo("30.00");
         assertThat(cuenta.getMontoPagado()).isEqualByComparingTo("30.00");
@@ -203,7 +204,7 @@ class CuentaPorCobrarServiceTest {
 
         service.registrarPago(5, new BigDecimal("30.00"), (byte) 1, null, 4, null);
 
-        verify(movimientoCajaService).registrarAbonoCuenta(isNull(), any(CuentaPorCobrar.class), any(PagoCuenta.class), any(Usuario.class));
+        verify(movimientoCajaService).registrarAbonoCuenta(isNull(), any(CuentaPorCobrar.class), any(PagoCuenta.class), any(Usuario.class), isNull());
     }
 
     @Test
@@ -214,6 +215,46 @@ class CuentaPorCobrarServiceTest {
         service.registrarPago(5, new BigDecimal("30.00"), (byte) 3, null, 4, null);
 
         verifyNoInteractions(movimientoCajaService);
+    }
+
+    @Test
+    @DisplayName("abono sin conexión: conserva la fecha real del pago, no la de sincronización")
+    void abonoSinConexion_conservaFecha() {
+        cuentaConSaldo();
+        LocalDateTime fechaReal = LocalDateTime.now().minusHours(3).withNano(0);
+
+        service.registrarPago(5, new BigDecimal("30.00"), (byte) 1, null, 4, 3, "clave-1", fechaReal);
+
+        ArgumentCaptor<PagoCuenta> cap = ArgumentCaptor.forClass(PagoCuenta.class);
+        verify(movimientoCajaService).registrarAbonoCuenta(eq(3), any(CuentaPorCobrar.class), cap.capture(), any(Usuario.class), eq(fechaReal));
+        assertThat(cap.getValue().getFechaPago()).isEqualTo(fechaReal);
+        assertThat(cap.getValue().getClaveOffline()).isEqualTo("clave-1");
+    }
+
+    @Test
+    @DisplayName("abono sin conexión: reenviar la misma clave no duplica el pago")
+    void abonoSinConexion_idempotente() {
+        CuentaPorCobrar cuenta = cuentaConSaldo();
+        LocalDateTime fechaReal = LocalDateTime.now().minusHours(1).withNano(0);
+        PagoCuenta yaGuardado = PagoCuenta.builder().idpago(77).cuentaPorCobrar(cuenta).claveOffline("clave-2").build();
+        when(pagoRepository.findByClaveOffline("clave-2")).thenReturn(Optional.of(yaGuardado));
+
+        service.registrarPago(5, new BigDecimal("30.00"), (byte) 1, null, 4, 3, "clave-2", fechaReal);
+
+        verify(pagoRepository, never()).save(any(PagoCuenta.class));
+        verifyNoInteractions(movimientoCajaService);
+    }
+
+    @Test
+    @DisplayName("abono sin conexión: rechaza fechas futuras y de hace más de 45 días")
+    void abonoSinConexion_fechas() {
+        cuentaConSaldo();
+
+        assertThatThrownBy(() -> service.registrarPago(5, new BigDecimal("10.00"), (byte) 1, null, 4, 3,
+                "clave-3", LocalDateTime.now().plusHours(2))).hasMessageContaining("futura");
+
+        assertThatThrownBy(() -> service.registrarPago(5, new BigDecimal("10.00"), (byte) 1, null, 4, 3,
+                "clave-4", LocalDateTime.now().minusDays(46))).hasMessageContaining("45 días");
     }
 
     private CuentaPorCobrarRequestDto dtoManual(Integer idcliente, Integer idventa) {

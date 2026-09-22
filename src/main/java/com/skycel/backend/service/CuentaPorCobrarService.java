@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -152,7 +153,37 @@ public class CuentaPorCobrarService {
     public Map<String, Object> registrarPago(Integer idcuenta, BigDecimal monto,
                                              Byte metodoPago, String notas,
                                              Integer idusuario, Integer idCaja) {
+        return registrarPago(idcuenta, monto, metodoPago, notas, idusuario, idCaja, null, null);
+    }
+
+    /**
+     * {@code claveOffline}: reenviar la misma clave devuelve el estado actual de la cuenta sin duplicar el abono.
+     * {@code fechaPago}: solo se honra junto con una clave, para que un abono hecho sin conexión conserve el
+     * momento real en que ocurrió (y no el de cuando se sincroniza).
+     */
+    @Transactional
+    public Map<String, Object> registrarPago(Integer idcuenta, BigDecimal monto,
+                                             Byte metodoPago, String notas,
+                                             Integer idusuario, Integer idCaja,
+                                             String claveOffline, LocalDateTime fechaPago) {
         CuentaPorCobrar cpc = buscarOFallar(idcuenta);
+
+        String clave = claveOffline != null && !claveOffline.isBlank() ? claveOffline.trim() : null;
+        if (clave != null) {
+            // Reenvío de un abono ya registrado: se devuelve el estado actual de la cuenta, sin duplicar
+            var existente = pagoRepository.findByClaveOffline(clave);
+            if (existente.isPresent()) return toMap(existente.get().getCuentaPorCobrar());
+        }
+        LocalDateTime fecha = null;
+        if (clave != null && fechaPago != null) {
+            if (fechaPago.isAfter(LocalDateTime.now().plusMinutes(10))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha del pago no puede ser futura.");
+            }
+            if (fechaPago.isBefore(LocalDateTime.now().minusDays(45))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El pago es de hace más de 45 días: regístrelo manualmente.");
+            }
+            fecha = fechaPago;
+        }
 
         if (monto.compareTo(BigDecimal.ZERO) <= 0)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El monto debe ser mayor a 0.");
@@ -172,12 +203,14 @@ public class CuentaPorCobrarService {
                 .monto(monto)
                 .metodoPago(metodoPago != null ? metodoPago : 1)
                 .notas(notas)
+                .claveOffline(clave)
+                .fechaPago(fecha)
                 .build();
         pago = pagoRepository.save(pago);
 
         // Solo el efectivo entra a la caja (tarjeta/transferencia/PayJoy no pasan por el cajón)
         if (pago.getMetodoPago() != null && pago.getMetodoPago() == METODO_EFECTIVO) {
-            movimientoCajaService.registrarAbonoCuenta(idCaja, cpc, pago, usuario);
+            movimientoCajaService.registrarAbonoCuenta(idCaja, cpc, pago, usuario, fecha);
         }
 
         // Actualizar monto pagado y estado

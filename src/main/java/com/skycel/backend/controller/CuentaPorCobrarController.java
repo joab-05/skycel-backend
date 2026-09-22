@@ -58,6 +58,10 @@ public class CuentaPorCobrarController {
             @RequestParam(required = false) String notas,
             @Parameter(description = "Caja donde entra el efectivo. Opcional: si se omite se usa la caja principal de la tienda del usuario")
             @RequestParam(required = false) Integer idCaja,
+            @Parameter(description = "Clave única (UUID) de un abono hecho sin conexión; reenviarla no duplica el pago")
+            @RequestParam(required = false) String claveOffline,
+            @Parameter(description = "Momento real del abono (solo sin conexión)")
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime fechaPago,
             @AuthenticationPrincipal UserDetails userDetails) {
 
         // Obtener el ID del usuario autenticado
@@ -67,7 +71,7 @@ public class CuentaPorCobrarController {
                 .orElseThrow();
 
         return ResponseEntityBuilder.updated(
-                cpcService.registrarPago(id, monto, metodoPago, notas, idusuario, idCaja),
+                cpcService.registrarPago(id, monto, metodoPago, notas, idusuario, idCaja, claveOffline, fechaPago),
                 "cuenta-por-cobrar");
     }
 
