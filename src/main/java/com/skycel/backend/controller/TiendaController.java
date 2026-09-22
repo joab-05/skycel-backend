@@ -1,11 +1,13 @@
 package com.skycel.backend.controller;
 
 import com.skycel.backend.domain.entity.Tienda;
+import com.skycel.backend.dto.configuracion.TiendaCreateDto;
 import com.skycel.backend.dto.configuracion.TiendaDatosRequestDto;
 import jakarta.validation.Valid;
 import org.springframework.web.server.ResponseStatusException;
 import com.skycel.backend.repository.TiendaRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +37,23 @@ public class TiendaController {
                 .filter(t -> Boolean.TRUE.equals(t.getActivo()))
                 .toList();
         return ResponseEntity.ok(tiendas);
+    }
+
+    /**
+     * POST /api/tiendas
+     * Da de alta una sucursal nueva. Solo ROOT y ADMIN.
+     */
+    @PostMapping
+    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    public ResponseEntity<Tienda> crear(@Valid @RequestBody TiendaCreateDto request) {
+        Tienda t = Tienda.builder()
+                .nombre(request.getNombre().trim())
+                .ubicacion(request.getUbicacion() == null || request.getUbicacion().isBlank() ? null : request.getUbicacion().trim())
+                .telefono(request.getTelefono() == null || request.getTelefono().isBlank() ? null : request.getTelefono().trim())
+                .esAlmacen(Boolean.TRUE.equals(request.getEsAlmacen()))
+                .activo(true)
+                .build();
+        return ResponseEntity.status(HttpStatus.CREATED).body(tiendaRepository.save(t));
     }
 
     /**

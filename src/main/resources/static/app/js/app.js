@@ -1546,18 +1546,68 @@ async function pantallaCaja() {
   }
 
   const contTienda = document.getElementById('cj-tienda');
-  if (SUPERIOR.includes(s.rol)) {
-    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="cj-codti"><option>Cargando...</option></select>`;
+  async function cargarTiendas(seleccionar) {
+    contTienda.innerHTML = `
+      <label class="obligatorio">Sucursal</label>
+      <div class="fila">
+        <select id="cj-codti"><option>Cargando...</option></select>
+        <button id="cj-nueva-sucursal" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+      </div>
+      <div id="cj-sucursal-form" class="oculto"></div>`;
     try {
-      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const tiendas = await api('GET', '/api/tiendas');
       const sel = document.getElementById('cj-codti');
-      sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
-      codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
+      const visibles = tiendas.filter(t => !t.esAlmacen);
+      sel.innerHTML = visibles.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      codti = seleccionar ?? (visibles.find(t => t.codti === s.codti)?.codti ?? visibles[0]?.codti);
       if (codti != null) sel.value = codti;
       sel.onchange = () => { codti = Number(sel.value); cargarCajaYSaldo(); };
     } catch {
-      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+      document.getElementById('cj-codti').outerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
     }
+    document.getElementById('cj-nueva-sucursal').onclick = () => {
+      const cont = document.getElementById('cj-sucursal-form');
+      cont.classList.toggle('oculto');
+      if (cont.classList.contains('oculto')) return;
+      cont.innerHTML = `
+        <div class="tarjeta">
+          <h2 style="margin-top:0;">Nueva sucursal</h2>
+          <label class="obligatorio">Nombre</label>
+          <input id="ns-nombre">
+          <label>Domicilio</label>
+          <input id="ns-ubicacion" placeholder="Opcional">
+          <label>Teléfono</label>
+          <input id="ns-telefono" inputmode="tel" placeholder="Opcional">
+          <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+            <input type="checkbox" id="ns-almacen" style="width:auto;"> Es almacén (sin caja ni venta al público)
+          </label>
+          <button id="ns-guardar" class="btn btn-verde">Guardar sucursal</button>
+        </div>`;
+      document.getElementById('ns-guardar').onclick = async (e) => {
+        const nombre = document.getElementById('ns-nombre').value.trim();
+        if (!nombre) { mostrarMensaje(root, 'El nombre de la sucursal es obligatorio.', 'error'); return; }
+        e.target.disabled = true;
+        e.target.innerHTML = '<span class="spinner"></span> Guardando...';
+        try {
+          const nueva = await api('POST', '/api/tiendas', {
+            nombre,
+            ubicacion: document.getElementById('ns-ubicacion').value.trim() || null,
+            telefono: document.getElementById('ns-telefono').value.trim() || null,
+            esAlmacen: document.getElementById('ns-almacen').checked,
+          });
+          mostrarMensaje(root, `Sucursal "${nueva.nombre}" creada.`, 'ok');
+          await cargarTiendas(nueva.esAlmacen ? undefined : nueva.codti);
+          cargarCajaYSaldo();
+        } catch (err) {
+          mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+          e.target.disabled = false;
+          e.target.textContent = 'Guardar sucursal';
+        }
+      };
+    };
+  }
+  if (SUPERIOR.includes(s.rol)) {
+    await cargarTiendas();
   } else {
     contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
   }
