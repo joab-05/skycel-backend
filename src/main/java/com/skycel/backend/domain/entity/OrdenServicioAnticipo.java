@@ -41,7 +41,11 @@ public class OrdenServicioAnticipo {
     @Column(name = "idmovimiento_caja")
     private Integer idmovimientoCaja;
 
-    @CreationTimestamp
     @Column(name = "fecha", updatable = false)
     private LocalDateTime fecha;
+
+    @jakarta.persistence.PrePersist
+    void alGuardar() {
+        if (fecha == null) fecha = LocalDateTime.now();
+    }
 }

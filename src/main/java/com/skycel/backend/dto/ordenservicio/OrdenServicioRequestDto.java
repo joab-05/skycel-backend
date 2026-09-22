@@ -16,8 +16,24 @@ public class OrdenServicioRequestDto {
     /** Tienda donde se recibe. Opcional: si se omite es la del usuario. */
     private Integer codti;
 
-    @NotNull(message = "El cliente es obligatorio")
+    /** Obligatorio, salvo en una recepcion sin conexion con clienteNombre y clienteTelefono. */
     private Integer idcliente;
+
+    /** Clave unica (UUID) de una recepcion hecha sin conexion; reenviarla no duplica la orden. */
+    @Size(max = 64)
+    private String claveOffline;
+
+    @Size(max = 40)
+    private String folioLocal;
+
+    /** Momento real de la recepcion (solo sin conexion). */
+    private java.time.LocalDateTime fechaRecepcion;
+
+    @Size(max = 150)
+    private String clienteNombre;
+
+    @Size(max = 20)
+    private String clienteTelefono;
 
     @NotBlank(message = "La marca del equipo es obligatoria")
     @Size(max = 60, message = "La marca no puede exceder los 60 caracteres")

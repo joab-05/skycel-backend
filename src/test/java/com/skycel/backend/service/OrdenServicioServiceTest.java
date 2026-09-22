@@ -52,6 +52,7 @@ class OrdenServicioServiceTest {
     @Mock private CategoriaFolioRepository         categoriaFolioRepository;
     @Mock private MovimientoCajaService            movimientoCajaService;
     @Mock private VentaService                     ventaService;
+    @Mock private ClienteService                   clienteService;
 
     @InjectMocks
     private OrdenServicioService service;
@@ -105,10 +106,12 @@ class OrdenServicioServiceTest {
 
         lenient().when(ordenRepository.save(any(OrdenServicio.class))).thenAnswer(inv -> {
             OrdenServicio o = inv.getArgument(0);
-            if (o.getIdorden() == null) { o.setIdorden(id++); o.setFechaIngreso(LocalDateTime.now()); }
+            if (o.getIdorden() == null) { o.setIdorden(id++); if (o.getFechaIngreso() == null) o.setFechaIngreso(LocalDateTime.now()); }
             ordenes.put(o.getIdorden(), o);
             return o;
         });
+        lenient().when(ordenRepository.findByClaveOffline(any())).thenAnswer(inv ->
+                ordenes.values().stream().filter(o -> inv.getArgument(0).equals(o.getClaveOffline())).findFirst());
         lenient().when(ordenRepository.findById(anyInt())).thenAnswer(inv -> Optional.ofNullable(ordenes.get((Integer) inv.getArgument(0))));
         lenient().when(ordenRepository.findByFolio(any())).thenAnswer(inv ->
                 ordenes.values().stream().filter(o -> o.getFolio().equals(inv.getArgument(0))).findFirst());
@@ -215,6 +218,70 @@ class OrdenServicioServiceTest {
     }
 
     // ── Recibir ──────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("recibir un equipo sin conexión")
+    class RecibirSinConexion {
+
+        private OrdenServicioRequestDto sinConexion(String clave) {
+            OrdenServicioRequestDto d = recepcion();
+            d.setClaveOffline(clave);
+            d.setFolioLocal("OFF-ZOC-000001");
+            d.setFechaRecepcion(LocalDateTime.now().minusHours(3).withNano(0));
+            return d;
+        }
+
+        @Test
+        @DisplayName("conserva la fecha original y el folio provisional")
+        void conservaFechaYFolio() {
+            OrdenServicioRequestDto d = sinConexion("clave-1");
+            OrdenServicioResponseDto r = service.crear(d, "abigail");
+
+            assertThat(r.getFolioLocal()).isEqualTo("OFF-ZOC-000001");
+            assertThat(ordenes.get(r.getIdorden()).getFechaIngreso()).isEqualTo(d.getFechaRecepcion());
+            assertThat(r.getHistorial().get(0).getComentario()).contains("sin conexión").contains("OFF-ZOC-000001");
+        }
+
+        @Test
+        @DisplayName("reenviar la misma clave devuelve la misma orden y no duplica")
+        void idempotente() {
+            OrdenServicioResponseDto a = service.crear(sinConexion("clave-2"), "abigail");
+            OrdenServicioResponseDto b = service.crear(sinConexion("clave-2"), "abigail");
+
+            assertThat(b.getIdorden()).isEqualTo(a.getIdorden());
+            assertThat(ordenes).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("rechaza fechas futuras y de hace más de 45 días")
+        void fechas() {
+            OrdenServicioRequestDto futura = sinConexion("clave-3");
+            futura.setFechaRecepcion(LocalDateTime.now().plusHours(2));
+            assertThatThrownBy(() -> service.crear(futura, "abigail")).hasMessageContaining("futura");
+
+            OrdenServicioRequestDto vieja = sinConexion("clave-4");
+            vieja.setFechaRecepcion(LocalDateTime.now().minusDays(46));
+            assertThatThrownBy(() -> service.crear(vieja, "abigail")).hasMessageContaining("45 días");
+        }
+
+        @Test
+        @DisplayName("crea el cliente por teléfono si no existía, y sin clave no se acepta cliente nuevo")
+        void clienteNuevo() {
+            Cliente nuevo = Cliente.builder().idcliente(50).nombreCompleto("Cliente Nuevo").telefono("7570000000").build();
+            lenient().when(clienteRepository.findByTelefono("7570000000")).thenReturn(Optional.empty());
+            com.skycel.backend.dto.cliente.ClienteResponseDto resp = com.skycel.backend.dto.cliente.ClienteResponseDto.builder().idcliente(50).build();
+            lenient().when(clienteService.crear(any())).thenReturn(resp);
+            lenient().when(clienteRepository.findById(50)).thenReturn(Optional.of(nuevo));
+
+            OrdenServicioRequestDto d = sinConexion("clave-5");
+            d.setIdcliente(null); d.setClienteNombre("Cliente Nuevo"); d.setClienteTelefono("7570000000");
+            assertThat(service.crear(d, "abigail").getNombreCliente()).isEqualTo("Cliente Nuevo");
+
+            OrdenServicioRequestDto sinClave = recepcion();
+            sinClave.setIdcliente(null); sinClave.setClienteNombre("X"); sinClave.setClienteTelefono("1");
+            assertThatThrownBy(() -> service.crear(sinClave, "abigail")).hasMessageContaining("cliente es obligatorio");
+        }
+    }
 
     @Nested
     @DisplayName("recibir un equipo")

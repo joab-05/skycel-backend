@@ -149,7 +149,9 @@ public class MovimientoCajaService {
         Caja caja = cajaParaTienda(idCaja, orden.getTienda());
         validarAcceso(usuario, caja);
         return guardar(caja, usuario, null, motivoSistema(ANTICIPO_SERVICIO), anticipo.getMonto(),
-                "Anticipo orden " + orden.getFolio() + " (anticipo #" + anticipo.getIdanticipo() + ")", null).getIdmovimiento();
+                "Anticipo orden " + orden.getFolio() + " (anticipo #" + anticipo.getIdanticipo() + ")"
+                        + (orden.getFolioLocal() != null ? " - recibida sin conexion (" + orden.getFolioLocal() + ")" : ""),
+                null, anticipo.getFecha()).getIdmovimiento();
     }
 
     /** La caja indicada (que debe ser de la tienda) o, si no se indica, la principal de la tienda. */

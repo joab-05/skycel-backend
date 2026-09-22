@@ -61,6 +61,7 @@ public class OrdenServicioService {
     private final CategoriaFolioRepository         categoriaFolioRepository;
     private final MovimientoCajaService            movimientoCajaService;
     private final VentaService                     ventaService;
+    private final ClienteService                   clienteService;
 
     // ── Recibir el equipo ────────────────────────────────────────────────────
 
@@ -70,6 +71,22 @@ public class OrdenServicioService {
         if (usuario.getRol() == Rol.TECNICO) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Un técnico no recibe equipos: lo hace el personal de la tienda.");
         }
+        String clave = dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank() ? dto.getClaveOffline().trim() : null;
+        if (clave != null) {
+            // Reenvio de una recepcion ya registrada: se devuelve la misma orden
+            var existente = ordenRepository.findByClaveOffline(clave);
+            if (existente.isPresent()) return toDto(existente.get());
+        }
+        java.time.LocalDateTime fechaRecepcion = null;
+        if (clave != null && dto.getFechaRecepcion() != null) {
+            fechaRecepcion = dto.getFechaRecepcion();
+            if (fechaRecepcion.isAfter(java.time.LocalDateTime.now().plusMinutes(10))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha de recepción no puede ser futura.");
+            }
+            if (fechaRecepcion.isBefore(java.time.LocalDateTime.now().minusDays(45))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La recepción es de hace más de 45 días: regístrela manualmente.");
+            }
+        }
         Integer codti = dto.getCodti() != null ? dto.getCodti() : (usuario.getTienda() != null ? usuario.getTienda().getCodti() : null);
         if (codti == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique la tienda (codti).");
@@ -77,8 +94,22 @@ public class OrdenServicioService {
         validarGestionaTienda(usuario, codti);
         Tienda tienda = tiendaRepository.findById(codti)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tienda no encontrada: " + codti));
-        Cliente cliente = clienteRepository.findById(dto.getIdcliente())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cliente no encontrado: " + dto.getIdcliente()));
+        Cliente cliente;
+        if (dto.getIdcliente() != null) {
+            cliente = clienteRepository.findById(dto.getIdcliente())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cliente no encontrado: " + dto.getIdcliente()));
+        } else if (clave != null && dto.getClienteTelefono() != null && !dto.getClienteTelefono().isBlank()
+                && dto.getClienteNombre() != null && !dto.getClienteNombre().isBlank()) {
+            // Cliente que no estaba registrado al recibir sin conexion: se busca por telefono y, si no existe, se crea
+            cliente = clienteRepository.findByTelefono(dto.getClienteTelefono().trim()).orElseGet(() -> {
+                com.skycel.backend.dto.cliente.ClienteRequestDto nuevo = new com.skycel.backend.dto.cliente.ClienteRequestDto();
+                nuevo.setNombreCompleto(dto.getClienteNombre().trim());
+                nuevo.setTelefono(dto.getClienteTelefono().trim());
+                return clienteRepository.findById(clienteService.crear(nuevo).getIdcliente()).orElseThrow();
+            });
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El cliente es obligatorio.");
+        }
         validarFechaPromesa(dto.getFechaPromesa());
         String imei = validarImei(dto.getImei());
         if (dto.getIdTecnico() != null && !esSuperior(usuario)) {
@@ -96,8 +127,11 @@ public class OrdenServicioService {
                 .fallaReportada(dto.getFallaReportada().trim())
                 .fechaPromesa(dto.getFechaPromesa())
                 .estado(RECIBIDA)
+                .claveOffline(clave)
+                .folioLocal(clave != null ? trimOrNull(dto.getFolioLocal()) : null)
+                .fechaIngreso(fechaRecepcion)
                 .build());
-        registrar(orden, usuario, "Equipo recibido" + (tecnico != null ? ". Técnico asignado: " + tecnico.getNombreCompleto() : ""));
+        registrar(orden, usuario, (orden.getFolioLocal() != null ? "Equipo recibido sin conexión (" + orden.getFolioLocal() + ")" : "Equipo recibido") + (tecnico != null ? ". Técnico asignado: " + tecnico.getNombreCompleto() : ""));
 
         if (dto.getLineas() != null) {
             for (OrdenLineaRequestDto l : dto.getLineas()) nuevaLinea(orden, l, usuario);
@@ -677,7 +711,7 @@ public class OrdenServicioService {
                 .accesoriosDejados(o.getAccesoriosDejados()).estadoFisico(o.getEstadoFisico())
                 .fallaReportada(o.getFallaReportada()).diagnostico(o.getDiagnostico())
                 .estado(o.getEstado()).estadoDisplay(estadoDisplay(o.getEstado()))
-                .fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa())
+                .folioLocal(o.getFolioLocal()).fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa())
                 .fechaLista(o.getFechaLista()).fechaEntrega(o.getFechaEntrega())
                 .diasGarantia(o.getDiasGarantia()).fechaGarantiaHasta(o.getFechaGarantiaHasta())
                 .idventa(o.getVenta() != null ? o.getVenta().getIdventa() : null)

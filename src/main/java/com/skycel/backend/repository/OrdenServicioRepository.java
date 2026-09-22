@@ -13,6 +13,10 @@ public interface OrdenServicioRepository extends JpaRepository<OrdenServicio, In
 
     Optional<OrdenServicio> findByFolio(String folio);
 
+    Optional<OrdenServicio> findByClaveOffline(String claveOffline);
+
+    Optional<OrdenServicio> findByFolioLocal(String folioLocal);
+
     /** ¿Esta venta salió de una orden de servicio? (esa venta no se cancela por separado) */
     boolean existsByVenta_Idventa(Integer idventa);
 

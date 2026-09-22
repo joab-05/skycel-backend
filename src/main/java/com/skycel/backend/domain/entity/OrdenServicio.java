@@ -84,9 +84,21 @@ public class OrdenServicio {
     @Column(name = "estado", nullable = false, columnDefinition = "TINYINT DEFAULT 1")
     private Byte estado;
 
-    @CreationTimestamp
     @Column(name = "fecha_ingreso", updatable = false)
     private LocalDateTime fechaIngreso;
+
+    @jakarta.persistence.PrePersist
+    void alGuardar() {
+        if (fechaIngreso == null) fechaIngreso = LocalDateTime.now();
+    }
+
+    /** Clave unica de una recepcion hecha sin conexion: reenviarla no duplica la orden. */
+    @Column(name = "clave_offline", length = 64, unique = true)
+    private String claveOffline;
+
+    /** Folio provisional que se dio al cliente si el equipo se recibio sin conexion. */
+    @Column(name = "folio_local", length = 40)
+    private String folioLocal;
 
     /** Fecha en que se le prometió el equipo al cliente. */
     @Column(name = "fecha_promesa")

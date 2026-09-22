@@ -32,7 +32,11 @@ public class OrdenServicioHistorial {
     @Column(name = "comentario", columnDefinition = "TEXT")
     private String comentario;
 
-    @CreationTimestamp
     @Column(name = "fecha", updatable = false)
     private LocalDateTime fecha;
+
+    @jakarta.persistence.PrePersist
+    void alGuardar() {
+        if (fecha == null) fecha = LocalDateTime.now();
+    }
 }

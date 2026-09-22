@@ -14,6 +14,7 @@ public class OrdenServicioResponseDto {
 
     private Integer idorden;
     private String  folio;
+    private String  folioLocal;
     private Integer codti;
     private String  nombreTienda;
 
