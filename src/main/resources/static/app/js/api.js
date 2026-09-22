@@ -57,7 +57,10 @@ async function api(method, ruta, cuerpo) {
   try { json = await res.json(); } catch { /* respuesta vacía, p. ej. 204 */ }
 
   if (!res.ok) {
-    const msg = (json && (json.message || json.mensaje || json.error)) || ('Error del servidor (' + res.status + ')');
+    // El manejador de errores del backend responde { type, title, status, description, ... } (estilo RFC7807);
+    // algunos otros casos usan message/mensaje/error. Se prueban en ese orden.
+    const msg = (json && (json.description || json.title || json.message || json.mensaje || json.error))
+      || ('Error del servidor (' + res.status + ')');
     throw new ApiError(msg, { status: res.status });
   }
   return desenvolver(json);

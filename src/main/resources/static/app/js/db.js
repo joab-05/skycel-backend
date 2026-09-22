@@ -1,18 +1,20 @@
 /**
- * Cola de recepciones hechas sin conexión, guardada en este dispositivo (IndexedDB). Cada recepción se manda
- * con una clave única (claveOffline): reenviarla no duplica la orden en el servidor.
+ * Colas de lo hecho sin conexión, guardadas en este dispositivo (IndexedDB). Cada registro se manda con una
+ * clave única (claveOffline): reenviarlo no lo duplica en el servidor. Un almacén por tipo de operación
+ * (recepciones de equipo, abonos a cuentas por cobrar...).
  */
 const DB = (() => {
   const NOMBRE = 'skycel_web';
-  const ALMACEN = 'recepciones_pendientes';
+  const VERSION = 2;
+  const ALMACENES = ['recepciones_pendientes', 'abonos_pendientes'];
 
   function abrir() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(NOMBRE, 1);
+      const req = indexedDB.open(NOMBRE, VERSION);
       req.onupgradeneeded = () => {
         const db = req.result;
-        if (!db.objectStoreNames.contains(ALMACEN)) {
-          db.createObjectStore(ALMACEN, { keyPath: 'clave' });
+        for (const almacen of ALMACENES) {
+          if (!db.objectStoreNames.contains(almacen)) db.createObjectStore(almacen, { keyPath: 'clave' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -20,32 +22,32 @@ const DB = (() => {
     });
   }
 
-  async function put(item) {
+  async function put(almacen, item) {
     const db = await abrir();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(ALMACEN, 'readwrite');
-      tx.objectStore(ALMACEN).put(item);
+      const tx = db.transaction(almacen, 'readwrite');
+      tx.objectStore(almacen).put(item);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
   }
 
-  async function eliminar(clave) {
+  async function eliminar(almacen, clave) {
     const db = await abrir();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(ALMACEN, 'readwrite');
-      tx.objectStore(ALMACEN).delete(clave);
+      const tx = db.transaction(almacen, 'readwrite');
+      tx.objectStore(almacen).delete(clave);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
   }
 
-  async function todas() {
+  async function todas(almacen) {
     try {
       const db = await abrir();
       return await new Promise((resolve, reject) => {
-        const tx = db.transaction(ALMACEN, 'readonly');
-        const req = tx.objectStore(ALMACEN).getAll();
+        const tx = db.transaction(almacen, 'readonly');
+        const req = tx.objectStore(almacen).getAll();
         req.onsuccess = () => resolve(req.result || []);
         req.onerror = () => reject(req.error);
       });

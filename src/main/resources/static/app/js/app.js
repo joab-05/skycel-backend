@@ -6,9 +6,10 @@
  * consulta de órdenes. Todo lo demás (caja, ventas, inventario…) sigue en JSystem.
  */
 
-const PERSONAL = ['ROOT', 'ADMIN', 'ENCARGADO_TIENDA', 'VENDEDOR']; // puede recibir equipos
+const PERSONAL = ['ROOT', 'ADMIN', 'ENCARGADO_TIENDA', 'VENDEDOR']; // puede recibir equipos, ver/crear clientes, garantías
 const TALLER_ROLES = ['ROOT', 'ADMIN', 'TECNICO'];                  // puede trabajar el taller
 const SUPERIOR = ['ROOT', 'ADMIN'];                                  // ve todas las tiendas y asigna técnico
+const GESTOR_ROLES = ['ROOT', 'ADMIN', 'ENCARGADO_TIENDA'];          // cuentas por cobrar y reportes de ventas
 
 const root = document.getElementById('root');
 const encabezado = document.getElementById('encabezado');
@@ -141,6 +142,13 @@ async function render() {
     if (ruta === 'consultar') return pantallaConsultar();
     if (ruta === 'pendientes') return pantallaPendientes();
     if (ruta === 'orden' && param) return pantallaOrdenDetalle(param);
+    if (ruta === 'clientes') return pantallaClientes();
+    if (ruta === 'cliente' && param) return pantallaClienteDetalle(param);
+    if (ruta === 'cxc') return pantallaCxC();
+    if (ruta === 'cuenta' && param) return pantallaCuentaDetalle(param);
+    if (ruta === 'garantias') return pantallaGarantias();
+    if (ruta === 'garantia' && param) return pantallaGarantiaDetalle(param);
+    if (ruta === 'reportes') return pantallaReportes();
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -202,6 +210,10 @@ async function pantallaMenu() {
   if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/recepcion', i: '📥', t: 'Recibir equipo' });
   if (TALLER_ROLES.includes(s.rol)) tarjetas.push({ h: '#/taller', i: '🔧', t: 'Taller' });
   tarjetas.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden' });
+  tarjetas.push({ h: '#/clientes', i: '👥', t: 'Clientes' });
+  if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar' });
+  if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/garantias', i: '🛡️', t: 'Garantías' });
+  if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/reportes', i: '📊', t: 'Reporte de ventas' });
   tarjetas.push({ h: '#/pendientes', i: '📤', t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null });
 
   root.innerHTML = `
@@ -417,7 +429,7 @@ async function pantallaRecepcion() {
         // Sin conexión: se guarda en este dispositivo con folio y fecha provisionales
         payload.folioLocal = 'WEB-' + Math.random().toString(16).slice(2, 8).toUpperCase();
         payload.fechaRecepcion = fechaLocalISO(new Date());
-        await DB.put({
+        await DB.put('recepciones_pendientes', {
           clave: payload.claveOffline,
           payload,
           estado: 'pendiente',
@@ -615,19 +627,36 @@ async function pantallaOrdenDetalle(id) {
   }
 }
 
-// ── Guardado en el equipo (cola sin conexión) ────────────────────────────
+// ── Guardado en el equipo (colas sin conexión) ────────────────────────────
 
 async function pantallaPendientes() {
-  root.innerHTML = `<h1>📤 Guardado en este equipo</h1><div id="pe-lista"><div class="vacio">Cargando...</div></div>`;
-  const cont = document.getElementById('pe-lista');
-  const items = (await DB.todas()).sort((a, b) => b.creado.localeCompare(a.creado));
+  root.innerHTML = `
+    <h1>📤 Guardado en este equipo</h1>
+    <div class="grupo-botones" style="margin-bottom:14px;">
+      <button id="pe-sincronizar" class="btn btn-verde">🔁 Intentar enviar todo ahora</button>
+    </div>
+    <h2>Equipos recibidos sin conexión</h2>
+    <div id="pe-ordenes"><div class="vacio">Cargando...</div></div>
+    <h2 style="margin-top:20px;">Abonos sin conexión</h2>
+    <div id="pe-abonos"><div class="vacio">Cargando...</div></div>`;
+
+  document.getElementById('pe-sincronizar').onclick = async (e) => {
+    e.target.disabled = true;
+    e.target.innerHTML = '<span class="spinner"></span> Enviando...';
+    await Net.sincronizar();
+    pantallaPendientes();
+  };
+
+  await dibujarColaOrdenes();
+  await dibujarColaAbonos();
+}
+
+async function dibujarColaOrdenes() {
+  const cont = document.getElementById('pe-ordenes');
+  const items = (await DB.todas('recepciones_pendientes')).sort((a, b) => b.creado.localeCompare(a.creado));
   if (items.length === 0) { cont.innerHTML = '<div class="vacio">No hay recepciones guardadas en este equipo.</div>'; return; }
 
-  cont.innerHTML = `
-    <div class="grupo-botones" style="margin-bottom:14px;">
-      <button id="pe-sincronizar" class="btn btn-verde">🔁 Intentar enviar ahora</button>
-    </div>
-    ${items.map(it => `
+  cont.innerHTML = items.map(it => `
       <div class="orden-item" data-clave="${it.clave}">
         <div class="orden-cab">
           <span class="orden-folio">${escapar(it.payload.folioLocal || it.folio || '—')}</span>
@@ -639,28 +668,589 @@ async function pantallaPendientes() {
         <div class="orden-cliente">${escapar(it.clienteResumen || '')}</div>
         <div class="orden-fecha" style="margin-top:6px;">${formatoFecha(it.creado)}</div>
         ${it.estado === 'error' ? `<div class="mensaje error" style="margin-top:8px;">${escapar(it.error)}</div>
-          <div class="grupo-botones"><button class="btn btn-azul btn-chico pe-reintentar" data-clave="${it.clave}">Reintentar</button>
-          <button class="btn btn-rojo btn-chico pe-descartar" data-clave="${it.clave}">Descartar</button></div>` : ''}
-        ${it.estado === 'enviada' && it.idorden ? `<div style="margin-top:8px;"><button class="enlace pe-ver" data-id="${it.idorden}">Ver la orden →</button></div>` : ''}
-      </div>`).join('')}`;
+          <div class="grupo-botones"><button class="btn btn-azul btn-chico oe-reintentar" data-clave="${it.clave}">Reintentar</button>
+          <button class="btn btn-rojo btn-chico oe-descartar" data-clave="${it.clave}">Descartar</button></div>` : ''}
+        ${it.estado === 'enviada' && it.idorden ? `<div style="margin-top:8px;"><button class="enlace oe-ver" data-id="${it.idorden}">Ver la orden →</button></div>` : ''}
+      </div>`).join('');
 
-  document.getElementById('pe-sincronizar').onclick = async (e) => {
-    e.target.disabled = true;
-    e.target.innerHTML = '<span class="spinner"></span> Enviando...';
-    await Net.sincronizar();
-    pantallaPendientes();
-  };
-  cont.querySelectorAll('.pe-reintentar').forEach(b => b.onclick = async () => {
-    const items2 = await DB.todas();
-    const it = items2.find(x => x.clave === b.dataset.clave);
-    if (it) { it.estado = 'pendiente'; it.error = null; await DB.put(it); await Net.sincronizar(); pantallaPendientes(); }
+  cont.querySelectorAll('.oe-reintentar').forEach(b => b.onclick = async () => {
+    const it = (await DB.todas('recepciones_pendientes')).find(x => x.clave === b.dataset.clave);
+    if (it) { it.estado = 'pendiente'; it.error = null; await DB.put('recepciones_pendientes', it); await Net.sincronizar(); pantallaPendientes(); }
   });
-  cont.querySelectorAll('.pe-descartar').forEach(b => b.onclick = async () => {
+  cont.querySelectorAll('.oe-descartar').forEach(b => b.onclick = async () => {
     if (!confirm('¿Descartar esta recepción? No se enviará al servidor.')) return;
-    await DB.eliminar(b.dataset.clave);
+    await DB.eliminar('recepciones_pendientes', b.dataset.clave);
     pantallaPendientes();
   });
-  cont.querySelectorAll('.pe-ver').forEach(b => b.onclick = () => navegar('#/orden/' + b.dataset.id));
+  cont.querySelectorAll('.oe-ver').forEach(b => b.onclick = () => navegar('#/orden/' + b.dataset.id));
+}
+
+async function dibujarColaAbonos() {
+  const cont = document.getElementById('pe-abonos');
+  const items = (await DB.todas('abonos_pendientes')).sort((a, b) => b.creado.localeCompare(a.creado));
+  if (items.length === 0) { cont.innerHTML = '<div class="vacio">No hay abonos guardados en este equipo.</div>'; return; }
+
+  cont.innerHTML = items.map(it => `
+      <div class="orden-item" data-clave="${it.clave}">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(it.noFactura)}</span>
+          ${it.estado === 'enviada' ? '<span class="pastilla lista">✅ Enviado</span>'
+            : it.estado === 'error' ? '<span class="pastilla error">⚠️ Revisar</span>' : '<span class="pastilla pendiente">⏳ Por enviar</span>'}
+        </div>
+        <div class="orden-equipo">${formatoDinero(it.payload.monto)} · ${escapar(it.metodoPago)}</div>
+        <div class="orden-cliente">${escapar(it.cliente || '')}</div>
+        <div class="orden-fecha" style="margin-top:6px;">${formatoFecha(it.creado)}</div>
+        ${it.estado === 'error' ? `<div class="mensaje error" style="margin-top:8px;">${escapar(it.error)}</div>
+          <div class="grupo-botones"><button class="btn btn-azul btn-chico ab-reintentar" data-clave="${it.clave}">Reintentar</button>
+          <button class="btn btn-rojo btn-chico ab-descartar" data-clave="${it.clave}">Descartar</button></div>` : ''}
+      </div>`).join('');
+
+  cont.querySelectorAll('.ab-reintentar').forEach(b => b.onclick = async () => {
+    const it = (await DB.todas('abonos_pendientes')).find(x => x.clave === b.dataset.clave);
+    if (it) { it.estado = 'pendiente'; it.error = null; await DB.put('abonos_pendientes', it); await Net.sincronizar(); pantallaPendientes(); }
+  });
+  cont.querySelectorAll('.ab-descartar').forEach(b => b.onclick = async () => {
+    if (!confirm('¿Descartar este abono? No se enviará al servidor.')) return;
+    await DB.eliminar('abonos_pendientes', b.dataset.clave);
+    pantallaPendientes();
+  });
+}
+
+// ── Clientes ──────────────────────────────────────────────────────────────
+
+async function pantallaClientes() {
+  const s = Sesion.obtener();
+  const puedeCrear = GESTOR_ROLES.includes(s.rol);
+  root.innerHTML = `
+    <h1>👥 Clientes</h1>
+    <div class="buscador">
+      <input id="cl-buscar" placeholder="Nombre o teléfono">
+      ${puedeCrear ? '<button id="cl-nuevo" class="btn btn-verde btn-chico">+ Nuevo</button>' : ''}
+    </div>
+    <div id="cl-form" class="oculto"></div>
+    <div id="cl-lista"><div class="vacio">Cargando...</div></div>`;
+
+  const cont = document.getElementById('cl-lista');
+  let clientes = [];
+  try {
+    clientes = await api('GET', '/api/clientes?soloActivos=true');
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor: la lista de clientes necesita el servidor.' : err.message)}</div>`;
+    return;
+  }
+
+  const dibujar = (lista) => {
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay clientes que coincidan.</div>'; return; }
+    cont.innerHTML = lista.slice(0, 60).map(c => `
+      <div class="orden-item" data-id="${c.idcliente}">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(c.nombreCompleto)}</span>
+          <span class="pastilla" style="background:${c.tipoColor}22; color:${c.tipoColor};">${escapar(c.tipoClienteDisplay)}</span>
+        </div>
+        <div class="orden-cliente">${escapar(c.telefono || 'Sin teléfono')}</div>
+      </div>`).join('');
+    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/cliente/' + el.dataset.id));
+  };
+  dibujar(clientes);
+
+  document.getElementById('cl-buscar').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    dibujar(!q ? clientes : clientes.filter(c => (c.nombreCompleto || '').toLowerCase().includes(q) || (c.telefono || '').includes(q)));
+  });
+
+  if (puedeCrear) {
+    document.getElementById('cl-nuevo').onclick = () => {
+      const cont2 = document.getElementById('cl-form');
+      cont2.classList.toggle('oculto');
+      if (!cont2.classList.contains('oculto')) dibujarFormularioCliente(cont2, null, () => { navegar('#/clientes'); render(); });
+    };
+  }
+}
+
+/** Formulario para crear o editar un cliente, dentro de {@code cont}. */
+function dibujarFormularioCliente(cont, cliente, alGuardar) {
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <h2>${cliente ? 'Editar cliente' : 'Nuevo cliente'}</h2>
+      <label class="obligatorio">Nombre completo</label>
+      <input id="cf-nombre" value="${escapar(cliente?.nombreCompleto || '')}">
+      <label>Teléfono</label>
+      <input id="cf-tel" inputmode="tel" value="${escapar(cliente?.telefono || '')}">
+      <label>Correo</label>
+      <input id="cf-correo" type="email" value="${escapar(cliente?.correo || '')}">
+      <label>Dirección</label>
+      <input id="cf-dir" value="${escapar(cliente?.direccion || '')}">
+      <button id="cf-guardar" class="btn btn-verde">Guardar</button>
+    </div>`;
+  document.getElementById('cf-guardar').onclick = async (e) => {
+    const nombreCompleto = document.getElementById('cf-nombre').value.trim();
+    if (!nombreCompleto) { mostrarMensaje(root, 'El nombre es obligatorio.', 'error'); return; }
+    const payload = {
+      nombreCompleto,
+      telefono: document.getElementById('cf-tel').value.trim() || null,
+      correo: document.getElementById('cf-correo').value.trim() || null,
+      direccion: document.getElementById('cf-dir').value.trim() || null,
+    };
+    e.target.disabled = true;
+    try {
+      if (cliente) await api('PUT', '/api/clientes/' + cliente.idcliente, payload);
+      else await api('POST', '/api/clientes', payload);
+      alGuardar();
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión: esta acción necesita conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+    }
+  };
+}
+
+async function pantallaClienteDetalle(id) {
+  const s = Sesion.obtener();
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let c;
+  try {
+    c = await api('GET', '/api/clientes/' + id);
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/clientes')">Ir a clientes</button></div>`;
+    return;
+  }
+
+  root.innerHTML = `
+    <h1>${escapar(c.nombreCompleto)}</h1>
+    <div class="tarjeta">
+      <span class="pastilla" style="background:${c.tipoColor}22; color:${c.tipoColor};">${escapar(c.tipoClienteDisplay)}</span>
+      <div class="detalle-fila"><span class="k">Teléfono</span><span class="v">${escapar(c.telefono || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Correo</span><span class="v">${escapar(c.correo || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Dirección</span><span class="v">${escapar(c.direccion || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Puntos</span><span class="v">${c.puntos ?? 0}</span></div>
+      <div class="detalle-fila"><span class="k">Compras</span><span class="v">${c.totalCompras ?? 0}</span></div>
+      <div class="detalle-fila"><span class="k">Total gastado</span><span class="v">${formatoDinero(c.totalGastado)}</span></div>
+      <div class="detalle-fila"><span class="k">Cliente desde</span><span class="v">${formatoFecha(c.fechaRegistro)}</span></div>
+    </div>
+    <div id="cd-form"></div>
+    <div class="grupo-botones" id="cd-acciones"></div>`;
+
+  const acciones = document.getElementById('cd-acciones');
+  const botones = [];
+  if (GESTOR_ROLES.includes(s.rol)) botones.push({ t: '✏️ Editar', color: 'btn-azul', fn: () => dibujarFormularioCliente(document.getElementById('cd-form'), c, () => pantallaClienteDetalle(id)) });
+  if (SUPERIOR.includes(s.rol)) botones.push({ t: '🗑 Desactivar', color: 'btn-rojo', fn: async () => {
+    if (!confirm('¿Desactivar a ' + c.nombreCompleto + '? Ya no aparecerá en la lista.')) return;
+    try { await api('DELETE', '/api/clientes/' + id); navegar('#/clientes'); }
+    catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+  } });
+  if (botones.length) {
+    acciones.innerHTML = botones.map((b, i) => `<button class="btn ${b.color}" data-i="${i}">${b.t}</button>`).join('');
+    acciones.querySelectorAll('button').forEach((b, i) => b.onclick = botones[i].fn);
+  }
+}
+
+// ── Cuentas por cobrar ───────────────────────────────────────────────────
+
+const METODOS_ABONO = { 1: 'Efectivo', 2: 'Tarjeta', 3: 'Transferencia', 4: 'PayJoy' };
+
+async function pantallaCxC() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver cuentas por cobrar.</div>'; return; }
+  root.innerHTML = `
+    <h1>💳 Cuentas por cobrar</h1>
+    <div id="cx-resumen"></div>
+    <div id="cx-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>`;
+
+  try {
+    const resumen = await api('GET', '/api/cuentas-por-cobrar/resumen');
+    document.getElementById('cx-resumen').innerHTML = `
+      <div class="fila">
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Pendiente</div><div style="font-size:18px; font-weight:700;">${formatoDinero(resumen.totalPendiente)}</div></div>
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Vencido</div><div style="font-size:18px; font-weight:700; color:var(--rojo);">${formatoDinero(resumen.totalVencido)}</div></div>
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Cuentas</div><div style="font-size:18px; font-weight:700;">${resumen.cuentasActivas}</div></div>
+      </div>`;
+  } catch { /* si falla el resumen, se sigue mostrando la lista */ }
+
+  const cont = document.getElementById('cx-lista');
+  try {
+    const cuentas = await api('GET', '/api/cuentas-por-cobrar?soloActivas=true');
+    if (cuentas.length === 0) { cont.innerHTML = '<div class="vacio">No hay cuentas activas.</div>'; return; }
+    cuentas.sort((a, b) => a.diasVencimiento - b.diasVencimiento);
+    cont.innerHTML = cuentas.map(c => `
+      <div class="orden-item" data-id="${c.idcuenta}">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(c.noFactura)}</span>
+          <span class="pastilla" style="background:${c.estadoColor}22; color:${c.estadoColor};">${escapar(c.estadoDisplay)}</span>
+        </div>
+        <div class="orden-equipo">${escapar(c.nombreCliente)}</div>
+        <div class="orden-meta">
+          <span class="orden-fecha">${c.diasVencimiento < 0 ? Math.abs(c.diasVencimiento) + ' días vencida' : 'vence en ' + c.diasVencimiento + ' días'}</span>
+          <span style="font-weight:700;">${formatoDinero(c.saldoPendiente)}</span>
+        </div>
+      </div>`).join('');
+    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/cuenta/' + el.dataset.id));
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+async function pantallaCuentaDetalle(id) {
+  const s = Sesion.obtener();
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let cuenta;
+  try {
+    const todas = await api('GET', '/api/cuentas-por-cobrar');
+    cuenta = todas.find(c => String(c.idcuenta) === String(id));
+    if (!cuenta) throw new ApiError('No se encontró la cuenta.', {});
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/cxc')">Ir a cuentas por cobrar</button></div>`;
+    return;
+  }
+
+  root.innerHTML = `
+    <h1>${escapar(cuenta.noFactura)}</h1>
+    <div class="tarjeta">
+      <span class="pastilla" style="background:${cuenta.estadoColor}22; color:${cuenta.estadoColor};">${escapar(cuenta.estadoDisplay)}</span>
+      <div class="detalle-fila"><span class="k">Cliente</span><span class="v">${escapar(cuenta.nombreCliente)}</span></div>
+      <div class="detalle-fila"><span class="k">Emisión</span><span class="v">${cuenta.fechaEmision}</span></div>
+      <div class="detalle-fila"><span class="k">Vencimiento</span><span class="v">${cuenta.fechaVencimiento}</span></div>
+      <div class="detalle-fila"><span class="k">Total</span><span class="v">${formatoDinero(cuenta.montoTotal)}</span></div>
+      <div class="detalle-fila"><span class="k">Pagado</span><span class="v">${formatoDinero(cuenta.montoPagado)}</span></div>
+      <div class="detalle-fila"><span class="k">Saldo</span><span class="v">${formatoDinero(cuenta.saldoPendiente)}</span></div>
+      ${cuenta.observaciones ? `<div class="detalle-fila"><span class="k">Notas</span><span class="v">${escapar(cuenta.observaciones)}</span></div>` : ''}
+    </div>
+    ${cuenta.saldoPendiente > 0 ? `
+    <div class="tarjeta">
+      <h2>Registrar abono</h2>
+      <label class="obligatorio">Monto</label>
+      <input id="ab-monto" type="number" inputmode="decimal" min="0" step="0.01" max="${cuenta.saldoPendiente}">
+      <label class="obligatorio">Método</label>
+      <select id="ab-metodo">
+        <option value="1">Efectivo</option>
+        <option value="2">Tarjeta</option>
+        <option value="3">Transferencia</option>
+        <option value="4">PayJoy</option>
+      </select>
+      <label>Notas</label>
+      <input id="ab-notas" placeholder="Opcional">
+      <button id="ab-btn" class="btn btn-verde">Registrar abono</button>
+    </div>` : ''}
+    <div class="tarjeta">
+      <h2>Historial de pagos</h2>
+      <div id="ab-historial"><div class="vacio">Cargando...</div></div>
+    </div>`;
+
+  cargarHistorialAbonos(id);
+
+  if (cuenta.saldoPendiente > 0) {
+    document.getElementById('ab-btn').onclick = async (e) => {
+      const monto = Number(document.getElementById('ab-monto').value);
+      if (!monto || monto <= 0) { mostrarMensaje(root, 'Indica un monto válido.', 'error'); return; }
+      if (monto > cuenta.saldoPendiente) { mostrarMensaje(root, 'El monto no puede ser mayor al saldo pendiente.', 'error'); return; }
+      const metodoPago = Number(document.getElementById('ab-metodo').value);
+      const notas = document.getElementById('ab-notas').value.trim() || null;
+      const claveOffline = uuid();
+
+      e.target.disabled = true;
+      e.target.innerHTML = '<span class="spinner"></span> Enviando...';
+      const qs = new URLSearchParams({ monto: String(monto), metodoPago: String(metodoPago) });
+      if (notas) qs.set('notas', notas);
+      qs.set('claveOffline', claveOffline);
+      try {
+        await api('POST', `/api/cuentas-por-cobrar/${id}/pago?${qs.toString()}`, undefined);
+        mostrarMensaje(root, 'Abono registrado.', 'ok');
+        setTimeout(() => pantallaCuentaDetalle(id), 700);
+      } catch (err) {
+        if (err.network) {
+          const fechaPago = fechaLocalISO(new Date());
+          await DB.put('abonos_pendientes', {
+            clave: claveOffline,
+            creado: new Date().toISOString(),
+            fechaPago,
+            idcuenta: Number(id),
+            noFactura: cuenta.noFactura,
+            cliente: cuenta.nombreCliente,
+            metodoPago: METODOS_ABONO[metodoPago],
+            estado: 'pendiente',
+            payload: { idcuenta: Number(id), monto, metodoPago, notas, claveOffline, fechaPago },
+          });
+          actualizarBarraConexion();
+          mostrarMensaje(root, `Sin conexión: el abono de ${formatoDinero(monto)} se guardó en este equipo y se enviará solo al volver la conexión.`, 'info');
+          setTimeout(() => navegar('#/pendientes'), 900);
+        } else if (err.auth) {
+          mostrarMensaje(root, 'La sesión expiró. Inicia sesión de nuevo.', 'error');
+          setTimeout(() => navegar('#/login'), 1200);
+        } else {
+          mostrarMensaje(root, err.message, 'error');
+          e.target.disabled = false;
+          e.target.textContent = 'Registrar abono';
+        }
+      }
+    };
+  }
+}
+
+async function cargarHistorialAbonos(id) {
+  const cont = document.getElementById('ab-historial');
+  try {
+    const pagos = await api('GET', `/api/cuentas-por-cobrar/${id}/historial`);
+    cont.innerHTML = pagos.length === 0 ? '<div class="vacio">Sin abonos todavía.</div>' : pagos.map(p => `
+      <div class="historial-item">
+        <div class="historial-comentario">${formatoDinero(p.monto)} · ${escapar(p.metodoPago)}</div>
+        <div class="historial-meta">${escapar(p.usuario)} · ${formatoFecha(p.fechaPago)}${p.notas ? ' · ' + escapar(p.notas) : ''}</div>
+      </div>`).join('');
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+// ── Garantías ────────────────────────────────────────────────────────────
+
+const GARANTIA_TRANSICIONES = {
+  1: [2, 8], 2: [3], 3: [4, 8], 4: [5], 5: [6, 7, 8], 6: [9], 7: [9], 8: [9, 10], 9: [10], 10: [11],
+};
+const GARANTIA_PASOS_SUCURSAL = new Set(['1>2', '1>8', '8>10', '9>10', '10>11']);
+const GARANTIA_NOMBRES = {
+  1: 'Recibido en sucursal', 2: 'En tránsito a bodega', 3: 'Recibido en bodega', 4: 'En tránsito al proveedor',
+  5: 'En el proveedor', 6: 'Reparado', 7: 'Cambio físico', 8: 'Rechazado', 9: 'Viaje de retorno',
+  10: 'Listo para entrega', 11: 'Entregado',
+};
+
+function pastillaGarantia(g) {
+  if (g.vencida) return '<span class="pastilla error">⚠️ Vencida</span>';
+  const clave = g.estado === 11 ? 'entregada' : g.estado === 8 ? 'cancelada' : g.estado >= 9 ? 'lista' : g.estado === 1 ? 'recibida' : 'reparacion';
+  return `<span class="pastilla ${clave}">${escapar(g.estadoDisplay)}</span>`;
+}
+
+async function pantallaGarantias() {
+  const s = Sesion.obtener();
+  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver garantías.</div>'; return; }
+  root.innerHTML = `
+    <h1>🛡️ Garantías</h1>
+    <div class="buscador">
+      <input id="ga-folio" placeholder="Folio (GAR-000123)" autocapitalize="characters">
+      <button id="ga-buscar" class="btn btn-azul btn-chico">Buscar</button>
+    </div>
+    <div id="ga-resultado"></div>
+    <div class="segmentado" style="margin-top:10px;">
+      <button id="ga-seg-abiertas" class="activo">Abiertas</button>
+      <button id="ga-seg-todas">Todas</button>
+    </div>
+    <div id="ga-lista"><div class="vacio">Cargando...</div></div>`;
+
+  const buscar = async () => {
+    const folio = document.getElementById('ga-folio').value.trim().toUpperCase();
+    const out = document.getElementById('ga-resultado');
+    if (!folio) return;
+    out.innerHTML = '<div class="vacio">Buscando...</div>';
+    try {
+      const g = await api('GET', '/api/garantias/folio/' + encodeURIComponent(folio));
+      out.innerHTML = itemGarantia(g);
+      out.querySelector('.orden-item').onclick = () => navegar('#/garantia/' + g.idgarantia);
+    } catch (err) {
+      out.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  };
+  document.getElementById('ga-buscar').onclick = buscar;
+  document.getElementById('ga-folio').addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
+
+  const segAbiertas = document.getElementById('ga-seg-abiertas');
+  const segTodas = document.getElementById('ga-seg-todas');
+  const cargarLista = async (soloAbiertas) => {
+    const cont = document.getElementById('ga-lista');
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const garantias = await api('GET', '/api/garantias' + (soloAbiertas ? '?soloAbiertas=true' : ''));
+      if (garantias.length === 0) { cont.innerHTML = '<div class="vacio">No hay garantías.</div>'; return; }
+      cont.innerHTML = garantias.map(itemGarantia).join('');
+      cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/garantia/' + el.dataset.id));
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  };
+  segAbiertas.onclick = () => { segAbiertas.classList.add('activo'); segTodas.classList.remove('activo'); cargarLista(true); };
+  segTodas.onclick = () => { segTodas.classList.add('activo'); segAbiertas.classList.remove('activo'); cargarLista(false); };
+  cargarLista(true);
+}
+
+function itemGarantia(g) {
+  return `
+    <div class="orden-item" data-id="${g.idgarantia}">
+      <div class="orden-cab">
+        <span class="orden-folio">${escapar(g.folio)}</span>
+        ${pastillaGarantia(g)}
+      </div>
+      <div class="orden-equipo">${escapar(g.nombreProducto)}</div>
+      <div class="orden-cliente">${escapar(g.nombreContacto || '')} · ${escapar(g.nombreTienda)}</div>
+      <div class="orden-meta">
+        <span class="orden-fecha">${formatoFecha(g.fechaIngreso)}</span>
+        <span style="font-size:12px; color:var(--gris);">${g.diasRestantes != null ? (g.diasRestantes < 0 ? Math.abs(g.diasRestantes) + ' días vencida' : g.diasRestantes + ' días restantes') : ''}</span>
+      </div>
+    </div>`;
+}
+
+async function pantallaGarantiaDetalle(id) {
+  const s = Sesion.obtener();
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let g;
+  try {
+    g = await api('GET', '/api/garantias/' + id);
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/garantias')">Ir a garantías</button></div>`;
+    return;
+  }
+
+  root.innerHTML = `
+    <h1>${escapar(g.folio)}</h1>
+    <div class="tarjeta">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        ${pastillaGarantia(g)}
+        <span class="orden-fecha">${formatoFecha(g.fechaIngreso)}</span>
+      </div>
+      <div class="detalle-fila"><span class="k">Producto</span><span class="v">${escapar(g.nombreProducto)}</span></div>
+      <div class="detalle-fila"><span class="k">IMEI/Serie</span><span class="v">${escapar(g.imei || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Contacto</span><span class="v">${escapar(g.nombreContacto || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Teléfono</span><span class="v">${escapar(g.telefonoContacto || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Sucursal</span><span class="v">${escapar(g.nombreTienda)}</span></div>
+      <div class="detalle-fila"><span class="k">Falla reportada</span><span class="v">${escapar(g.fallaReportada)}</span></div>
+      <div class="detalle-fila"><span class="k">Proveedor</span><span class="v">${escapar(g.proveedor || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Fecha límite</span><span class="v">${g.fechaLimiteSolucion || '—'}</span></div>
+      ${g.imeiReemplazo ? `<div class="detalle-fila"><span class="k">IMEI de reemplazo</span><span class="v">${escapar(g.imeiReemplazo)}</span></div>` : ''}
+    </div>
+    <div id="gd-acciones" class="tarjeta oculto">
+      <h2>Avanzar estado</h2>
+      <div class="grupo-botones" id="gd-botones"></div>
+      <div id="gd-form" class="oculto" style="margin-top:10px;"></div>
+    </div>
+    <div class="tarjeta">
+      <h2>Bitácora</h2>
+      ${(g.historial || []).slice().reverse().map(h => `
+        <div class="historial-item">
+          <div class="historial-comentario">${escapar(h.estadoDisplay)}${h.comentario ? ': ' + escapar(h.comentario) : ''}</div>
+          <div class="historial-meta">${escapar(h.nombreUsuario)} · ${formatoFecha(h.fecha)}</div>
+        </div>`).join('') || '<div class="vacio">Sin movimientos.</div>'}
+    </div>`;
+
+  const siguientes = GARANTIA_TRANSICIONES[g.estado] || [];
+  const permitidos = SUPERIOR.includes(s.rol) ? siguientes : siguientes.filter(h => GARANTIA_PASOS_SUCURSAL.has(g.estado + '>' + h));
+  if (permitidos.length === 0) return;
+
+  const contAcc = document.getElementById('gd-acciones');
+  contAcc.classList.remove('oculto');
+  const botones = document.getElementById('gd-botones');
+  botones.innerHTML = permitidos.map(h => `<button class="btn btn-azul" data-hacia="${h}">${escapar(GARANTIA_NOMBRES[h])}</button>`).join('');
+  botones.querySelectorAll('button').forEach(b => b.onclick = () => mostrarFormularioAvance(id, Number(b.dataset.hacia)));
+}
+
+function mostrarFormularioAvance(id, hacia) {
+  const necesitaComentario = [6, 7, 8].includes(hacia); // Reparado, Cambio físico, Rechazado
+  const esCambioFisico = hacia === 7;
+  const cont = document.getElementById('gd-form');
+  cont.classList.remove('oculto');
+  cont.innerHTML = `
+    <label${necesitaComentario ? ' class="obligatorio"' : ''}>${hacia === 8 ? 'Motivo del rechazo' : 'Comentario'}</label>
+    <textarea id="gf-comentario" placeholder="${necesitaComentario ? 'Obligatorio para este paso' : 'Opcional'}"></textarea>
+    ${esCambioFisico ? '<label class="obligatorio">IMEI/serie del equipo nuevo</label><input id="gf-imei">' : ''}
+    <button id="gf-guardar" class="btn btn-verde">Confirmar: ${escapar(GARANTIA_NOMBRES[hacia])}</button>`;
+  document.getElementById('gf-guardar').onclick = async (e) => {
+    const comentario = document.getElementById('gf-comentario').value.trim();
+    if (necesitaComentario && !comentario) { mostrarMensaje(root, 'El comentario es obligatorio para este paso.', 'error'); return; }
+    const imeiReemplazo = esCambioFisico ? document.getElementById('gf-imei').value.trim() : null;
+    if (esCambioFisico && !imeiReemplazo) { mostrarMensaje(root, 'Indica el IMEI/serie del equipo nuevo.', 'error'); return; }
+    e.target.disabled = true;
+    try {
+      await api('POST', `/api/garantias/${id}/avanzar`, { estado: hacia, comentario: comentario || null, imeiReemplazo });
+      pantallaGarantiaDetalle(id);
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión: esta acción necesita conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+    }
+  };
+}
+
+// ── Reportes de ventas ───────────────────────────────────────────────────
+
+async function pantallaReportes() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
+  root.innerHTML = `
+    <h1>📊 Reporte de ventas</h1>
+    <div id="rp-tienda"></div>
+    <div class="segmentado">
+      <button id="rp-hoy" class="activo">Hoy</button>
+      <button id="rp-7dias">7 días</button>
+      <button id="rp-mes">Este mes</button>
+    </div>
+    <div id="rp-resumen"></div>
+    <div id="rp-lista" style="margin-top:10px;"></div>`;
+
+  let codti = s.codti;
+  const contTienda = document.getElementById('rp-tienda');
+  if (SUPERIOR.includes(s.rol)) {
+    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="rp-codti"><option>Cargando...</option></select>`;
+    try {
+      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const sel = document.getElementById('rp-codti');
+      sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
+      if (codti != null) sel.value = codti;
+      sel.onchange = () => { codti = Number(sel.value); cargar(); };
+    } catch {
+      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    }
+  } else {
+    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
+  }
+
+  const botonesPeriodo = { hoy: document.getElementById('rp-hoy'), '7dias': document.getElementById('rp-7dias'), mes: document.getElementById('rp-mes') };
+  let periodo = 'hoy';
+  function rangoDe(periodo) {
+    const ahora = new Date();
+    const hasta = fechaLocalISO(ahora);
+    let desde;
+    if (periodo === 'hoy') { const d = new Date(ahora); d.setHours(0, 0, 0, 0); desde = fechaLocalISO(d); }
+    else if (periodo === '7dias') { const d = new Date(ahora); d.setDate(d.getDate() - 6); d.setHours(0, 0, 0, 0); desde = fechaLocalISO(d); }
+    else { const d = new Date(ahora.getFullYear(), ahora.getMonth(), 1); desde = fechaLocalISO(d); }
+    return { desde, hasta };
+  }
+
+  async function cargar() {
+    if (codti == null) return;
+    Object.values(botonesPeriodo).forEach(b => b.classList.remove('activo'));
+    botonesPeriodo[periodo].classList.add('activo');
+    const resumenEl = document.getElementById('rp-resumen');
+    const listaEl = document.getElementById('rp-lista');
+    resumenEl.innerHTML = '<div class="vacio">Cargando...</div>';
+    listaEl.innerHTML = '';
+    try {
+      const { desde, hasta } = rangoDe(periodo);
+      const ventas = await api('GET', `/api/ventas/tienda/${codti}?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`);
+      const completadas = ventas.filter(v => v.descripcionEstado !== 'Cancelada');
+      const total = completadas.reduce((sum, v) => sum + Number(v.total || 0), 0);
+      resumenEl.innerHTML = `
+        <div class="fila">
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Ventas</div><div style="font-size:18px; font-weight:700;">${completadas.length}</div></div>
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Total</div><div style="font-size:18px; font-weight:700;">${formatoDinero(total)}</div></div>
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Ticket prom.</div><div style="font-size:18px; font-weight:700;">${formatoDinero(completadas.length ? total / completadas.length : 0)}</div></div>
+        </div>`;
+      if (ventas.length === 0) { listaEl.innerHTML = '<div class="vacio">Sin ventas en este periodo.</div>'; return; }
+      listaEl.innerHTML = ventas.slice(0, 60).map(v => `
+        <div class="orden-item">
+          <div class="orden-cab">
+            <span class="orden-folio">${v.folioLocal || ('Venta #' + v.idventa)}</span>
+            <span class="pastilla ${v.descripcionEstado === 'Cancelada' ? 'cancelada' : 'lista'}">${escapar(v.descripcionEstado)}</span>
+          </div>
+          <div class="orden-equipo">${escapar(v.nombreCliente || 'Sin cliente')} · ${escapar(v.descripcionMetodoPago)}</div>
+          <div class="orden-meta">
+            <span class="orden-fecha">${formatoFecha(v.fechaVenta)} · ${escapar(v.nombreVendedor || '')}</span>
+            <span style="font-weight:700;">${formatoDinero(v.total)}</span>
+          </div>
+        </div>`).join('');
+    } catch (err) {
+      resumenEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+  botonesPeriodo.hoy.onclick = () => { periodo = 'hoy'; cargar(); };
+  botonesPeriodo['7dias'].onclick = () => { periodo = '7dias'; cargar(); };
+  botonesPeriodo.mes.onclick = () => { periodo = 'mes'; cargar(); };
+  cargar();
 }
 
 // ── Arranque ──────────────────────────────────────────────────────────────
