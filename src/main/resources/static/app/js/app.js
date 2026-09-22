@@ -15,6 +15,7 @@ const GESTOR_ROLES = ['ROOT', 'ADMIN', 'ENCARGADO_TIENDA'];          // cuentas 
 const root = document.getElementById('root');
 const encabezado = document.getElementById('encabezado');
 const navInferior = document.getElementById('nav-inferior');
+const sidebar = document.getElementById('sidebar');
 const usuarioActualEl = document.getElementById('usuario-actual');
 const barraConexion = document.getElementById('barra-conexion');
 
@@ -90,13 +91,15 @@ function actualizarBarraConexion() {
 }
 Net.agregarOyente(actualizarBarraConexion);
 
-function actualizarEncabezado() {
+async function actualizarEncabezado() {
   const s = Sesion.obtener();
-  if (!s) { encabezado.classList.add('oculto'); navInferior.classList.add('oculto'); return; }
+  if (!s) { encabezado.classList.add('oculto'); navInferior.classList.add('oculto'); sidebar.classList.add('oculto'); return; }
   encabezado.classList.remove('oculto');
   navInferior.classList.remove('oculto');
+  sidebar.classList.remove('oculto');
   usuarioActualEl.textContent = `${s.nombreCompleto || s.username} · ${etiquetaRol(s.rol)}`;
   dibujarNavInferior();
+  await dibujarSidebar();
 }
 function etiquetaRol(rol) {
   return ({ ROOT: 'Administrador', ADMIN: 'Administrador', ENCARGADO_TIENDA: 'Encargado', VENDEDOR: 'Vendedor', TECNICO: 'Técnico' })[rol] || rol;
@@ -116,6 +119,46 @@ function dibujarNavInferior() {
   navInferior.querySelectorAll('button').forEach(b => b.onclick = () => navegar(b.dataset.h));
 }
 
+/** Lista completa de módulos según el rol — la usan tanto la pantalla de Inicio (celular) como la barra lateral (escritorio). */
+function itemsMenu(s, pend, err) {
+  const items = [];
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: '📥', t: 'Recibir equipo' });
+  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: '🔧', t: 'Taller' });
+  items.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden' });
+  items.push({ h: '#/inventario', i: '📦', t: 'Inventario' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: '🧾', t: 'Caja' });
+  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: '🧑‍💼', t: 'Empleados' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/pos', i: '💰', t: 'Punto de venta' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: '↩️', t: 'Devoluciones' });
+  items.push({ h: '#/clientes', i: '👥', t: 'Clientes' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: '🛡️', t: 'Garantías' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: '📊', t: 'Reporte de ventas' });
+  items.push({ h: '#/pendientes', i: '📤', t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null });
+  return items;
+}
+
+/** Barra lateral de escritorio: los mismos módulos que la pantalla de Inicio, siempre visibles (CSS la oculta en celular/tablet). */
+async function dibujarSidebar() {
+  const s = Sesion.obtener();
+  if (!s) return;
+  const pend = await Net.cantidadPendiente();
+  const err = await Net.cantidadConError();
+  const items = itemsMenu(s, pend, err);
+  const ruta = location.hash.split('/')[1] || 'menu';
+  sidebar.innerHTML = `
+    <div class="sidebar-marca" id="sidebar-inicio"><span class="logo">📱</span> Skycel</div>
+    <div class="sidebar-items">
+      ${items.map(it => `
+        <button data-h="${it.h}" class="${ruta === it.h.slice(2) ? 'activo' : ''}">
+          <span class="icono">${it.i}</span><span class="texto">${escapar(it.t)}</span>
+          ${it.badge ? `<span class="badge">${it.badge}</span>` : ''}
+        </button>`).join('')}
+    </div>`;
+  sidebar.querySelectorAll('button[data-h]').forEach(b => b.onclick = () => navegar(b.dataset.h));
+  document.getElementById('sidebar-inicio').onclick = () => navegar('#/menu');
+}
+
 document.getElementById('btn-salir').onclick = () => {
   if (!confirm('¿Cerrar sesión?')) return;
   Sesion.limpiar();
@@ -132,7 +175,7 @@ async function render() {
   if (!s && ruta !== 'login') { navegar('#/login'); return; }
   if (s && ruta === 'login') { navegar('#/menu'); return; }
 
-  actualizarEncabezado();
+  await actualizarEncabezado();
   actualizarBarraConexion();
 
   try {
@@ -215,20 +258,7 @@ async function pantallaMenu() {
   const s = Sesion.obtener();
   const pend = await Net.cantidadPendiente();
   const err = await Net.cantidadConError();
-  const tarjetas = [];
-  if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/recepcion', i: '📥', t: 'Recibir equipo' });
-  if (TALLER_ROLES.includes(s.rol)) tarjetas.push({ h: '#/taller', i: '🔧', t: 'Taller' });
-  tarjetas.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden' });
-  tarjetas.push({ h: '#/inventario', i: '📦', t: 'Inventario' });
-  if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/caja', i: '🧾', t: 'Caja' });
-  if (SUPERIOR.includes(s.rol)) tarjetas.push({ h: '#/empleados', i: '🧑‍💼', t: 'Empleados' });
-  if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/pos', i: '💰', t: 'Punto de venta' });
-  if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/devoluciones', i: '↩️', t: 'Devoluciones' });
-  tarjetas.push({ h: '#/clientes', i: '👥', t: 'Clientes' });
-  if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar' });
-  if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/garantias', i: '🛡️', t: 'Garantías' });
-  if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/reportes', i: '📊', t: 'Reporte de ventas' });
-  tarjetas.push({ h: '#/pendientes', i: '📤', t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null });
+  const tarjetas = itemsMenu(s, pend, err);
 
   root.innerHTML = `
     <h1>Hola, ${escapar((s.nombreCompleto || s.username).split(' ')[0])}</h1>

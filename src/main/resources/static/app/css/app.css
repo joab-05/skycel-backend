@@ -194,6 +194,28 @@ button { -webkit-appearance: none; appearance: none; touch-action: manipulation;
 .historial-comentario { font-weight: 600; }
 .historial-meta { font-size: 11px; color: var(--gris); margin-top: 2px; }
 
+/* ── Barra lateral (escritorio; oculta en celular/tablet, ver breakpoint) ── */
+.app-shell { display: flex; align-items: flex-start; }
+.sidebar { display: none; }
+.sidebar-marca {
+  display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px;
+  padding: 8px 10px 16px 10px; cursor: pointer; color: var(--texto);
+}
+.sidebar-marca .logo { font-size: 20px; }
+.sidebar-items { display: flex; flex-direction: column; gap: 2px; }
+.sidebar button {
+  display: flex; align-items: center; gap: 10px;
+  background: none; border: none; border-radius: 10px; padding: 10px 10px;
+  font-size: 13px; font-weight: 600; color: var(--texto); cursor: pointer; text-align: left;
+}
+.sidebar button .icono { font-size: 16px; width: 20px; text-align: center; }
+.sidebar button .texto { flex: 1; }
+.sidebar button .badge {
+  background: var(--ambar); color: white; font-size: 11px; font-weight: 700;
+  border-radius: 999px; padding: 1px 8px;
+}
+.sidebar button.activo { background: var(--gris-claro); color: var(--azul); }
+
 /* ── Navegación inferior ───────────────────────────────────────────────── */
 .nav-inferior {
   position: fixed; bottom: 0; left: 0; right: 0;
@@ -216,3 +238,37 @@ button { -webkit-appearance: none; appearance: none; touch-action: manipulation;
 @keyframes girar { to { transform: rotate(360deg); } }
 
 .enlace { color: var(--azul); font-weight: 600; background: none; border: none; padding: 0; cursor: pointer; font-size: 13px; }
+
+/* ── Escritorio: barra lateral fija, más aire, listas en columnas ───────── */
+@media (min-width: 900px) {
+  .nav-inferior { display: none !important; }
+  .sidebar:not(.oculto) {
+    display: block;
+    width: 230px; flex: 0 0 230px;
+    position: sticky; top: 0; align-self: flex-start;
+    max-height: 100vh; overflow-y: auto;
+    padding: 20px 12px;
+    border-right: 1px solid var(--borde);
+  }
+  main { flex: 1; max-width: 1040px; padding: 28px 32px 40px 32px; margin: 0; }
+
+  /* Formularios y tarjetas con campos: ancho de lectura cómodo, no de borde a borde */
+  .tarjeta:has(input, select, textarea) { max-width: 640px; }
+  .pantalla-centrada { max-width: 360px; }
+
+  /* Listas de tarjetas (órdenes, inventario, clientes, devoluciones...) en columnas */
+  #co-lista, #cl-lista, #ga-lista, #iv-lista, #dv-lista, #cx-lista, #ta-lista,
+  #cj-lista, #pe-ordenes, #pe-abonos {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-content: start;
+  }
+  .rejilla-menu { grid-template-columns: repeat(4, 1fr); max-width: 720px; }
+
+  /* Hover solo con mouse real, para no dejar estados "pegados" al tocar en pantallas táctiles */
+  @media (hover: hover) and (pointer: fine) {
+    .orden-item, .boton-menu { transition: box-shadow 0.15s, border-color 0.15s; }
+    .orden-item:hover, .boton-menu:hover { box-shadow: 0 4px 14px rgba(15,23,42,0.08); border-color: #cbd5e1; }
+    .sidebar button:not(.activo):hover { background: var(--gris-claro); }
+    .btn:not(:disabled):hover { filter: brightness(1.07); }
+    .btn-chico:not(:disabled):hover { filter: brightness(1.05); }
+  }
+}
