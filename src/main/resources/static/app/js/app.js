@@ -2,8 +2,9 @@
  * Skycel · Web para celular y tablet. Una sola página con ruteo por hash (#/...). Usa las mismas rutas de la
  * API que JSystem, con JWT en localStorage.
  *
- * Alcance de esta primera versión: recepción de equipos (con cola sin conexión), el taller para técnicos, y
- * consulta de órdenes. Todo lo demás (caja, ventas, inventario…) sigue en JSystem.
+ * Cubre recepción de equipos y taller (con cola sin conexión), consulta de órdenes, inventario, caja, empleados,
+ * punto de venta, clientes, cuentas por cobrar, garantías, reportes y devoluciones. Lo que necesita pago mixto,
+ * venta a crédito o cambio de producto por otro sigue en JSystem.
  */
 
 const PERSONAL = ['ROOT', 'ADMIN', 'ENCARGADO_TIENDA', 'VENDEDOR']; // puede recibir equipos, ver/crear clientes, garantías
@@ -155,6 +156,8 @@ async function render() {
     if (ruta === 'empleados') return pantallaEmpleados();
     if (ruta === 'empleado' && param) return pantallaEmpleadoDetalle(param);
     if (ruta === 'pos') return pantallaPOS();
+    if (ruta === 'devoluciones') return pantallaDevoluciones();
+    if (ruta === 'devolucion' && param) return pantallaDevolucionDetalle(param);
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -220,6 +223,7 @@ async function pantallaMenu() {
   if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/caja', i: '🧾', t: 'Caja' });
   if (SUPERIOR.includes(s.rol)) tarjetas.push({ h: '#/empleados', i: '🧑‍💼', t: 'Empleados' });
   if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/pos', i: '💰', t: 'Punto de venta' });
+  if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/devoluciones', i: '↩️', t: 'Devoluciones' });
   tarjetas.push({ h: '#/clientes', i: '👥', t: 'Clientes' });
   if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar' });
   if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/garantias', i: '🛡️', t: 'Garantías' });
@@ -237,7 +241,7 @@ async function pantallaMenu() {
         </div>`).join('')}
     </div>
     <div class="ayuda" style="text-align:center; margin-top:20px;">
-      Para ventas, caja e inventario sigue usando el sistema de la tienda.
+      Para pagos mixtos, ventas a crédito y cambios de producto, usa JSystem en la tienda.
     </div>`;
   root.querySelectorAll('.boton-menu').forEach(b => b.onclick = () => navegar(b.dataset.h));
 }
@@ -2047,6 +2051,240 @@ function dibujarSelectorClientePOS(cont, alSeleccionar) {
       }
     }
   };
+}
+
+// ── Devoluciones ─────────────────────────────────────────────────────────
+// v1: solo Reembolso. Los cambios por otro producto se atienden en la tienda con JSystem.
+
+function pastillaDevolucion(estadoDisplay) {
+  const claves = { 'Pendiente': 'pendiente', 'Procesada': 'lista', 'Rechazada': 'cancelada' };
+  return `<span class="pastilla ${claves[estadoDisplay] || 'pendiente'}">${escapar(estadoDisplay)}</span>`;
+}
+
+async function pantallaDevoluciones() {
+  const s = Sesion.obtener();
+  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
+
+  root.innerHTML = `
+    <h1>↩️ Devoluciones</h1>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Solicitar devolución</h2>
+      <label class="obligatorio">ID de venta</label>
+      <div class="fila">
+        <input id="dv-idventa" type="number" inputmode="numeric" placeholder="Ej. 51">
+        <button id="dv-consultar" class="btn btn-azul btn-chico" style="flex:0 0 auto;">Consultar</button>
+      </div>
+      <div id="dv-consulta-resultado"></div>
+      <div class="ayuda">Solo reembolso. Para cambiar por otro producto, usa JSystem en la tienda.</div>
+    </div>
+
+    <h2 style="margin-top:16px;">Historial</h2>
+    <div class="segmentado">
+      <button id="dv-seg-pendientes" class="activo">Pendientes</button>
+      <button id="dv-seg-todas">Todas</button>
+    </div>
+    <div id="dv-lista"><div class="vacio">Cargando...</div></div>`;
+
+  document.getElementById('dv-consultar').onclick = () => consultarVentaDevolucion();
+  document.getElementById('dv-idventa').addEventListener('keydown', e => { if (e.key === 'Enter') consultarVentaDevolucion(); });
+
+  async function consultarVentaDevolucion() {
+    const idventa = Number(document.getElementById('dv-idventa').value);
+    const cont = document.getElementById('dv-consulta-resultado');
+    if (!idventa) return;
+    cont.innerHTML = '<div class="vacio">Consultando...</div>';
+    try {
+      const venta = await api('GET', `/api/devoluciones/venta/${idventa}`);
+      dibujarConsultaVenta(cont, venta);
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+
+  function dibujarConsultaVenta(cont, venta) {
+    if (!venta.elegible) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(venta.motivo || 'Esta venta no admite devoluciones.')}</div>`;
+      return;
+    }
+    const devolvibles = (venta.lineas || []).filter(l => l.disponible > 0);
+    if (devolvibles.length === 0) {
+      cont.innerHTML = `<div class="mensaje info">Ya se devolvió todo lo de esta venta.</div>`;
+      return;
+    }
+    cont.innerHTML = `
+      <div class="ayuda">Venta #${venta.idventa} · ${escapar(venta.nombreCliente || 'Público general')} · ${formatoDinero(venta.total)}
+        ${venta.devolucionHasta ? ' · Plazo hasta ' + escapar(venta.devolucionHasta) : ''}</div>
+      ${devolvibles.map(l => `
+        <div style="border-top:1px solid var(--gris-claro); padding:10px 0;">
+          <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+            <input type="checkbox" class="dv-linea-chk" data-idx="${l.iddetalleVenta}" style="width:auto;">
+            ${escapar(l.nombreProducto)}${l.imei ? ' · IMEI ' + escapar(l.imei) : ''} — ${formatoDinero(l.precioUnitario)} c/u (disponible: ${l.disponible})
+          </label>
+          ${!l.imei && l.disponible > 1 ? `<div style="margin-left:26px; margin-top:4px;"><label>Cantidad a devolver</label>
+            <input type="number" class="dv-linea-cant" data-idx="${l.iddetalleVenta}" min="1" max="${l.disponible}" value="${l.disponible}" style="width:80px;" disabled></div>` : ''}
+          <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none; margin-left:26px; margin-top:4px;">
+            <input type="checkbox" class="dv-linea-danado" data-idx="${l.iddetalleVenta}" style="width:auto;"> Dañado (no regresa a inventario)
+          </label>
+        </div>`).join('')}
+      <label class="obligatorio" style="margin-top:10px;">Motivo</label>
+      <textarea id="dv-motivo" placeholder="Por qué se devuelve"></textarea>
+      <label class="obligatorio">Cómo se reembolsa</label>
+      <select id="dv-metodo-reembolso">
+        <option value="1">Efectivo</option>
+        <option value="2">Tarjeta</option>
+        <option value="3">Transferencia</option>
+      </select>
+      <button id="dv-solicitar" class="btn btn-verde" style="margin-top:10px;">Solicitar devolución</button>`;
+
+    cont.querySelectorAll('.dv-linea-chk').forEach(chk => {
+      chk.addEventListener('change', () => {
+        const cantInput = cont.querySelector(`.dv-linea-cant[data-idx="${chk.dataset.idx}"]`);
+        if (cantInput) cantInput.disabled = !chk.checked;
+      });
+    });
+
+    document.getElementById('dv-solicitar').onclick = async (e) => {
+      const lineas = [];
+      cont.querySelectorAll('.dv-linea-chk:checked').forEach(chk => {
+        const idx = chk.dataset.idx;
+        const linea = devolvibles.find(l => String(l.iddetalleVenta) === idx);
+        const cantInput = cont.querySelector(`.dv-linea-cant[data-idx="${idx}"]`);
+        const cantidad = cantInput ? Number(cantInput.value) : 1;
+        const danado = cont.querySelector(`.dv-linea-danado[data-idx="${idx}"]`)?.checked;
+        lineas.push({ iddetalleVenta: linea.iddetalleVenta, cantidad, reingresa: !danado });
+      });
+      const motivo = document.getElementById('dv-motivo').value.trim();
+      if (lineas.length === 0) { mostrarMensaje(root, 'Selecciona al menos un producto.', 'error'); return; }
+      if (!motivo) { mostrarMensaje(root, 'Escribe el motivo de la devolución.', 'error'); return; }
+
+      const payload = {
+        idventa: venta.idventa,
+        tipo: 1,
+        motivo,
+        metodoReembolso: Number(document.getElementById('dv-metodo-reembolso').value),
+        lineas,
+      };
+      e.target.disabled = true;
+      e.target.innerHTML = '<span class="spinner"></span> Enviando...';
+      try {
+        const dev = await api('POST', '/api/devoluciones', payload);
+        mostrarMensaje(root, `Devolución ${dev.folio} solicitada. Queda pendiente de aprobación.`, 'ok');
+        setTimeout(() => pantallaDevoluciones(), 1200);
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        e.target.disabled = false;
+        e.target.textContent = 'Solicitar devolución';
+      }
+    };
+  }
+
+  let soloPendientes = true;
+  const segPend = document.getElementById('dv-seg-pendientes');
+  const segTodas = document.getElementById('dv-seg-todas');
+  segPend.onclick = () => { soloPendientes = true; segPend.classList.add('activo'); segTodas.classList.remove('activo'); cargarLista(); };
+  segTodas.onclick = () => { soloPendientes = false; segTodas.classList.add('activo'); segPend.classList.remove('activo'); cargarLista(); };
+
+  async function cargarLista() {
+    const cont = document.getElementById('dv-lista');
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const lista = await api('GET', '/api/devoluciones' + (soloPendientes ? '?estado=1' : ''));
+      if (lista.length === 0) { cont.innerHTML = '<div class="vacio">Sin devoluciones.</div>'; return; }
+      cont.innerHTML = lista.map(d => `
+        <div class="orden-item" data-id="${d.iddevolucion}">
+          <div class="orden-cab">
+            <span class="orden-folio">${escapar(d.folio)}</span>
+            ${pastillaDevolucion(d.estadoDisplay)}
+          </div>
+          <div class="orden-equipo">${escapar(d.nombreCliente || 'Público general')} · Venta #${d.idventa} · ${escapar(d.tipoDisplay)}</div>
+          <div class="orden-meta">
+            <span class="orden-fecha">${formatoFecha(d.fechaSolicitud)}</span>
+            <span style="font-weight:700;">${formatoDinero(d.totalDevuelto)}</span>
+          </div>
+        </div>`).join('');
+      cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/devolucion/' + el.dataset.id));
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+  cargarLista();
+}
+
+async function pantallaDevolucionDetalle(id) {
+  const s = Sesion.obtener();
+  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let d;
+  try {
+    d = await api('GET', '/api/devoluciones/' + id);
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/devoluciones')">Volver</button></div>`;
+    return;
+  }
+
+  root.innerHTML = `
+    <h1>↩️ ${escapar(d.folio)}</h1>
+    <div class="tarjeta">
+      <div class="orden-cab">
+        ${pastillaDevolucion(d.estadoDisplay)}
+        <span class="ayuda">${escapar(d.tipoDisplay)}</span>
+      </div>
+      <div class="ayuda" style="margin-top:6px;">${escapar(d.nombreTienda)} · Venta #${d.idventa}${d.nombreCliente ? ' · ' + escapar(d.nombreCliente) : ''}</div>
+      <h2>Motivo</h2>
+      <div>${escapar(d.motivo)}</div>
+      <h2>Productos</h2>
+      ${(d.lineas || []).map(l => `
+        <div class="detalle-fila">
+          <span class="k">${escapar(l.nombreProducto)}${l.imei ? ' · IMEI ' + escapar(l.imei) : ''} × ${l.cantidad}${l.reingresa === false ? ' (dañado, no regresó)' : ''}</span>
+          <span class="v">${formatoDinero(l.subtotal)}</span>
+        </div>`).join('')}
+      <div class="detalle-fila" style="font-weight:800;">
+        <span class="k">Total devuelto</span>
+        <span class="v">${formatoDinero(d.totalDevuelto)}</span>
+      </div>
+      ${d.descripcionMetodoReembolso ? `<div class="ayuda">Reembolso: ${escapar(d.descripcionMetodoReembolso)}</div>` : ''}
+      <div class="ayuda" style="margin-top:10px;">Solicitó ${escapar(d.nombreSolicita)} · ${formatoFecha(d.fechaSolicitud)}</div>
+      ${d.nombreResuelve ? `<div class="ayuda">Resolvió ${escapar(d.nombreResuelve)} · ${formatoFecha(d.fechaResolucion)}${d.comentarioResolucion ? ': ' + escapar(d.comentarioResolucion) : ''}</div>` : ''}
+    </div>
+    ${d.estado === 1 && GESTOR_ROLES.includes(s.rol) ? `
+      <div class="tarjeta">
+        <h2 style="margin-top:0;">Resolver</h2>
+        <label>Comentario</label>
+        <textarea id="dv-comentario" placeholder="Opcional para aprobar; obligatorio para rechazar"></textarea>
+        <div class="fila">
+          <button id="dv-aprobar" class="btn btn-verde">✔️ Aprobar</button>
+          <button id="dv-rechazar" class="btn btn-rojo">✖️ Rechazar</button>
+        </div>
+      </div>` : ''}
+    <button class="btn btn-gris" onclick="navegar('#/devoluciones')" style="margin-top:10px;">Volver</button>`;
+
+  if (d.estado === 1 && GESTOR_ROLES.includes(s.rol)) {
+    document.getElementById('dv-aprobar').onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        await api('POST', `/api/devoluciones/${id}/aprobar`, { comentario: document.getElementById('dv-comentario').value.trim() || null });
+        mostrarMensaje(root, 'Devolución aprobada.', 'ok');
+        pantallaDevolucionDetalle(id);
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        e.target.disabled = false;
+      }
+    };
+    document.getElementById('dv-rechazar').onclick = async (e) => {
+      const comentario = document.getElementById('dv-comentario').value.trim();
+      if (!comentario) { mostrarMensaje(root, 'Escribe el motivo del rechazo.', 'error'); return; }
+      e.target.disabled = true;
+      try {
+        await api('POST', `/api/devoluciones/${id}/rechazar`, { comentario });
+        mostrarMensaje(root, 'Devolución rechazada.', 'ok');
+        pantallaDevolucionDetalle(id);
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        e.target.disabled = false;
+      }
+    };
+  }
 }
 
 // ── Arranque ──────────────────────────────────────────────────────────────
