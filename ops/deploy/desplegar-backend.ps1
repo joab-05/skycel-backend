@@ -16,14 +16,14 @@ $ErrorActionPreference = "Stop"
 
 $esAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $esAdmin) {
-    Write-Host "Este script necesita permisos de administrador. Ciérralo y ábrelo de nuevo con 'Ejecutar como administrador'." -ForegroundColor Red
+    Write-Host "Este script necesita permisos de administrador. Cierralo y abrelo de nuevo con 'Ejecutar como administrador'." -ForegroundColor Red
     exit 1
 }
 
 $raiz = "C:\skycel"
 $jar  = "$raiz\api.jar"
 if (-not (Test-Path $jar)) {
-    Write-Host "No encuentro $jar. Copia ahí el jar compilado (target\backend-0.0.1-SNAPSHOT.jar) y vuelve a correr este script." -ForegroundColor Red
+    Write-Host "No encuentro $jar. Copia ahi el jar compilado (target\backend-0.0.1-SNAPSHOT.jar) y vuelve a correr este script." -ForegroundColor Red
     exit 1
 }
 
@@ -46,15 +46,17 @@ if (-not (Test-Path $javaExe)) {
 Write-Host ""
 Write-Host "Credenciales de MySQL para skyceldb2 (las del usuario 'skycel_app' que creaste con el .sql):" -ForegroundColor Cyan
 $dbUser = Read-Host "Usuario"
-$dbPassSecura = Read-Host "Contraseña" -AsSecureString
+$dbPassSecura = Read-Host "Contrasena" -AsSecureString
 $dbPass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($dbPassSecura))
 
-$jwtInput = Read-Host "JWT_SECRET (Enter para generar uno nuevo automáticamente)"
+$jwtInput = Read-Host "JWT_SECRET (Enter para generar uno nuevo automaticamente)"
 if ([string]::IsNullOrWhiteSpace($jwtInput)) {
     $bytes = New-Object byte[] 64
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $rng.Dispose()
     $jwtSecret = [Convert]::ToBase64String($bytes)
-    Write-Host "JWT_SECRET generado. Se queda guardado solo en la configuración del servicio." -ForegroundColor Yellow
+    Write-Host "JWT_SECRET generado. Se queda guardado solo en la configuracion del servicio." -ForegroundColor Yellow
 } else {
     $jwtSecret = $jwtInput
 }
