@@ -151,6 +151,9 @@ async function render() {
     if (ruta === 'reportes') return pantallaReportes();
     if (ruta === 'inventario') return pantallaInventario();
     if (ruta === 'producto' && param) return pantallaProductoDetalle(param);
+    if (ruta === 'caja') return pantallaCaja();
+    if (ruta === 'empleados') return pantallaEmpleados();
+    if (ruta === 'empleado' && param) return pantallaEmpleadoDetalle(param);
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -213,6 +216,8 @@ async function pantallaMenu() {
   if (TALLER_ROLES.includes(s.rol)) tarjetas.push({ h: '#/taller', i: '🔧', t: 'Taller' });
   tarjetas.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden' });
   tarjetas.push({ h: '#/inventario', i: '📦', t: 'Inventario' });
+  if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/caja', i: '🧾', t: 'Caja' });
+  if (SUPERIOR.includes(s.rol)) tarjetas.push({ h: '#/empleados', i: '🧑‍💼', t: 'Empleados' });
   tarjetas.push({ h: '#/clientes', i: '👥', t: 'Clientes' });
   if (GESTOR_ROLES.includes(s.rol)) tarjetas.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar' });
   if (PERSONAL.includes(s.rol)) tarjetas.push({ h: '#/garantias', i: '🛡️', t: 'Garantías' });
@@ -1461,6 +1466,304 @@ async function cargarHistorialInventario(codti, codpro) {
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
   }
+}
+
+// ── Caja ─────────────────────────────────────────────────────────────────
+
+async function pantallaCaja() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver caja.</div>'; return; }
+  root.innerHTML = `
+    <h1>🧾 Caja</h1>
+    <div id="cj-tienda"></div>
+    <div id="cj-caja"></div>
+    <div id="cj-saldo"></div>
+    <div class="grupo-botones" style="margin: 10px 0;">
+      <button id="cj-nuevo" class="btn btn-verde">+ Nuevo movimiento</button>
+    </div>
+    <div id="cj-form" class="oculto"></div>
+    <h2>Movimientos de hoy</h2>
+    <div id="cj-lista"><div class="vacio">Cargando...</div></div>`;
+
+  let codti = s.codti;
+  let idCaja = null;
+  let motivos = [];
+
+  async function cargarCajaYSaldo() {
+    if (codti == null) return;
+    const contCaja = document.getElementById('cj-caja');
+    try {
+      const cajas = await api('GET', '/api/cajas/tienda/' + codti);
+      if (cajas.length === 0) { contCaja.innerHTML = '<div class="mensaje info">Esta sucursal no tiene cajas.</div>'; return; }
+      if (cajas.length > 1) {
+        contCaja.innerHTML = `<label>Caja</label><select id="cj-idcaja">${cajas.map(c => `<option value="${c.idCaja}">${escapar(c.nombreCaja)}</option>`).join('')}</select>`;
+        idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0].idCaja;
+        document.getElementById('cj-idcaja').value = idCaja;
+        document.getElementById('cj-idcaja').onchange = (e) => { idCaja = Number(e.target.value); cargarSaldoYMovimientos(); };
+      } else {
+        contCaja.innerHTML = '';
+        idCaja = cajas[0].idCaja;
+      }
+      cargarSaldoYMovimientos();
+    } catch (err) {
+      contCaja.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+
+  async function cargarSaldoYMovimientos() {
+    if (idCaja == null) return;
+    const contSaldo = document.getElementById('cj-saldo');
+    const contLista = document.getElementById('cj-lista');
+    contSaldo.innerHTML = '<div class="vacio">Cargando...</div>';
+    contLista.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const saldo = await api('GET', `/api/cajas/${idCaja}/saldo`);
+      contSaldo.innerHTML = `
+        <div class="fila">
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Entradas</div><div style="font-size:16px; font-weight:700; color:var(--verde);">${formatoDinero(saldo.totalEntradas)}</div></div>
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Salidas</div><div style="font-size:16px; font-weight:700; color:var(--rojo);">${formatoDinero(saldo.totalSalidas)}</div></div>
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Saldo</div><div style="font-size:16px; font-weight:700;">${formatoDinero(saldo.saldo)}</div></div>
+        </div>`;
+    } catch (err) {
+      contSaldo.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+    try {
+      const movs = await api('GET', `/api/cajas/${idCaja}/movimientos`);
+      contLista.innerHTML = movs.length === 0 ? '<div class="vacio">Sin movimientos hoy.</div>' : movs.map(m => `
+        <div class="historial-item">
+          <div class="historial-comentario">${m.tipo === 1 ? '➕' : '➖'} ${escapar(m.nombreMotivo)} · ${formatoDinero(m.monto)}</div>
+          <div class="historial-meta">${escapar(m.nombreEncargado)} · ${formatoFecha(m.fechaMov)}${m.observaciones ? ' · ' + escapar(m.observaciones) : ''}</div>
+        </div>`).join('');
+    } catch (err) {
+      contLista.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+
+  const contTienda = document.getElementById('cj-tienda');
+  if (SUPERIOR.includes(s.rol)) {
+    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="cj-codti"><option>Cargando...</option></select>`;
+    try {
+      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const sel = document.getElementById('cj-codti');
+      sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
+      if (codti != null) sel.value = codti;
+      sel.onchange = () => { codti = Number(sel.value); cargarCajaYSaldo(); };
+    } catch {
+      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    }
+  } else {
+    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
+  }
+  cargarCajaYSaldo();
+
+  document.getElementById('cj-nuevo').onclick = async () => {
+    const cont = document.getElementById('cj-form');
+    cont.classList.toggle('oculto');
+    if (cont.classList.contains('oculto')) return;
+    if (motivos.length === 0) {
+      try { motivos = (await api('GET', '/api/motivos-caja')).filter(m => !m.delSistema); }
+      catch { mostrarMensaje(root, 'No se pudieron cargar los motivos (sin conexión).', 'error'); return; }
+    }
+    cont.innerHTML = `
+      <div class="tarjeta">
+        <h2>Nuevo movimiento</h2>
+        <label class="obligatorio">Motivo</label>
+        <select id="cj-motivo">${motivos.map(m => `<option value="${m.idmotivo}">${m.tipoMov === 1 ? '➕' : '➖'} ${escapar(m.nombre)}</option>`).join('')}</select>
+        <label class="obligatorio">Monto</label>
+        <input id="cj-monto" type="number" inputmode="decimal" min="0" step="0.01">
+        <label>Observaciones</label>
+        <input id="cj-obs" placeholder="Opcional">
+        <button id="cj-guardar" class="btn btn-verde">Registrar movimiento</button>
+      </div>`;
+    document.getElementById('cj-guardar').onclick = async (e) => {
+      const monto = Number(document.getElementById('cj-monto').value);
+      if (!monto || monto <= 0) { mostrarMensaje(root, 'Indica un monto válido.', 'error'); return; }
+      e.target.disabled = true;
+      try {
+        await api('POST', `/api/cajas/${idCaja}/movimientos`, {
+          idmotivo: Number(document.getElementById('cj-motivo').value),
+          monto,
+          observaciones: document.getElementById('cj-obs').value.trim() || null,
+        });
+        mostrarMensaje(root, 'Movimiento registrado.', 'ok');
+        cont.classList.add('oculto');
+        cargarSaldoYMovimientos();
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        e.target.disabled = false;
+      }
+    };
+  };
+}
+
+// ── Empleados ────────────────────────────────────────────────────────────
+
+const ROLES_STAFF = ['ROOT', 'ADMIN', 'ENCARGADO_TIENDA', 'VENDEDOR', 'TECNICO'];
+const ROL_ETIQUETA = { ROOT: 'Administrador', ADMIN: 'Administrador', ENCARGADO_TIENDA: 'Encargado de tienda', VENDEDOR: 'Vendedor', TECNICO: 'Técnico' };
+
+async function pantallaEmpleados() {
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver empleados.</div>'; return; }
+  root.innerHTML = `
+    <h1>🧑‍💼 Empleados</h1>
+    <div class="buscador">
+      <input id="em-buscar" placeholder="Nombre o usuario">
+      <button id="em-nuevo" class="btn btn-verde btn-chico">+ Nuevo</button>
+    </div>
+    <div id="em-form" class="oculto"></div>
+    <div id="em-lista"><div class="vacio">Cargando...</div></div>`;
+
+  const cont = document.getElementById('em-lista');
+  let empleados = [];
+  try {
+    empleados = await api('GET', '/api/usuarios?soloActivos=true');
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    return;
+  }
+
+  const dibujar = (lista) => {
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay empleados que coincidan.</div>'; return; }
+    cont.innerHTML = lista.map(u => `
+      <div class="orden-item" data-id="${u.idusuario}">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(u.nombreCompleto)}</span>
+          <span class="pastilla recibida">${escapar(ROL_ETIQUETA[u.rol] || u.rol)}</span>
+        </div>
+        <div class="orden-cliente">@${escapar(u.username)} · ${escapar(u.nombreTienda || 'Sin sucursal')}${u.tecnicoEncargado ? ' · Técnico encargado' : ''}</div>
+      </div>`).join('');
+    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/empleado/' + el.dataset.id));
+  };
+  dibujar(empleados);
+
+  document.getElementById('em-buscar').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    dibujar(!q ? empleados : empleados.filter(u => (u.nombreCompleto || '').toLowerCase().includes(q) || (u.username || '').toLowerCase().includes(q)));
+  });
+
+  document.getElementById('em-nuevo').onclick = () => {
+    const cont2 = document.getElementById('em-form');
+    cont2.classList.toggle('oculto');
+    if (!cont2.classList.contains('oculto')) dibujarFormularioEmpleado(cont2, null, () => { navegar('#/empleados'); render(); });
+  };
+}
+
+async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
+  let tiendas = [];
+  try { tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen); } catch { /* sin conexión: se deja vacío */ }
+
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <h2>${empleado ? 'Editar empleado' : 'Nuevo empleado'}</h2>
+      ${!empleado ? `
+      <label class="obligatorio">Usuario</label>
+      <input id="ef-username" autocapitalize="off">
+      <label class="obligatorio">Contraseña</label>
+      <input id="ef-password" type="password">` : `
+      <label>Nueva contraseña</label>
+      <input id="ef-password" type="password" placeholder="Déjalo en blanco para no cambiarla">`}
+      <label class="obligatorio">Nombre completo</label>
+      <input id="ef-nombre" value="${escapar(empleado?.nombreCompleto || '')}">
+      <label class="obligatorio">Rol</label>
+      <select id="ef-rol">${ROLES_STAFF.map(r => `<option value="${r}" ${empleado?.rol === r ? 'selected' : ''}>${ROL_ETIQUETA[r]}</option>`).join('')}</select>
+      <label class="obligatorio">Sucursal</label>
+      <select id="ef-tienda">${tiendas.map(t => `<option value="${t.codti}" ${empleado?.codti === t.codti ? 'selected' : ''}>${escapar(t.nombre)}</option>`).join('')}</select>
+      <div id="ef-tecnico-cont" class="oculto">
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+          <input type="checkbox" id="ef-tec-encargado" style="width:auto;" ${empleado?.tecnicoEncargado ? 'checked' : ''}> Técnico encargado
+        </label>
+      </div>
+      <label>Teléfono</label>
+      <input id="ef-tel" inputmode="tel" value="${escapar(empleado?.telefono || '')}">
+      <label>Correo</label>
+      <input id="ef-correo" type="email" value="${escapar(empleado?.email || '')}">
+      <label>Sueldo base</label>
+      <input id="ef-sueldo" type="number" inputmode="decimal" step="0.01" value="${empleado?.sueldoBase ?? ''}">
+      <button id="ef-guardar" class="btn btn-verde">Guardar</button>
+    </div>`;
+
+  const selRol = document.getElementById('ef-rol');
+  const contTec = document.getElementById('ef-tecnico-cont');
+  const actualizarTec = () => contTec.classList.toggle('oculto', selRol.value !== 'TECNICO');
+  selRol.onchange = actualizarTec;
+  actualizarTec();
+
+  document.getElementById('ef-guardar').onclick = async (e) => {
+    const nombreCompleto = document.getElementById('ef-nombre').value.trim();
+    const codti = Number(document.getElementById('ef-tienda').value);
+    if (!nombreCompleto) { mostrarMensaje(root, 'El nombre es obligatorio.', 'error'); return; }
+    if (!codti) { mostrarMensaje(root, 'Indica la sucursal.', 'error'); return; }
+
+    const payload = {
+      nombreCompleto,
+      codti,
+      rol: selRol.value,
+      tecnicoEncargado: selRol.value === 'TECNICO' ? document.getElementById('ef-tec-encargado').checked : null,
+      telefono: document.getElementById('ef-tel').value.trim() || null,
+      email: document.getElementById('ef-correo').value.trim() || null,
+      sueldoBase: Number(document.getElementById('ef-sueldo').value) || null,
+    };
+    const password = document.getElementById('ef-password').value;
+    if (!empleado) {
+      const username = document.getElementById('ef-username').value.trim();
+      if (!username || !password) { mostrarMensaje(root, 'Usuario y contraseña son obligatorios.', 'error'); return; }
+      payload.username = username;
+      payload.password = password;
+    } else if (password) {
+      payload.password = password;
+    }
+
+    e.target.disabled = true;
+    try {
+      if (empleado) await api('PUT', '/api/usuarios/' + empleado.idusuario, payload);
+      else await api('POST', '/api/usuarios', payload);
+      alGuardar();
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión: esta acción necesita conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+    }
+  };
+}
+
+async function pantallaEmpleadoDetalle(id) {
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver empleados.</div>'; return; }
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let u;
+  try {
+    u = await api('GET', '/api/usuarios/' + id);
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/empleados')">Ir a empleados</button></div>`;
+    return;
+  }
+
+  root.innerHTML = `
+    <h1>${escapar(u.nombreCompleto)}</h1>
+    <div class="tarjeta">
+      <span class="pastilla recibida">${escapar(ROL_ETIQUETA[u.rol] || u.rol)}</span>
+      <div class="detalle-fila"><span class="k">Usuario</span><span class="v">@${escapar(u.username)}</span></div>
+      <div class="detalle-fila"><span class="k">Sucursal</span><span class="v">${escapar(u.nombreTienda || '—')}</span></div>
+      ${u.rol === 'TECNICO' ? `<div class="detalle-fila"><span class="k">Técnico encargado</span><span class="v">${u.tecnicoEncargado ? 'Sí' : 'No'}</span></div>` : ''}
+      <div class="detalle-fila"><span class="k">Teléfono</span><span class="v">${escapar(u.telefono || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Correo</span><span class="v">${escapar(u.email || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Sueldo base</span><span class="v">${formatoDinero(u.sueldoBase)}</span></div>
+      <div class="detalle-fila"><span class="k">Fecha de ingreso</span><span class="v">${u.fechaIngreso || '—'}</span></div>
+      <div class="detalle-fila"><span class="k">De alta desde</span><span class="v">${formatoFecha(u.fechaAlta)}</span></div>
+    </div>
+    <div id="ed-form"></div>
+    <div class="grupo-botones">
+      <button id="ed-editar" class="btn btn-azul">✏️ Editar</button>
+      <button id="ed-desactivar" class="btn btn-rojo">🗑 Desactivar</button>
+    </div>`;
+
+  document.getElementById('ed-editar').onclick = () => dibujarFormularioEmpleado(document.getElementById('ed-form'), u, () => pantallaEmpleadoDetalle(id));
+  document.getElementById('ed-desactivar').onclick = async () => {
+    if (!confirm('¿Desactivar a ' + u.nombreCompleto + '? Ya no podrá iniciar sesión.')) return;
+    try { await api('DELETE', '/api/usuarios/' + id); navegar('#/empleados'); }
+    catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+  };
 }
 
 // ── Arranque ──────────────────────────────────────────────────────────────
