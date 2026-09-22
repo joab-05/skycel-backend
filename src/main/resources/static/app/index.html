@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Skycel · Taller</title>
+<meta name="theme-color" content="#0f172a">
+<meta name="description" content="Recepción de equipos y taller de Skycel, para celular y tablet.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/app/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/app/icons/icon-192.png">
+<link rel="stylesheet" href="/app/css/app.css">
+</head>
+<body>
+<div id="barra-conexion"></div>
+<header id="encabezado" class="encabezado oculto">
+  <div class="encabezado-titulo">
+    <span class="logo">📱</span>
+    <div>
+      <div class="marca">Skycel</div>
+      <div class="subtitulo" id="usuario-actual"></div>
+    </div>
+  </div>
+  <button id="btn-salir" class="btn-icono" title="Cerrar sesión">⎋</button>
+</header>
+<main id="root"></main>
+<nav id="nav-inferior" class="nav-inferior oculto"></nav>
+
+<script src="/app/js/db.js"></script>
+<script src="/app/js/api.js"></script>
+<script src="/app/js/net.js"></script>
+<script src="/app/js/app.js"></script>
+</body>
+</html>

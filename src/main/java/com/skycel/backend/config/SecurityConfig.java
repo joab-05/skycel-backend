@@ -62,7 +62,9 @@ public class SecurityConfig {
                         // Los errores de validación (400) se reenvían a /error; sin esto se enmascaran como 401
                         "/error",
                         // Consulta del cliente por folio (sin iniciar sesión); ver PublicoGarantiaController
-                        "/api/publico/**"
+                        "/api/publico/**",
+                        // Web/PWA para celular y tablet: la página misma es pública, el login lo hace el JS contra /api/auth/login
+                        "/app", "/app/**", "/manifest.webmanifest", "/favicon.ico"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
