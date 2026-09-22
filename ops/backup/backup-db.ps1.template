@@ -1,0 +1,65 @@
+# Respaldo automático de skyceldb2 (Skycel). Corre por la Tarea Programada "Skycel - Respaldo BD".
+# Hace un dump con mysqldump, lo comprime, guarda una copia local y otra en OneDrive, y borra los respaldos viejos.
+
+$ErrorActionPreference = "Stop"
+
+$mysqldump   = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe"
+$db          = "skyceldb2"
+$credFile    = "C:\SkycelBackups\.my-backup.cnf"
+$localDir    = "C:\SkycelBackups"
+$cloudDir    = "$env:USERPROFILE\OneDrive\SkycelBackups"
+$logFile     = "C:\SkycelBackups\backup.log"
+$diasLocal   = 14   # cuántos días se conservan los respaldos locales
+$diasNube    = 60   # cuántos días se conservan los respaldos en OneDrive
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$sqlTemp   = Join-Path $env:TEMP "skyceldb2_$timestamp.sql"
+$zipNombre = "skyceldb2_$timestamp.zip"
+$zipLocal  = Join-Path $localDir $zipNombre
+
+function Escribir-Log($mensaje) {
+    $linea = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $mensaje"
+    Add-Content -Path $logFile -Value $linea -Encoding UTF8
+    Write-Host $linea
+}
+
+try {
+    New-Item -ItemType Directory -Force -Path $localDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $cloudDir | Out-Null
+
+    # 1) Dump de la base completa (estructura + datos + rutinas + triggers)
+    & $mysqldump --defaults-extra-file="$credFile" --routines --triggers --single-transaction --set-gtid-purged=OFF $db > $sqlTemp
+    if ($LASTEXITCODE -ne 0) { throw "mysqldump terminó con código $LASTEXITCODE" }
+
+    $tamanoSql = (Get-Item $sqlTemp).Length
+    if ($tamanoSql -lt 1024) { throw "El dump salió sospechosamente chico ($tamanoSql bytes): no se guarda nada, revisa la conexión a MySQL." }
+
+    # 2) Comprimir (10 MB de SQL suelen quedar en ~1-2 MB)
+    Compress-Archive -Path $sqlTemp -DestinationPath $zipLocal -CompressionLevel Optimal -Force
+    Remove-Item $sqlTemp -Force
+
+    $tamanoZip = [math]::Round((Get-Item $zipLocal).Length / 1MB, 2)
+
+    # 3) Copia a OneDrive (segunda copia fuera de este disco)
+    $zipNube = Join-Path $cloudDir $zipNombre
+    Copy-Item $zipLocal $zipNube -Force
+
+    Escribir-Log "OK: $zipNombre ($tamanoZip MB) guardado en local y OneDrive."
+
+    # 4) Limpiar respaldos viejos
+    Get-ChildItem $localDir -Filter "skyceldb2_*.zip" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$diasLocal) } | ForEach-Object {
+        Remove-Item $_.FullName -Force
+        Escribir-Log "Borrado local viejo: $($_.Name)"
+    }
+    if (Test-Path $cloudDir) {
+        Get-ChildItem $cloudDir -Filter "skyceldb2_*.zip" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$diasNube) } | ForEach-Object {
+            Remove-Item $_.FullName -Force
+            Escribir-Log "Borrado de OneDrive viejo: $($_.Name)"
+        }
+    }
+}
+catch {
+    Escribir-Log "ERROR: $($_.Exception.Message)"
+    if (Test-Path $sqlTemp) { Remove-Item $sqlTemp -Force -ErrorAction SilentlyContinue }
+    exit 1
+}
