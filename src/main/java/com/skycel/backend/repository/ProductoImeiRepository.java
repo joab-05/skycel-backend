@@ -14,5 +14,8 @@ public interface ProductoImeiRepository extends JpaRepository<ProductoImei, Long
 
     List<ProductoImei> findByProducto_IdproductoAndEstado(Integer idproducto, String estado);
 
+    /** Las unidades en ese estado de varios productos a la vez (una consulta en vez de una por producto). */
+    List<ProductoImei> findByProducto_IdproductoInAndEstado(java.util.Collection<Integer> idproductos, String estado);
+
     boolean existsByImei(String imei);
 }

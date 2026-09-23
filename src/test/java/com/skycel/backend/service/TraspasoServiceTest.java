@@ -25,6 +25,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -206,6 +209,17 @@ class TraspasoServiceTest {
             assertThat(r.getLineas().get(0).getCantidad()).isEqualByComparingTo("15");
             assertThat(r.getLineas().get(0).getNombreProducto()).isEqualTo("Funda Silicon");
             assertThat(r.getLineas().get(0).getImeis()).isNull();
+        }
+
+        @Test
+        @DisplayName("avisa a la tienda destino que le llega mercancía, con un enlace al traspaso")
+        void avisaALaDestino() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+
+            TraspasoResponseDto r = service.crearEnvio(envio(null, 2, linea("ACC-000001", "15")), "root");
+
+            verify(notificacionService).notificarTienda(eq(2), eq("TRASPASO_ENVIO"),
+                    contains("te envió mercancía"), eq("#/traspaso/" + r.getIdtraspaso()));
         }
 
         @Test
@@ -791,6 +805,9 @@ class TraspasoServiceTest {
             assertThat(funda.getStock()).isEqualByComparingTo("40");
             assertEstado(HttpStatus.CONFLICT, () -> service.aceptar(id, null, "root"));
             assertEstado(HttpStatus.CONFLICT, () -> service.rechazar(id, rechazo, "root"));
+            // quien pidió se entera del rechazo y de su motivo, con enlace al traspaso
+            verify(notificacionService).notificarTienda(eq(r.getCodtiOrigen()), eq("TRASPASO_RECHAZO"),
+                    contains("No hay existencia suficiente"), eq("#/traspaso/" + id));
         }
 
         @Test

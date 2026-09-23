@@ -107,7 +107,8 @@ public class TraspasoService {
             detalleRepository.save(TraspasoDetalle.builder().traspaso(solicitud).codpro(codpro).cantidad(l.getCantidad()).build());
         }
         notificacionService.notificarTienda(surte.getCodti(), "TRASPASO_SOLICITUD",
-                solicitante.getNombre() + " te pidió mercancía (traspaso #" + solicitud.getIdtraspaso() + ")", null);
+                solicitante.getNombre() + " te pidió mercancía (traspaso #" + solicitud.getIdtraspaso() + ")",
+                "#/traspaso/" + solicitud.getIdtraspaso());
         return toDto(solicitud);
     }
 
@@ -465,7 +466,11 @@ public class TraspasoService {
         s.setEstado(RECHAZADA);
         s.setUsuarioValida(usuario);
         s.setMotivoRechazo(dto.getMotivo().trim());
-        return toDto(traspasoRepository.save(s));
+        Traspaso guardada = traspasoRepository.save(s);
+        notificacionService.notificarTienda(s.getTiendaOrigen().getCodti(), "TRASPASO_RECHAZO",
+                s.getTiendaDestino().getNombre() + " rechazó tu solicitud (traspaso #" + s.getIdtraspaso() + "): " + s.getMotivoRechazo(),
+                "#/traspaso/" + s.getIdtraspaso());
+        return toDto(guardada);
     }
 
     // ── Consultas ────────────────────────────────────────────────────────────
@@ -553,6 +558,10 @@ public class TraspasoService {
             productoRepository.save(p);
             movimientoInventarioService.registrar(p, stock, "TRASPASO_SALIDA", null, "Traspaso #" + envio.getIdtraspaso());
         }
+        notificacionService.notificarTienda(destino.getCodti(), "TRASPASO_ENVIO",
+                origen.getNombre() + (idRef != null ? " aceptó tu solicitud y te envió mercancía" : " te envió mercancía")
+                        + " (traspaso #" + envio.getIdtraspaso() + "): confírmala al recibirla",
+                "#/traspaso/" + envio.getIdtraspaso());
         return envio;
     }
 

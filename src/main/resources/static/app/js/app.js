@@ -3,7 +3,7 @@
  * API que JSystem, con JWT en localStorage.
  *
  * Cubre recepción de equipos y taller (con cola sin conexión), consulta de órdenes, inventario, caja, empleados,
- * punto de venta, clientes, cuentas por cobrar, garantías, reportes y devoluciones. Lo que necesita pago mixto,
+ * punto de venta, clientes, cuentas por cobrar, garantías, reportes, devoluciones y traspasos. Lo que necesita pago mixto,
  * venta a crédito o cambio de producto por otro sigue en JSystem.
  */
 
@@ -142,6 +142,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   items.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden', grupo: 'Taller' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/pos', i: '💰', t: 'Punto de venta', grupo: 'Ventas' });
   items.push({ h: '#/inventario', i: '📦', t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Ventas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/traspasos', i: '🚚', t: 'Traspasos', grupo: 'Ventas' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: '↩️', t: 'Devoluciones', grupo: 'Ventas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: '🧾', t: 'Caja', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar', grupo: 'Finanzas' });
@@ -222,6 +223,10 @@ async function render() {
     if (ruta === 'empleados') return pantallaEmpleados();
     if (ruta === 'empleado' && param) return pantallaEmpleadoDetalle(param);
     if (ruta === 'pos') return pantallaPOS();
+    if (ruta === 'traspasos') return pantallaTraspasos();
+    if (ruta === 'traspaso' && param) return pantallaTraspasoDetalle(param);
+    if (ruta === 'traspaso-nuevo') return pantallaTraspasoNuevo(param);
+    if (ruta === 'faltantes') return pantallaFaltantes();
     if (ruta === 'devoluciones') return pantallaDevoluciones();
     if (ruta === 'devolucion' && param) return pantallaDevolucionDetalle(param);
     if (ruta === 'ajustes') return pantallaAjustes();
@@ -1350,6 +1355,11 @@ async function pantallaInventario() {
     <div id="iv-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
 
   let codti = s.codti;
+  let productosInv = [];
+  const refrescarListaInventario = () => {
+    const q = document.getElementById('iv-buscar').value.trim();
+    dibujarInventario(document.getElementById('iv-lista'), filtrarProductos(productosInv, q));
+  };
   const contTienda = document.getElementById('iv-tienda');
   const cargar = async () => {
     if (codti == null) return;
@@ -1357,8 +1367,8 @@ async function pantallaInventario() {
     cont.innerHTML = '<div class="vacio">Cargando...</div>';
     try {
       const soloBajo = document.getElementById('iv-bajo-stock').checked;
-      const productos = await api('GET', `/api/productos/tienda/${codti}${soloBajo ? '/bajo-stock' : ''}`);
-      dibujarInventario(cont, productos);
+      productosInv = await api('GET', `/api/productos/tienda/${codti}${soloBajo ? '/bajo-stock' : ''}`);
+      refrescarListaInventario();
     } catch (err) {
       cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }
@@ -1380,16 +1390,9 @@ async function pantallaInventario() {
     contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
   }
 
-  document.getElementById('iv-buscar').addEventListener('input', () => filtrarInventario());
+  document.getElementById('iv-buscar').addEventListener('input', refrescarListaInventario);
   document.getElementById('iv-bajo-stock').addEventListener('change', cargar);
   cargar();
-
-  function filtrarInventario() {
-    const q = document.getElementById('iv-buscar').value.trim().toLowerCase();
-    document.querySelectorAll('#iv-lista .orden-item').forEach(el => {
-      el.style.display = !q || el.dataset.buscar.includes(q) ? '' : 'none';
-    });
-  }
 
   if (GESTOR_ROLES.includes(s.rol)) {
     let categorias = null;
@@ -1606,12 +1609,14 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   };
 }
 
+const INVENTARIO_MAX_TARJETAS = 100;
 function dibujarInventario(cont, productos) {
   if (productos.length === 0) { cont.innerHTML = '<div class="vacio">No hay productos que mostrar.</div>'; return; }
-  cont.innerHTML = productos.slice(0, 150).map(p => {
-    const buscar = `${p.nombreProductoMaster || ''} ${p.codpro || ''} ${p.marca || ''} ${p.modelo || ''}`.toLowerCase();
+  const aviso = productos.length > INVENTARIO_MAX_TARJETAS
+    ? `<div class="ayuda" style="margin:6px 0;">Mostrando ${INVENTARIO_MAX_TARJETAS} de ${productos.length} productos: escribe arriba para buscar el que necesitas.</div>` : '';
+  cont.innerHTML = aviso + productos.slice(0, INVENTARIO_MAX_TARJETAS).map(p => {
     return `
-    <div class="orden-item" data-codti="${p.codti}~${escapar(p.codpro)}" data-buscar="${escapar(buscar)}">
+    <div class="orden-item" data-codti="${p.codti}~${escapar(p.codpro)}">
       <div class="orden-cab">
         <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
         ${p.bajoStock ? '<span class="pastilla error">⚠️ Bajo stock</span>' : ''}
@@ -2141,6 +2146,43 @@ async function pantallaEmpleadoDetalle(id) {
 
 let posCarrito = [];
 
+// ── Búsqueda de productos y catálogo del POS ─────────────────────────────
+
+function quitarAcentos(t) { return t.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+
+/** Texto en minúsculas y sin acentos con lo que se puede buscar de un producto (se calcula una vez por producto). */
+function textoBusqueda(p) {
+  if (p._t === undefined) {
+    p._t = quitarAcentos(`${p.nombreProductoMaster || ''} ${p.codpro || ''} ${p.marca || ''} ${p.modelo || ''} ${p.nombreCategoria || ''} ` +
+      `${p.color?.nombre || ''} ${(p.imeisDisponibles || []).map(u => u.imei).join(' ')}`).toLowerCase();
+  }
+  return p._t;
+}
+/** Todas las palabras escritas deben aparecer (en cualquier orden): "protector a17" encuentra "Protector Antigolpe Samsung A17". */
+function filtrarProductos(productos, q) {
+  const terminos = quitarAcentos(q).toLowerCase().split(/\s+/).filter(Boolean);
+  if (terminos.length === 0) return productos;
+  return productos.filter(p => { const t = textoBusqueda(p); return terminos.every(x => t.includes(x)); });
+}
+
+/**
+ * Catálogo del punto de venta de una sucursal (~2,000 productos). Si ya se tenía se devuelve al instante y se
+ * refresca en segundo plano (alActualizar recibe la lista nueva); el servidor valida el stock al cobrar.
+ */
+const posCatalogoCache = { codti: null, productos: null };
+async function cargarCatalogoPOS(codti, alActualizar) {
+  const pedir = async () => {
+    const productos = await api('GET', `/api/productos/tienda/${codti}/disponibles`);
+    posCatalogoCache.codti = codti; posCatalogoCache.productos = productos;
+    return productos;
+  };
+  if (posCatalogoCache.codti === codti && posCatalogoCache.productos) {
+    pedir().then(alActualizar).catch(() => { /* se sigue con lo que ya había */ });
+    return posCatalogoCache.productos;
+  }
+  return pedir();
+}
+
 async function pantallaPOS() {
   const s = Sesion.obtener();
   if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para vender.</div>'; return; }
@@ -2186,31 +2228,32 @@ async function pantallaPOS() {
       <button id="pv-cobrar" class="btn btn-verde">Cobrar</button>
     </div>`;
 
-  // Productos disponibles de la tienda (una sola carga; se filtra en el cliente)
+  // El catálogo y la caja se piden a la vez (y el catálogo se usa al instante si ya se tenía: ver cargarCatalogoPOS)
+  const promesaCajas = api('GET', '/api/cajas/tienda/' + codti).catch(() => null);
+  const inputBuscar = document.getElementById('pv-buscar');
+  inputBuscar.disabled = true;
+  inputBuscar.placeholder = 'Cargando catálogo...';
   let productos = [];
   try {
-    productos = await api('GET', `/api/productos/tienda/${codti}/disponibles`);
+    productos = await cargarCatalogoPOS(codti, (nuevos) => { productos = nuevos; });
   } catch (err) {
     document.getElementById('pv-resultados').innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor: el punto de venta necesita conexión.' : err.message)}</div>`;
+    inputBuscar.placeholder = 'Sin catálogo';
     return;
   }
+  inputBuscar.disabled = false;
+  inputBuscar.placeholder = 'Buscar por nombre, código, modelo o IMEI...';
 
-  // Caja de la tienda
+  // Caja de la tienda (se valida de nuevo al cobrar)
   let idCaja = null;
-  try {
-    const cajas = await api('GET', '/api/cajas/tienda/' + codti);
-    idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0]?.idCaja ?? null;
-  } catch { /* se valida al cobrar */ }
+  const cajas = await promesaCajas;
+  if (cajas) idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0]?.idCaja ?? null;
 
   const contResultados = document.getElementById('pv-resultados');
-  document.getElementById('pv-buscar').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
+  inputBuscar.addEventListener('input', (e) => {
+    const q = e.target.value.trim();
     if (q.length < 2) { contResultados.innerHTML = ''; return; }
-    const encontrados = productos.filter(p =>
-      (p.nombreProductoMaster || '').toLowerCase().includes(q) || (p.codpro || '').toLowerCase().includes(q)
-      || (p.marca || '').toLowerCase().includes(q) || (p.modelo || '').toLowerCase().includes(q)
-    ).slice(0, 20);
-    dibujarResultadosPOS(contResultados, encontrados);
+    dibujarResultadosPOS(contResultados, filtrarProductos(productos, q).slice(0, 20));
   });
 
   // Cliente
@@ -2264,6 +2307,7 @@ async function pantallaPOS() {
       const venta = await api('POST', '/api/ventas', payload);
       mostrarMensaje(root, `Venta #${venta.idventa} registrada. Total ${formatoDinero(venta.total)}${metodoPago === 1 ? ' · Cambio ' + formatoDinero(venta.cambio) : ''}.`, 'ok');
       posCarrito = [];
+      posCatalogoCache.productos = null;   // el stock cambió: el próximo POS pide el catálogo fresco
       setTimeout(() => pantallaPOS(), 1200);
     } catch (err) {
       mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: esta venta no se guardó. Usa JSystem en la tienda mientras tanto.' : err.message, 'error');
@@ -2648,6 +2692,480 @@ async function pantallaDevolucionDetalle(id) {
       }
     };
   }
+}
+
+// ── Traspasos ────────────────────────────────────────────────────────────
+//
+// Envíos (una tienda manda mercancía y la otra confirma al recibirla) y solicitudes (una tienda le pide mercancía a
+// otra, que la acepta —eligiendo los IMEI de los equipos— o la rechaza). Solo encargados y administradores
+// (los mismos roles que permite la API). Un encargado opera con su tienda; un administrador elige la sucursal.
+
+const esEquipoTipo = tipo => tipo === 'CELULAR' || tipo === 'TABLET';
+
+function pastillaTraspaso(t) {
+  const clase = !t.activo ? 'cancelada' : ({ 1: 'recibida', 2: 'lista', 3: 'reparacion', 4: 'lista', 5: 'cancelada' })[t.estado] || 'pendiente';
+  return `<span class="pastilla ${clase}">${escapar(t.estadoDisplay)}</span>`;
+}
+
+/** Sucursal con la que se opera: el encargado, la suya; un administrador la elige. Devuelve el codti inicial. */
+async function dibujarSelectorSucursal(cont, s, alCambiar) {
+  if (!SUPERIOR.includes(s.rol)) {
+    cont.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
+    return s.codti;
+  }
+  cont.innerHTML = '<label class="obligatorio">Sucursal</label><select><option>Cargando...</option></select>';
+  try {
+    const tiendas = await api('GET', '/api/tiendas');
+    const sel = cont.querySelector('select');
+    sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+    const inicial = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
+    if (inicial != null) sel.value = inicial;
+    sel.onchange = () => alCambiar(Number(sel.value));
+    return inicial;
+  } catch {
+    cont.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    return null;
+  }
+}
+
+async function pantallaTraspasos() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
+
+  root.innerHTML = `
+    <h1>🚚 Traspasos</h1>
+    <div id="tr-tienda"></div>
+    <div class="grupo-botones" style="margin:10px 0;">
+      <button id="tr-nuevo-envio" class="btn btn-verde">📤 Enviar mercancía</button>
+      <button id="tr-nueva-solicitud" class="btn btn-azul">📥 Pedir mercancía</button>
+    </div>
+    <button id="tr-faltantes" class="btn btn-gris" style="margin-bottom:10px;">⚠️ Faltantes por resolver <span id="tr-falt-n"></span></button>
+    <div class="segmentado">
+      <button id="tr-seg-pend" class="activo">Por atender</button>
+      <button id="tr-seg-todos">Todos</button>
+    </div>
+    <div id="tr-lista"><div class="vacio">Cargando...</div></div>`;
+
+  let codti = await dibujarSelectorSucursal(document.getElementById('tr-tienda'), s, (c) => { codti = c; cargar(); });
+  let soloPendientes = true;
+  const segPend = document.getElementById('tr-seg-pend');
+  const segTodos = document.getElementById('tr-seg-todos');
+  segPend.onclick = () => { soloPendientes = true; segPend.classList.add('activo'); segTodos.classList.remove('activo'); cargar(); };
+  segTodos.onclick = () => { soloPendientes = false; segTodos.classList.add('activo'); segPend.classList.remove('activo'); cargar(); };
+  document.getElementById('tr-nuevo-envio').onclick = () => navegar('#/traspaso-nuevo/envio');
+  document.getElementById('tr-nueva-solicitud').onclick = () => navegar('#/traspaso-nuevo/solicitud');
+  document.getElementById('tr-faltantes').onclick = () => navegar('#/faltantes');
+
+  async function cargar() {
+    if (codti == null) return;
+    const cont = document.getElementById('tr-lista');
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const lista = await api('GET', `/api/traspasos/tienda/${codti}` + (soloPendientes ? '/pendientes' : ''));
+      if (lista.length === 0) {
+        cont.innerHTML = `<div class="vacio">${soloPendientes ? 'No tienes traspasos por atender.' : 'Sin traspasos.'}</div>`;
+      } else {
+        cont.innerHTML = lista.map(t => {
+          const porMi = t.activo && t.codtiDestino === codti
+            ? (t.tipo === 1 && t.estado === 1 ? '📦 Por recibir' : (t.tipo === 2 && (t.estado === 1 || t.estado === 3) ? '📝 Por resolver' : ''))
+            : '';
+          return `
+          <div class="orden-item" data-id="${t.idtraspaso}">
+            <div class="orden-cab">
+              <span class="orden-folio">#${t.idtraspaso} · ${escapar(t.tipoDisplay)}</span>
+              ${pastillaTraspaso(t)}
+            </div>
+            <div class="orden-equipo">${escapar(t.nombreTiendaOrigen)} → ${escapar(t.nombreTiendaDestino)}</div>
+            <div class="orden-meta">
+              <span class="orden-fecha">${formatoFecha(t.fechaCreacion)}</span>
+              <span>${(t.lineas || []).length} producto(s)${porMi ? ' · <strong>' + porMi + '</strong>' : ''}</span>
+            </div>
+          </div>`;
+        }).join('');
+        cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/traspaso/' + el.dataset.id));
+      }
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+    api('GET', `/api/traspasos/faltantes?codti=${codti}`).then(f => {
+      const n = document.getElementById('tr-falt-n');
+      if (n) n.textContent = f.length > 0 ? `(${f.length})` : '';
+    }).catch(() => {});
+  }
+  cargar();
+}
+
+async function pantallaTraspasoDetalle(id) {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let t;
+  try {
+    t = await api('GET', '/api/traspasos/' + id);
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/traspasos')">Volver</button></div>`;
+    return;
+  }
+
+  const superior = SUPERIOR.includes(s.rol);
+  const soyOrigen = superior || s.codti === t.codtiOrigen;
+  const soyDestino = superior || s.codti === t.codtiDestino;
+  const esEnvio = t.tipo === 1;
+  // Una solicitud nueva se marca como leída en cuanto la tienda que surte la abre
+  if (!esEnvio && t.activo && t.estado === 1 && soyDestino) {
+    try { t = await api('POST', `/api/traspasos/${id}/leer`); } catch { /* no es grave: se puede atender igual */ }
+  }
+  const abierto = t.activo && (esEnvio ? t.estado === 1 : (t.estado === 1 || t.estado === 3));
+  const lineas = t.lineas || [];
+
+  root.innerHTML = `
+    <h1>🚚 Traspaso #${t.idtraspaso}</h1>
+    <div class="tarjeta">
+      <div class="orden-cab">${pastillaTraspaso(t)}<span class="ayuda">${escapar(t.tipoDisplay)}</span></div>
+      <div class="ayuda" style="margin-top:6px;">${escapar(t.nombreTiendaOrigen)} → ${escapar(t.nombreTiendaDestino)}</div>
+      <h2>Productos</h2>
+      ${lineas.map(l => `
+        <div class="detalle-fila">
+          <span class="k">${escapar(l.nombreProducto)}<br><span class="ayuda">${escapar(l.codpro)}${(l.imeis || []).length ? ' · ' + l.imeis.map(escapar).join(', ') : ''}</span></span>
+          <span class="v">× ${Number(l.cantidad)}${esEnvio && t.estado === 2 && l.cantidadRecibida != null ? ' (llegó ' + Number(l.cantidadRecibida) + ')' : ''}</span>
+        </div>
+        ${Number(l.faltantePendiente) > 0 ? `<div class="ayuda" style="color:#b91c1c;">⚠️ Faltan por resolver: ${Number(l.faltantePendiente)}</div>` : ''}`).join('')}
+      <div class="ayuda" style="margin-top:10px;">Lo creó ${escapar(t.nombreCrea || '')} · ${formatoFecha(t.fechaCreacion)}</div>
+      ${t.nombreValida ? `<div class="ayuda">Lo resolvió ${escapar(t.nombreValida)} · ${formatoFecha(t.fechaActualizacion)}</div>` : ''}
+      ${t.motivoRechazo ? `<div class="mensaje error" style="margin-top:8px;">Motivo del rechazo: ${escapar(t.motivoRechazo)}</div>` : ''}
+      ${t.comentarioRecepcion ? `<div class="ayuda">Comentario de la recepción: ${escapar(t.comentarioRecepcion)}</div>` : ''}
+      ${t.idtraspasoRef ? `<div class="ayuda">Ligado al traspaso <span class="enlace" onclick="navegar('#/traspaso/${t.idtraspasoRef}')">#${t.idtraspasoRef}</span></div>` : ''}
+      ${esEnvio && t.conFaltantes ? `<button class="btn btn-ambar btn-chico" onclick="navegar('#/faltantes')" style="margin-top:8px;">⚠️ Ver faltantes</button>` : ''}
+    </div>
+    <div id="tr-acciones"></div>
+    <button class="btn btn-gris" onclick="navegar('#/traspasos')" style="margin-top:10px;">Volver</button>`;
+
+  const acciones = document.getElementById('tr-acciones');
+  const fallo = (err, boton, texto) => {
+    mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+    if (boton) { boton.disabled = false; if (texto) boton.textContent = texto; }
+  };
+  const refrescar = (mensaje) => { mostrarMensaje(root, mensaje, 'ok'); setTimeout(() => pantallaTraspasoDetalle(id), 900); };
+
+  // ── Recibir un envío ──
+  if (esEnvio && abierto && soyDestino) {
+    acciones.insertAdjacentHTML('beforeend', `
+      <div class="tarjeta">
+        <h2 style="margin-top:0;">Recibir mercancía</h2>
+        <div class="ayuda">Confirma que llegó todo. Si algo no llegó, márcalo: queda como faltante por resolver.</div>
+        ${lineas.map((l, i) => `
+          <div style="border-top:1px solid var(--gris-claro); padding:10px 0;">
+            <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+              <input type="checkbox" class="tr-falta-chk" data-i="${i}" style="width:auto;"> No llegó completo: ${escapar(l.nombreProducto)}
+            </label>
+            <div class="tr-falta-det oculto" data-i="${i}" style="margin-left:26px;">
+              ${esEquipoTipo(l.tipoProducto)
+                ? (l.imeis || []).map(im => `<label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+                    <input type="checkbox" class="tr-falta-imei" data-i="${i}" value="${escapar(im)}" style="width:auto;"> ${escapar(im)} no llegó</label>`).join('')
+                : `<label>Cantidad que NO llegó (de ${Number(l.cantidad)})</label>
+                   <input type="number" class="tr-falta-cant" data-i="${i}" min="1" max="${Number(l.cantidad)}" value="1" style="width:100px;">`}
+            </div>
+          </div>`).join('')}
+        <label>Comentario</label>
+        <textarea id="tr-comentario" placeholder="Obligatorio si algo no llegó: qué pasó"></textarea>
+        <button id="tr-recibir" class="btn btn-verde">✔️ Confirmar recepción</button>
+      </div>`);
+    acciones.querySelectorAll('.tr-falta-chk').forEach(chk => chk.onchange = () =>
+      acciones.querySelector(`.tr-falta-det[data-i="${chk.dataset.i}"]`).classList.toggle('oculto', !chk.checked));
+    document.getElementById('tr-recibir').onclick = async (e) => {
+      const faltantes = [];
+      for (const chk of acciones.querySelectorAll('.tr-falta-chk:checked')) {
+        const l = lineas[Number(chk.dataset.i)];
+        if (esEquipoTipo(l.tipoProducto)) {
+          const imeis = [...acciones.querySelectorAll(`.tr-falta-imei[data-i="${chk.dataset.i}"]:checked`)].map(x => x.value);
+          if (imeis.length === 0) { mostrarMensaje(root, `Marca cuál IMEI no llegó de ${l.nombreProducto}.`, 'error'); return; }
+          faltantes.push({ codpro: l.codpro, imeis });
+        } else {
+          const cantidad = Number(acciones.querySelector(`.tr-falta-cant[data-i="${chk.dataset.i}"]`).value);
+          if (!cantidad || cantidad < 1) { mostrarMensaje(root, `Indica cuánto no llegó de ${l.nombreProducto}.`, 'error'); return; }
+          faltantes.push({ codpro: l.codpro, cantidad });
+        }
+      }
+      const comentario = document.getElementById('tr-comentario').value.trim();
+      if (faltantes.length > 0 && !comentario) { mostrarMensaje(root, 'Escribe en el comentario qué pasó con lo que no llegó.', 'error'); return; }
+      e.target.disabled = true;
+      try {
+        await api('POST', `/api/traspasos/${id}/recibir`, { faltantes, comentario: comentario || null });
+        refrescar(faltantes.length ? 'Recepción registrada con faltantes.' : 'Mercancía recibida: ya está en tu inventario.');
+      } catch (err) { fallo(err, e.target); }
+    };
+  }
+
+  // ── Atender una solicitud (la tienda que surte) ──
+  if (!esEnvio && abierto && soyDestino) {
+    const equipos = lineas.filter(l => esEquipoTipo(l.tipoProducto));
+    let catalogo = [];
+    if (equipos.length > 0) {
+      try { catalogo = await api('GET', `/api/productos/tienda/${t.codtiDestino}/disponibles`); }
+      catch { /* se avisa abajo */ }
+    }
+    acciones.insertAdjacentHTML('beforeend', `
+      <div class="tarjeta">
+        <h2 style="margin-top:0;">Atender solicitud</h2>
+        <div class="ayuda">Acepta para enviar lo pedido${equipos.length ? ' (elige qué equipos mandas)' : ''}, o recházala con un motivo.</div>
+        ${equipos.map((l, i) => {
+          const prod = catalogo.find(p => p.codpro === l.codpro);
+          const unidades = prod?.imeisDisponibles || [];
+          return `<div style="border-top:1px solid var(--gris-claro); padding:10px 0;">
+            <div><strong>${escapar(l.nombreProducto)}</strong> — elige ${Number(l.cantidad)} equipo(s)</div>
+            ${unidades.length === 0 ? '<div class="mensaje error">No hay equipos disponibles en tu inventario.</div>' : unidades.map(u => `
+              <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+                <input type="checkbox" class="tr-imei" data-codpro="${escapar(l.codpro)}" value="${escapar(u.imei)}" style="width:auto;"> ${escapar(u.imei)}
+              </label>`).join('')}
+          </div>`;
+        }).join('')}
+        <button id="tr-aceptar" class="btn btn-verde" style="margin-top:6px;">✔️ Aceptar y enviar</button>
+        <label style="margin-top:12px;">Motivo (solo si la rechazas)</label>
+        <textarea id="tr-motivo" placeholder="Por qué no se puede surtir"></textarea>
+        <button id="tr-rechazar" class="btn btn-rojo">✖️ Rechazar</button>
+      </div>`);
+    document.getElementById('tr-aceptar').onclick = async (e) => {
+      const elegidos = [];
+      for (const l of equipos) {
+        const imeis = [...acciones.querySelectorAll(`.tr-imei[data-codpro="${CSS.escape(l.codpro)}"]:checked`)].map(x => x.value);
+        if (imeis.length !== Number(l.cantidad)) { mostrarMensaje(root, `De ${l.nombreProducto} debes elegir exactamente ${Number(l.cantidad)} equipo(s).`, 'error'); return; }
+        elegidos.push({ codpro: l.codpro, imeis });
+      }
+      if (!confirm('¿Aceptar y enviar? El stock sale de tu inventario.')) return;
+      e.target.disabled = true;
+      try {
+        const envio = await api('POST', `/api/traspasos/${id}/aceptar`, { equipos: elegidos });
+        mostrarMensaje(root, `Solicitud aceptada. Se creó el envío #${envio.idtraspaso}.`, 'ok');
+        setTimeout(() => navegar('#/traspaso/' + envio.idtraspaso), 1000);
+      } catch (err) { fallo(err, e.target); }
+    };
+    document.getElementById('tr-rechazar').onclick = async (e) => {
+      const motivo = document.getElementById('tr-motivo').value.trim();
+      if (!motivo) { mostrarMensaje(root, 'Escribe el motivo del rechazo.', 'error'); return; }
+      e.target.disabled = true;
+      try {
+        await api('POST', `/api/traspasos/${id}/rechazar`, { motivo });
+        refrescar('Solicitud rechazada.');
+      } catch (err) { fallo(err, e.target); }
+    };
+  }
+
+  // ── Anular (quien lo creó, mientras no se resuelva) ──
+  if (abierto && soyOrigen) {
+    acciones.insertAdjacentHTML('beforeend', `
+      <div class="tarjeta">
+        <button id="tr-anular" class="btn btn-rojo">🚫 Anular ${esEnvio ? 'envío' : 'solicitud'}</button>
+        <div class="ayuda">${esEnvio ? 'La mercancía vuelve a tu inventario.' : 'La tienda ya no la verá como pendiente.'}</div>
+      </div>`);
+    document.getElementById('tr-anular').onclick = async (e) => {
+      if (!confirm(`¿Anular ${esEnvio ? 'este envío' : 'esta solicitud'}?`)) return;
+      e.target.disabled = true;
+      try {
+        await api('POST', `/api/traspasos/${id}/anular`);
+        refrescar('Traspaso anulado.');
+      } catch (err) { fallo(err, e.target); }
+    };
+  }
+}
+
+/** Nuevo envío ("envio") o nueva solicitud ("solicitud"). */
+async function pantallaTraspasoNuevo(tipo) {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
+  const esEnvio = tipo !== 'solicitud';
+
+  root.innerHTML = `
+    <h1>${esEnvio ? '📤 Enviar mercancía' : '📥 Pedir mercancía'}</h1>
+    <div id="tn-tienda"></div>
+    <label class="obligatorio" style="margin-top:8px;">${esEnvio ? 'Enviar a' : 'Pedir a'}</label>
+    <select id="tn-otra"><option>Cargando...</option></select>
+    <div class="ayuda">${esEnvio
+      ? 'El stock sale de tu inventario al enviar; la otra tienda lo confirma cuando lo recibe.'
+      : 'La otra tienda revisa tu solicitud y te envía lo que acepte.'}</div>
+    <h2>Productos</h2>
+    <div class="buscador"><input id="tn-buscar" placeholder="Buscar por nombre, código o IMEI..." disabled></div>
+    <div id="tn-resultados"></div>
+    <h2>${esEnvio ? 'A enviar' : 'A pedir'}</h2>
+    <div id="tn-lineas"><div class="vacio">Busca y toca un producto para agregarlo.</div></div>
+    <button id="tn-guardar" class="btn btn-verde" style="margin-top:10px;">${esEnvio ? '📤 Enviar' : '📥 Enviar solicitud'}</button>
+    <button class="btn btn-gris" onclick="navegar('#/traspasos')" style="margin-top:8px;">Cancelar</button>`;
+
+  let tiendas = [];
+  try { tiendas = await api('GET', '/api/tiendas'); } catch { /* se avisa abajo */ }
+  let miCodti = await dibujarSelectorSucursal(document.getElementById('tn-tienda'), s, (c) => { miCodti = c; llenarOtras(); cargarCatalogo(); });
+  const selOtra = document.getElementById('tn-otra');
+  let catalogo = [];
+  let lineas = [];   // { p, cantidad, imeis }
+
+  function llenarOtras() {
+    const otras = tiendas.filter(t => t.codti !== miCodti);
+    selOtra.innerHTML = otras.length ? otras.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('') : '<option value="">(sin otras sucursales)</option>';
+  }
+  /** El catálogo sale de la tienda que tiene la mercancía: la propia en un envío, la otra en una solicitud. */
+  async function cargarCatalogo() {
+    lineas = []; dibujarLineas();
+    document.getElementById('tn-resultados').innerHTML = '';
+    const buscar = document.getElementById('tn-buscar');
+    const fuente = esEnvio ? miCodti : Number(selOtra.value);
+    if (!fuente) { buscar.disabled = true; return; }
+    buscar.disabled = true; buscar.placeholder = 'Cargando productos...';
+    try {
+      catalogo = (await api('GET', `/api/productos/tienda/${fuente}/disponibles`)).filter(p => p.tipo !== 'SERVICIO');
+      buscar.disabled = false; buscar.placeholder = 'Buscar por nombre, código o IMEI...';
+    } catch (err) {
+      buscar.placeholder = err.network ? 'Sin conexión con el servidor' : 'No se pudo cargar el catálogo';
+    }
+  }
+  selOtra.onchange = () => { if (!esEnvio) cargarCatalogo(); };
+  llenarOtras();
+  await cargarCatalogo();
+
+  document.getElementById('tn-buscar').addEventListener('input', (e) => {
+    const q = e.target.value.trim();
+    const cont = document.getElementById('tn-resultados');
+    if (q.length < 2) { cont.innerHTML = ''; return; }
+    const encontrados = filtrarProductos(catalogo, q).slice(0, 15);
+    cont.innerHTML = encontrados.length === 0 ? '<div class="vacio">Sin resultados.</div>' : encontrados.map(p => `
+      <div class="orden-item" data-codpro="${escapar(p.codpro)}">
+        <div class="orden-cab"><span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
+          <span style="font-weight:700;">Stock: ${Number(p.stock)}</span></div>
+        <div class="orden-cliente">${escapar(p.codpro)}</div>
+      </div>`).join('');
+    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => {
+      const p = catalogo.find(x => x.codpro === el.dataset.codpro);
+      if (!lineas.some(l => l.p.codpro === p.codpro)) lineas.push({ p, cantidad: 1, imeis: [] });
+      dibujarLineas();
+      cont.innerHTML = ''; document.getElementById('tn-buscar').value = '';
+    });
+  });
+
+  function dibujarLineas() {
+    const cont = document.getElementById('tn-lineas');
+    if (lineas.length === 0) { cont.innerHTML = '<div class="vacio">Busca y toca un producto para agregarlo.</div>'; return; }
+    cont.innerHTML = lineas.map((l, i) => `
+      <div class="orden-item">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(l.p.nombreProductoMaster)}</span>
+          <button class="btn btn-rojo btn-chico tn-quitar" data-i="${i}">Quitar</button>
+        </div>
+        <div class="orden-cliente">${escapar(l.p.codpro)} · Stock: ${Number(l.p.stock)}</div>
+        ${esEnvio && esEquipoTipo(l.p.tipo)
+          ? `<div style="margin-top:6px;">${(l.p.imeisDisponibles || []).map(u => `
+              <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
+                <input type="checkbox" class="tn-imei" data-i="${i}" value="${escapar(u.imei)}" ${l.imeis.includes(u.imei) ? 'checked' : ''} style="width:auto;"> ${escapar(u.imei)}
+              </label>`).join('')}</div>`
+          : `<div class="fila" style="margin-top:8px; align-items:center;">
+              <label style="margin:0;">Cantidad</label>
+              <input type="number" class="tn-cant" data-i="${i}" min="1" max="${Number(l.p.stock)}" step="1" value="${l.cantidad}" style="width:100px;">
+            </div>`}
+      </div>`).join('');
+    cont.querySelectorAll('.tn-quitar').forEach(b => b.onclick = () => { lineas.splice(Number(b.dataset.i), 1); dibujarLineas(); });
+    cont.querySelectorAll('.tn-cant').forEach(inp => inp.oninput = () => { lineas[Number(inp.dataset.i)].cantidad = Number(inp.value); });
+    cont.querySelectorAll('.tn-imei').forEach(chk => chk.onchange = () => {
+      const l = lineas[Number(chk.dataset.i)];
+      l.imeis = chk.checked ? [...l.imeis, chk.value] : l.imeis.filter(x => x !== chk.value);
+    });
+  }
+
+  document.getElementById('tn-guardar').onclick = async (e) => {
+    const otra = Number(selOtra.value);
+    if (!otra) { mostrarMensaje(root, 'Elige la otra sucursal.', 'error'); return; }
+    if (miCodti == null) { mostrarMensaje(root, 'No se pudo determinar tu sucursal.', 'error'); return; }
+    if (lineas.length === 0) { mostrarMensaje(root, 'Agrega al menos un producto.', 'error'); return; }
+    const detalle = [];
+    for (const l of lineas) {
+      if (esEnvio && esEquipoTipo(l.p.tipo)) {
+        if (l.imeis.length === 0) { mostrarMensaje(root, `Elige los equipos que envías de ${l.p.nombreProductoMaster}.`, 'error'); return; }
+        detalle.push({ codpro: l.p.codpro, cantidad: l.imeis.length, imeis: l.imeis });
+      } else {
+        if (!l.cantidad || l.cantidad < 1 || l.cantidad > Number(l.p.stock)) {
+          mostrarMensaje(root, `La cantidad de ${l.p.nombreProductoMaster} debe estar entre 1 y ${Number(l.p.stock)}.`, 'error'); return;
+        }
+        detalle.push({ codpro: l.p.codpro, cantidad: l.cantidad });
+      }
+    }
+    // En un envío, "origen" es quien manda; en una solicitud, quien pide (y recibe). La otra tienda va como destino.
+    const payload = { codtiOrigen: miCodti, codtiDestino: otra, lineas: detalle };
+    e.target.disabled = true;
+    e.target.innerHTML = '<span class="spinner"></span> Enviando...';
+    try {
+      const t = await api('POST', esEnvio ? '/api/traspasos/envios' : '/api/traspasos/solicitudes', payload);
+      mostrarMensaje(root, `${esEnvio ? 'Envío' : 'Solicitud'} #${t.idtraspaso} creado.`, 'ok');
+      setTimeout(() => navegar('#/traspaso/' + t.idtraspaso), 900);
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: no se guardó.' : err.message, 'error');
+      e.target.disabled = false;
+      e.target.textContent = esEnvio ? '📤 Enviar' : '📥 Enviar solicitud';
+    }
+  };
+}
+
+/** Lo que faltó en envíos ya recibidos y sigue sin resolver. */
+async function pantallaFaltantes() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
+  root.innerHTML = `
+    <h1>⚠️ Faltantes</h1>
+    <div class="ayuda">Mercancía que salió de una tienda y no llegó completa a la otra. Cada faltante se resuelve: llegó tarde, regresó al origen o se da de baja.</div>
+    <div id="fa-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>
+    <button class="btn btn-gris" onclick="navegar('#/traspasos')" style="margin-top:10px;">Volver</button>`;
+  const superior = SUPERIOR.includes(s.rol);
+
+  async function cargar() {
+    const cont = document.getElementById('fa-lista');
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    let lista;
+    try {
+      lista = await api('GET', '/api/traspasos/faltantes' + (superior ? '' : `?codti=${s.codti}`));
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+      return;
+    }
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay faltantes por resolver. 🎉</div>'; return; }
+    cont.innerHTML = lista.map(f => {
+      const puedeTarde = superior || s.codti === f.codtiDestino;
+      const puedeReintegro = superior || s.codti === f.codtiOrigen;
+      return `
+      <div class="tarjeta" data-id="${f.iddetalle}">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(f.nombreProducto)}</span>
+          <span class="pastilla error">Faltan ${Number(f.pendiente)}</span>
+        </div>
+        <div class="ayuda">${escapar(f.codpro)}${f.imei ? ' · IMEI ' + escapar(f.imei) : ''} · Traspaso <span class="enlace" onclick="navegar('#/traspaso/${f.idtraspaso}')">#${f.idtraspaso}</span></div>
+        <div class="ayuda">${escapar(f.nombreTiendaOrigen)} → ${escapar(f.nombreTiendaDestino)} · Enviadas ${Number(f.cantidadEnviada)}, recibidas ${Number(f.cantidadRecibida)}</div>
+        ${f.comentarioRecepcion ? `<div class="ayuda">Comentario: ${escapar(f.comentarioRecepcion)}</div>` : ''}
+        ${(f.historial || []).map(h => `<div class="historial-meta">${escapar(h.accion)}${h.cantidad ? ' ×' + Number(h.cantidad) : ''} · ${escapar(h.usuario || '')} · ${formatoFecha(h.fecha)}${h.nota ? ' — ' + escapar(h.nota) : ''}</div>`).join('')}
+        <label>Cantidad a resolver</label>
+        <input type="number" class="fa-cant" min="1" max="${Number(f.pendiente)}" value="${Number(f.pendiente)}" ${f.imei ? 'disabled' : ''} style="width:100px;">
+        <label>Nota</label>
+        <input class="fa-nota" placeholder="Opcional (obligatoria para dar de baja)">
+        <div class="grupo-botones" style="margin-top:8px;">
+          ${puedeTarde ? '<button class="btn btn-verde btn-chico fa-accion" data-accion="RECIBIDO_TARDE">📦 Llegó tarde</button>' : ''}
+          ${puedeReintegro ? '<button class="btn btn-azul btn-chico fa-accion" data-accion="REINTEGRADO_ORIGEN">↩️ Regresó al origen</button>' : ''}
+          ${superior ? '<button class="btn btn-rojo btn-chico fa-accion" data-accion="BAJA">🗑️ Dar de baja</button>' : ''}
+        </div>
+      </div>`;
+    }).join('');
+    cont.querySelectorAll('.fa-accion').forEach(btn => btn.onclick = async () => {
+      const tarjeta = btn.closest('.tarjeta');
+      const accion = btn.dataset.accion;
+      const nota = tarjeta.querySelector('.fa-nota').value.trim();
+      const cantidad = Number(tarjeta.querySelector('.fa-cant').value);
+      if (accion === 'BAJA' && !nota) { mostrarMensaje(root, 'Para dar de baja escribe una nota (qué se perdió o dañó).', 'error'); return; }
+      if (!confirm(accion === 'BAJA' ? '¿Dar de baja esta mercancía? No se puede deshacer.' : '¿Registrar esta resolución?')) return;
+      btn.disabled = true;
+      try {
+        await api('POST', `/api/traspasos/faltantes/${tarjeta.dataset.id}/resolver`, { accion, cantidad, nota: nota || null });
+        mostrarMensaje(root, 'Faltante resuelto.', 'ok');
+        cargar();
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        btn.disabled = false;
+      }
+    });
+  }
+  cargar();
 }
 
 // ── Notificaciones ───────────────────────────────────────────────────────

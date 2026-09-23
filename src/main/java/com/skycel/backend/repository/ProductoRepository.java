@@ -20,6 +20,22 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
     List<Producto> findByProductoMaster_IdprodmasterOrderByIdproductoAsc(Integer idprodmaster);
 
     List<Producto> findByTienda_CodtiAndActivoTrue(Integer codti);
+
+    /**
+     * Los productos activos de una tienda con TODO lo que el DTO necesita (tienda, artículo, categoría, color,
+     * proveedor, magnitud y sección) en una sola consulta. Sin esto, listar ~2,000 productos hacía ~2,000 consultas
+     * extra (una por relación perezosa de cada producto) y tardaba varios segundos.
+     */
+    @Query("SELECT p FROM Producto p JOIN FETCH p.tienda LEFT JOIN FETCH p.productoMaster m LEFT JOIN FETCH m.categoria " +
+           "LEFT JOIN FETCH p.color LEFT JOIN FETCH p.proveedor LEFT JOIN FETCH p.magnitud LEFT JOIN FETCH p.seccion " +
+           "WHERE p.tienda.codti = :codti AND p.activo = true")
+    List<Producto> findActivosConDetalleByTienda(Integer codti);
+
+    /** Igual que {@link #findActivosConDetalleByTienda} pero solo con stock (lo que el punto de venta puede vender). */
+    @Query("SELECT p FROM Producto p JOIN FETCH p.tienda LEFT JOIN FETCH p.productoMaster m LEFT JOIN FETCH m.categoria " +
+           "LEFT JOIN FETCH p.color LEFT JOIN FETCH p.proveedor LEFT JOIN FETCH p.magnitud LEFT JOIN FETCH p.seccion " +
+           "WHERE p.tienda.codti = :codti AND p.stock > 0 AND p.activo = true")
+    List<Producto> findDisponiblesConDetalleByTienda(Integer codti);
     
     List<Producto> findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(Integer idprodmaster, Integer codti);
 

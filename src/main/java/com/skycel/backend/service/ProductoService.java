@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -91,16 +92,24 @@ public class ProductoService {
 
     @Transactional(readOnly = true)
     public List<ProductoResponseDTO> obtenerStockPorTienda(Integer codti) {
-        return productoRepository.findByTienda_CodtiAndActivoTrue(codti).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+        return aDtos(productoRepository.findActivosConDetalleByTienda(codti));
     }
 
     @Transactional(readOnly = true)
     public List<ProductoResponseDTO> obtenerStockDisponiblePorTienda(Integer codti) {
-        return productoRepository.findAvailableStockByTienda(codti).stream()
-                .map(this::toDto)
+        return aDtos(productoRepository.findDisponiblesConDetalleByTienda(codti));
+    }
+
+    /** Convierte una lista de productos cargando las unidades (IMEI) de todos los equipos en UNA sola consulta. */
+    private List<ProductoResponseDTO> aDtos(List<Producto> productos) {
+        List<Integer> equipos = productos.stream()
+                .filter(p -> p.getProductoMaster() != null && esEquipoConImei(p.getProductoMaster().getTipo()))
+                .map(Producto::getIdproducto)
                 .collect(Collectors.toList());
+        Map<Integer, List<ProductoImei>> unidades = equipos.isEmpty() ? Map.of()
+                : productoImeiRepository.findByProducto_IdproductoInAndEstado(equipos, "DISPONIBLE").stream()
+                        .collect(Collectors.groupingBy(pi -> pi.getProducto().getIdproducto()));
+        return productos.stream().map(p -> toDto(p, unidades)).collect(Collectors.toList());
     }
 
     // ── Crear ─────────────────────────────────────────────────────────────────
@@ -562,6 +571,11 @@ public class ProductoService {
     // ── Mapeo enriquecido ─────────────────────────────────────────────────────
 
     private ProductoResponseDTO toDto(Producto p) {
+        return toDto(p, null);
+    }
+
+    /** @param unidadesPrecargadas las unidades disponibles por producto ya leídas (null = leerlas de este producto). */
+    private ProductoResponseDTO toDto(Producto p, Map<Integer, List<ProductoImei>> unidadesPrecargadas) {
         ProductoResponseDTO dto = productoMapper.toProductoResponse(p);
         // Campos adicionales que el mapper no cubre
         if (p.getTienda() != null) {
@@ -589,7 +603,10 @@ public class ProductoService {
         dto.setBajoStock(!esServicio && minimo.signum() > 0 && stock.compareTo(minimo) <= 0);
 
         if (p.getProductoMaster() != null && esEquipoConImei(p.getProductoMaster().getTipo())) {
-            List<ImeiInfoDTO> availableImeis = productoImeiRepository.findByProducto_IdproductoAndEstado(p.getIdproducto(), "DISPONIBLE")
+            List<ProductoImei> unidades = unidadesPrecargadas != null
+                    ? unidadesPrecargadas.getOrDefault(p.getIdproducto(), List.of())
+                    : productoImeiRepository.findByProducto_IdproductoAndEstado(p.getIdproducto(), "DISPONIBLE");
+            List<ImeiInfoDTO> availableImeis = unidades
                     .stream()
                     .map(pi -> toImeiInfo(pi, p))
                     .collect(Collectors.toList());
