@@ -7,6 +7,10 @@
 -- Correr ANTES de actualizar el jar a la versión que ya espera estas columnas como TINYINT
 -- (con ddl-auto: update, Hibernate no convierte de forma confiable un VARCHAR existente a TINYINT).
 
+-- Workbench bloquea por defecto un UPDATE que no filtre por una columna llave (Modo seguro).
+-- Se desactiva solo para esta sesión (no toca ninguna preferencia permanente) y se reactiva al final.
+SET SQL_SAFE_UPDATES = 0;
+
 -- 1) producto_master.tipo: VARCHAR -> TINYINT
 UPDATE producto_master SET tipo = '0' WHERE tipo = 'CELULAR';
 UPDATE producto_master SET tipo = '1' WHERE tipo = 'ACCESORIO';
@@ -41,3 +45,5 @@ WHERE a.tipo_raiz IS NOT NULL;
 UPDATE categoria SET tipo = 1 WHERE tipo IS NULL;
 
 ALTER TABLE categoria MODIFY COLUMN tipo TINYINT NOT NULL;
+
+SET SQL_SAFE_UPDATES = 1;
