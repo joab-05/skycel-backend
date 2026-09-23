@@ -1,13 +1,17 @@
 package com.skycel.backend.controller;
 
+import com.skycel.backend.dto.usuario.CambiarPasswordDto;
 import com.skycel.backend.dto.usuario.UsuarioCreateDto;
 import com.skycel.backend.dto.usuario.UsuarioResponseDto;
 import com.skycel.backend.dto.usuario.UsuarioUpdateDto;
 import com.skycel.backend.service.UsuarioService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -44,7 +48,7 @@ public class UsuarioController {
     @PreAuthorize("hasAnyRole('ROOT', 'ADMIN', 'ENCARGADO_TIENDA', 'TECNICO')")
     public ResponseEntity<List<UsuarioResponseDto>> listarTecnicos(
             @RequestParam(value = "codti", required = false) Integer codti,
-            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+            @AuthenticationPrincipal UserDetails user) {
         return ResponseEntity.ok(usuarioService.listarTecnicos(codti, user.getUsername()));
     }
 
@@ -73,6 +77,18 @@ public class UsuarioController {
             @PathVariable Integer id,
             @RequestBody UsuarioUpdateDto dto) {
         return ResponseEntity.ok(usuarioService.actualizar(id, dto));
+    }
+
+    // ── PATCH /api/usuarios/mi-password ───────────────────────────────────────
+
+    /** Cualquier usuario autenticado cambia su propia contraseña (pide la actual). */
+    @PatchMapping("/mi-password")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> cambiarMiPassword(
+            @Valid @RequestBody CambiarPasswordDto dto,
+            @AuthenticationPrincipal UserDetails user) {
+        usuarioService.cambiarPasswordPropia(user.getUsername(), dto.getPasswordActual(), dto.getPasswordNueva());
+        return ResponseEntity.noContent().build();
     }
 
     // ── DELETE /api/usuarios/{id} (soft delete) ───────────────────────────────

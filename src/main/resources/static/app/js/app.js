@@ -185,6 +185,7 @@ document.getElementById('btn-salir').onclick = () => {
   Sesion.limpiar();
   navegar('#/login');
 };
+document.getElementById('btn-ajustes').onclick = () => navegar('#/ajustes');
 
 // ── Router ────────────────────────────────────────────────────────────────
 
@@ -222,6 +223,7 @@ async function render() {
     if (ruta === 'pos') return pantallaPOS();
     if (ruta === 'devoluciones') return pantallaDevoluciones();
     if (ruta === 'devolucion' && param) return pantallaDevolucionDetalle(param);
+    if (ruta === 'ajustes') return pantallaAjustes();
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -2503,6 +2505,47 @@ async function pantallaDevolucionDetalle(id) {
       }
     };
   }
+}
+
+// ── Ajustes ──────────────────────────────────────────────────────────────
+
+function pantallaAjustes() {
+  root.innerHTML = `
+    <h1>⚙️ Ajustes</h1>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Cambiar mi contraseña</h2>
+      <label class="obligatorio">Contraseña actual</label>
+      <input id="aj-actual" type="password" autocomplete="current-password">
+      <label class="obligatorio">Contraseña nueva</label>
+      <input id="aj-nueva" type="password" autocomplete="new-password">
+      <label class="obligatorio">Confirmar contraseña nueva</label>
+      <input id="aj-confirmar" type="password" autocomplete="new-password">
+      <div class="ayuda">Al menos 8 caracteres.</div>
+      <button id="aj-guardar" class="btn btn-verde">Guardar</button>
+    </div>`;
+
+  document.getElementById('aj-guardar').onclick = async (e) => {
+    const actual = document.getElementById('aj-actual').value;
+    const nueva = document.getElementById('aj-nueva').value;
+    const confirmar = document.getElementById('aj-confirmar').value;
+    if (!actual || !nueva) { mostrarMensaje(root, 'Completa los dos campos de contraseña.', 'error'); return; }
+    if (nueva.length < 8) { mostrarMensaje(root, 'La contraseña nueva debe tener al menos 8 caracteres.', 'error'); return; }
+    if (nueva !== confirmar) { mostrarMensaje(root, 'La confirmación no coincide con la contraseña nueva.', 'error'); return; }
+
+    e.target.disabled = true;
+    e.target.innerHTML = '<span class="spinner"></span> Guardando...';
+    try {
+      await api('PATCH', '/api/usuarios/mi-password', { passwordActual: actual, passwordNueva: nueva });
+      mostrarMensaje(root, 'Contraseña actualizada.', 'ok');
+      document.getElementById('aj-actual').value = '';
+      document.getElementById('aj-nueva').value = '';
+      document.getElementById('aj-confirmar').value = '';
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: esta acción necesita conexión.' : err.message, 'error');
+    }
+    e.target.disabled = false;
+    e.target.textContent = 'Guardar';
+  };
 }
 
 // ── Arranque ──────────────────────────────────────────────────────────────

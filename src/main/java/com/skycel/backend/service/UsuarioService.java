@@ -186,6 +186,22 @@ public class UsuarioService {
         return toDto(usuario);
     }
 
+    // ── Cambiar mi contraseña ────────────────────────────────────────────────
+
+    @Transactional
+    public void cambiarPasswordPropia(String username, String passwordActual, String passwordNueva) {
+        Usuario usuario = usuarioRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "Usuario autenticado no encontrado"));
+
+        if (!passwordEncoder.matches(passwordActual, usuario.getPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña actual no es correcta.");
+        }
+
+        usuario.setPassword(passwordEncoder.encode(passwordNueva));
+        usuarioRepository.save(usuario);
+    }
+
     // ── Desactivar (soft delete) ───────────────────────────────────────────────
 
     @Transactional
