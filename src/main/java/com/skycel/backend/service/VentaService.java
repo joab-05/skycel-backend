@@ -384,7 +384,7 @@ public class VentaService {
             if (detalle.getImei() != null) {
                 revertirImei(detalle.getImei(), idventa);
             } else if (detalle.getCodpro() != null) {
-                revertirStockAccesorio(detalle.getCodpro(), detalle.getCantidad(), idventa);
+                revertirStockAccesorio(detalle.getCodpro(), venta.getTienda().getCodti(), detalle.getCantidad(), idventa);
             }
         }
 
@@ -419,8 +419,9 @@ public class VentaService {
         movimientoInventarioService.registrar(producto, stockActual, "CANCELACION_VENTA", null, "Venta #" + idventa);
     }
 
-    private void revertirStockAccesorio(String codpro, Short cantidad, Integer idventa) {
-        Producto producto = productoRepository.findByCodpro(codpro).orElse(null);
+    private void revertirStockAccesorio(String codpro, Integer codti, Short cantidad, Integer idventa) {
+        // El mismo código existe en varias sucursales: se revierte el de la tienda donde se vendió.
+        Producto producto = productoRepository.findByCodproAndTienda_Codti(codpro, codti).orElse(null);
         if (producto == null || producto.getProductoMaster().getTipo() == TipoProducto.SERVICIO) {
             return; // no hay stock que revertir (producto ya no existe, o es un servicio)
         }

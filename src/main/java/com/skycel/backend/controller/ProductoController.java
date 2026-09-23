@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import io.swagger.v3.oas.annotations.Parameter;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -133,8 +134,10 @@ public class ProductoController {
     @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
     public ResponseEntity<ProductoResponseDTO> actualizarProducto(
             @PathVariable String codpro,
+            @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
+            @RequestParam(required = false) Integer codti,
             @RequestBody ProductoUpdateDTO request) {
-        return ResponseEntity.ok(productoService.actualizar(codpro, request));
+        return ResponseEntity.ok(productoService.actualizar(codpro, codti, request));
     }
 
     @Operation(summary = "Ajustar stock — ENTRADA / SALIDA / AJUSTE")
@@ -143,8 +146,10 @@ public class ProductoController {
     @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
     public ResponseEntity<ProductoResponseDTO> ajustarStock(
             @PathVariable String codpro,
+            @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
+            @RequestParam(required = false) Integer codti,
             @RequestBody StockAjusteDTO request) {
-        return ResponseEntity.ok(productoService.ajustarStock(codpro, request));
+        return ResponseEntity.ok(productoService.ajustarStock(codpro, codti, request));
     }
 
     @Operation(summary = "Fijar (o quitar) el precio propio de un IMEI específico, distinto al del modelo")
@@ -179,8 +184,11 @@ public class ProductoController {
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{codpro}")
     @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
-    public ResponseEntity<Void> eliminarProducto(@PathVariable String codpro) {
-        productoService.eliminarProducto(codpro);
+    public ResponseEntity<Void> eliminarProducto(
+            @PathVariable String codpro,
+            @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
+            @RequestParam(required = false) Integer codti) {
+        productoService.eliminarProducto(codpro, codti);
         return ResponseEntity.noContent().build();
     }
 }

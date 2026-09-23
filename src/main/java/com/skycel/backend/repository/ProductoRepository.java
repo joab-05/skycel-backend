@@ -11,9 +11,13 @@ import java.util.Optional;
 @Repository
 public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
-    Optional<Producto> findByCodpro(String codpro);
+    /** Un mismo artículo lleva el mismo código en todas las sucursales, así que un código puede dar varias filas. */
+    List<Producto> findAllByCodpro(String codpro);
 
     Optional<Producto> findByCodproAndTienda_Codti(String codpro, Integer codti);
+
+    /** Todas las filas (una por sucursal) de un artículo maestro. */
+    List<Producto> findByProductoMaster_IdprodmasterOrderByIdproductoAsc(Integer idprodmaster);
 
     List<Producto> findByTienda_CodtiAndActivoTrue(Integer codti);
     

@@ -26,6 +26,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -126,8 +128,6 @@ class TraspasoServiceTest {
         });
         lenient().when(productoImeiRepository.findByImei(anyString())).thenAnswer(inv -> Optional.ofNullable(imeis.get((String) inv.getArgument(0))));
         lenient().when(productoImeiRepository.save(any(ProductoImei.class))).thenAnswer(inv -> inv.getArgument(0));
-        lenient().when(productoService.generarCodigoPara(any(ProductoMaster.class))).thenAnswer(inv ->
-                ((ProductoMaster) inv.getArgument(0)).getTipo() == TipoProducto.CELULAR ? "CEL-000099" : "ACC-000099");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -320,18 +320,20 @@ class TraspasoServiceTest {
     class Recibir {
 
         @Test
-        @DisplayName("accesorio: si la tienda destino no lo tenía, se crea su producto con los datos del origen y el stock llega")
+        @DisplayName("accesorio: si la tienda destino no lo tenía, se crea su producto con los datos del origen y el MISMO código, y el stock llega")
         void creaElProductoEnDestino() {
             stock("ACC-000001", almacen, accesorio, "40", negro);
             int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "15")), "root").getIdtraspaso();
 
             TraspasoResponseDto r = service.recibir(id, "abigail");
 
-            Producto nuevo = enTienda("ACC-000099", zocalo);
+            Producto nuevo = enTienda("ACC-000001", zocalo);
             assertThat(nuevo.getStock()).isEqualByComparingTo("15");
             assertThat(nuevo.getPreciopub()).isEqualByComparingTo("150");
             assertThat(nuevo.getColor()).isSameAs(negro);
             assertThat(nuevo.getActivo()).isTrue();
+            // el artículo conserva su código: no se pide uno nuevo al generador
+            verify(productoService, never()).generarCodigoPara(any(ProductoMaster.class));
             assertThat(r.getEstado()).isEqualTo((byte) 2);
             assertThat(r.getEstadoDisplay()).isEqualTo("Recibido");
             assertThat(r.getNombreValida()).isEqualTo("ABIGAIL");
@@ -347,7 +349,7 @@ class TraspasoServiceTest {
             service.recibir(id, "abigail");
 
             assertThat(yaTenia.getStock()).isEqualByComparingTo("20");
-            assertThat(productos).noneMatch(p -> p.getCodpro().equals("ACC-000099"));
+            assertThat(productos).noneMatch(p -> p.getTienda().equals(zocalo) && p.getCodpro().equals("ACC-000001"));
         }
 
         @Test
@@ -360,7 +362,7 @@ class TraspasoServiceTest {
             service.recibir(id, "abigail");
 
             assertThat(azulDestino.getStock()).isEqualByComparingTo("5");
-            assertThat(enTienda("ACC-000099", zocalo).getStock()).isEqualByComparingTo("15");
+            assertThat(enTienda("ACC-000001", zocalo).getStock()).isEqualByComparingTo("15");
         }
 
         @Test
@@ -376,7 +378,7 @@ class TraspasoServiceTest {
 
             service.recibir(id, "abigail");
 
-            Producto destino = enTienda("CEL-000099", zocalo);
+            Producto destino = enTienda("CEL-000004", zocalo);
             assertThat(destino.getStock()).isEqualByComparingTo("2");
             assertThat(usado.getProducto()).isSameAs(destino);
             assertThat(usado.getEstado()).isEqualTo("DISPONIBLE");
@@ -394,7 +396,7 @@ class TraspasoServiceTest {
             assertEstado(HttpStatus.FORBIDDEN, () -> service.recibir(id, "guillermo"));
             service.recibir(id, "abigail");
             assertEstado(HttpStatus.CONFLICT, () -> service.recibir(id, "abigail"));
-            assertThat(enTienda("ACC-000099", zocalo).getStock()).isEqualByComparingTo("5");   // no se duplicó
+            assertThat(enTienda("ACC-000001", zocalo).getStock()).isEqualByComparingTo("5");   // no se duplicó
         }
 
         @Test
@@ -445,7 +447,7 @@ class TraspasoServiceTest {
 
             TraspasoResponseDto r = service.recibir(id, falta("Caja rota", "ACC-000001", "4"), "abigail");
 
-            assertThat(enTienda("ACC-000099", zocalo).getStock()).isEqualByComparingTo("11");
+            assertThat(enTienda("ACC-000001", zocalo).getStock()).isEqualByComparingTo("11");
             assertThat(origen.getStock()).isEqualByComparingTo("25");
             assertThat(r.getConFaltantes()).isTrue();
             assertThat(r.getLineas().get(0).getCantidadRecibida()).isEqualByComparingTo("11");
@@ -479,8 +481,8 @@ class TraspasoServiceTest {
             service.recibir(id, falta("Se quedó en la caja del repartidor", "CEL-000004", null, "350000000000029"), "abigail");
 
             assertThat(llega.getEstado()).isEqualTo("DISPONIBLE");
-            assertThat(llega.getProducto()).isSameAs(enTienda("CEL-000099", zocalo));
-            assertThat(enTienda("CEL-000099", zocalo).getStock()).isEqualByComparingTo("1");
+            assertThat(llega.getProducto()).isSameAs(enTienda("CEL-000004", zocalo));
+            assertThat(enTienda("CEL-000004", zocalo).getStock()).isEqualByComparingTo("1");
             assertThat(noLlega.getEstado()).isEqualTo("FALTANTE");
             assertThat(noLlega.getProducto()).isSameAs(a15);
             assertThat(a15.getStock()).isEqualByComparingTo("0");
@@ -507,7 +509,7 @@ class TraspasoServiceTest {
             assertEstado(HttpStatus.FORBIDDEN, () -> service.resolverFaltante(det, resolver("RECIBIDO_TARDE", "1", null), "guillermo"));
             FaltanteResponseDto r = service.resolverFaltante(det, resolver("RECIBIDO_TARDE", "3", null), "abigail");
 
-            assertThat(enTienda("ACC-000099", zocalo).getStock()).isEqualByComparingTo("14");
+            assertThat(enTienda("ACC-000001", zocalo).getStock()).isEqualByComparingTo("14");
             assertThat(r.getPendiente()).isEqualByComparingTo("1");
             assertThat(r.getCantidadRecibida()).isEqualByComparingTo("14");
             assertThat(r.getHistorial()).extracting(FaltanteResponseDto.MovimientoDto::getAccion).containsExactly("REPORTADO", "RECIBIDO_TARDE");
@@ -727,7 +729,7 @@ class TraspasoServiceTest {
 
             // y la tienda que pidió lo recibe como cualquier envío
             service.recibir(envio.getIdtraspaso(), "abigail");
-            assertThat(enTienda("ACC-000099", zocalo).getStock()).isEqualByComparingTo("12");
+            assertThat(enTienda("ACC-000001", zocalo).getStock()).isEqualByComparingTo("12");
         }
 
         @Test

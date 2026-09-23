@@ -556,7 +556,10 @@ public class TraspasoService {
         return envio;
     }
 
-    /** El producto equivalente en la tienda destino (mismo maestro y color); si no lo tiene, se crea con los datos del origen. */
+    /**
+     * El producto equivalente en la tienda destino (mismo maestro y color); si no lo tiene, se crea con los datos
+     * del origen. Conserva el código del origen: un artículo lleva el mismo código en todas las sucursales.
+     */
     private Producto productoEnDestino(Producto enOrigen, Tienda destino) {
         return productoRepository
                 .findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(enOrigen.getProductoMaster().getIdprodmaster(), destino.getCodti())
@@ -564,7 +567,7 @@ public class TraspasoService {
                 .filter(p -> Objects.equals(idColorDe(enOrigen), idColorDe(p)))
                 .findFirst()
                 .orElseGet(() -> productoRepository.save(Producto.builder()
-                        .codpro(productoService.generarCodigoPara(enOrigen.getProductoMaster()))
+                        .codpro(enOrigen.getCodpro())
                         .tienda(destino)
                         .productoMaster(enOrigen.getProductoMaster())
                         .magnitud(enOrigen.getMagnitud())

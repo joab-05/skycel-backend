@@ -18,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -127,12 +128,47 @@ class ProductoServiceTest {
         return d;
     }
 
+    // ── Mismo código en varias sucursales ───────────────────────────────────
+
+    private Producto enSucursal(Producto base, int codti, int idproducto) {
+        return Producto.builder()
+                .idproducto(idproducto).codpro(base.getCodpro()).productoMaster(base.getProductoMaster())
+                .tienda(Tienda.builder().codti(codti).build())
+                .stock(BigDecimal.TEN).build();
+    }
+
+    @Test
+    @DisplayName("ajustarStock: un código que existe en varias sucursales exige codti (400)")
+    void ajustarStock_codigoEnVariasSucursales_sinCodti_lanza400() {
+        Producto base = accesorio(BigDecimal.TEN);
+        when(productoRepository.findAllByCodpro(base.getCodpro()))
+                .thenReturn(List.of(enSucursal(base, 1, 20), enSucursal(base, 2, 21)));
+
+        assertThatThrownBy(() -> productoService.ajustarStock(base.getCodpro(), dto("ENTRADA", BigDecimal.ONE, null, "x")))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    @DisplayName("ajustarStock: con codti mueve el stock de la sucursal indicada y no toca la otra")
+    void ajustarStock_codigoEnVariasSucursales_conCodti_usaEsaSucursal() {
+        Producto base = accesorio(BigDecimal.TEN);
+        Producto zocalo = enSucursal(base, 2, 21);
+        Producto bodega = enSucursal(base, 1, 20);
+        when(productoRepository.findByCodproAndTienda_Codti(base.getCodpro(), 2)).thenReturn(Optional.of(zocalo));
+
+        productoService.ajustarStock(base.getCodpro(), 2, dto("ENTRADA", new BigDecimal("5"), null, "reposición"));
+
+        assertThat(zocalo.getStock()).isEqualByComparingTo("15");
+        assertThat(bodega.getStock()).isEqualByComparingTo("10");
+    }
+
     // ── Producto no encontrado ──────────────────────────────────────────────
 
     @Test
     @DisplayName("ajustarStock: producto inexistente lanza 404")
     void ajustarStock_productoNoEncontrado_lanza404() {
-        when(productoRepository.findByCodpro("NO-EXISTE")).thenReturn(Optional.empty());
+        when(productoRepository.findAllByCodpro("NO-EXISTE")).thenReturn(List.of());
 
         StockAjusteDTO request = dto("ENTRADA", BigDecimal.ONE, List.of("123456789012345"), null);
 
@@ -149,7 +185,7 @@ class ProductoServiceTest {
     @DisplayName("ajustarStock: los artículos de tipo SERVICIO no admiten ajuste de stock")
     void ajustarStock_servicio_lanzaBadRequest() {
         Producto p = servicio();
-        when(productoRepository.findByCodpro(p.getCodpro())).thenReturn(Optional.of(p));
+        when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
         StockAjusteDTO request = dto("ENTRADA", BigDecimal.ONE, null, null);
 
@@ -170,7 +206,7 @@ class ProductoServiceTest {
         @DisplayName("con IMEIs válidos y nuevos: suma stock y registra cada IMEI como DISPONIBLE")
         void entrada_imeisValidos_sumaStockYRegistraImeis() {
             Producto p = celular(BigDecimal.valueOf(2));
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
             when(productoImeiRepository.existsByImei(anyString())).thenReturn(false);
 
             List<String> imeis = List.of("123456789012345", "123456789012346");
@@ -191,7 +227,7 @@ class ProductoServiceTest {
         @DisplayName("si el número de IMEIs no coincide con la cantidad: 400")
         void entrada_cantidadImeisNoCoincide_lanzaBadRequest() {
             Producto p = celular(BigDecimal.ZERO);
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
 
             StockAjusteDTO request = dto("ENTRADA", BigDecimal.valueOf(2),
                     List.of("123456789012345"), null); // solo 1 IMEI, se piden 2
@@ -208,7 +244,7 @@ class ProductoServiceTest {
         @DisplayName("rechaza identificadores que no tengan entre 5 y 20 caracteres alfanuméricos")
         void entrada_imeiFormatoInvalido_lanzaBadRequest(String imeiInvalido) {
             Producto p = celular(BigDecimal.ZERO);
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
 
             StockAjusteDTO request = dto("ENTRADA", BigDecimal.ONE, List.of(imeiInvalido), null);
 
@@ -221,7 +257,7 @@ class ProductoServiceTest {
         @DisplayName("si un IMEI ya existe en el sistema: 409 y no se guarda ninguno")
         void entrada_imeiDuplicado_lanzaConflict() {
             Producto p = celular(BigDecimal.ZERO);
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
             when(productoImeiRepository.existsByImei("123456789012345")).thenReturn(false);
             when(productoImeiRepository.existsByImei("123456789012346")).thenReturn(true);
 
@@ -240,7 +276,7 @@ class ProductoServiceTest {
         @DisplayName("cantidad no entera (p.ej. 1.5) para un celular: 400")
         void entrada_cantidadNoEntera_lanzaBadRequest() {
             Producto p = celular(BigDecimal.ZERO);
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
 
             StockAjusteDTO request = dto("ENTRADA", new BigDecimal("1.5"), null, null);
 
@@ -263,7 +299,7 @@ class ProductoServiceTest {
             ProductoImei pi = ProductoImei.builder()
                     .id(1L).producto(p).imei("123456789012345").estado("DISPONIBLE").build();
 
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
             when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
 
             StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("123456789012345"), null);
@@ -281,7 +317,7 @@ class ProductoServiceTest {
             ProductoImei pi = ProductoImei.builder()
                     .id(1L).producto(p).imei("123456789012345").estado("DISPONIBLE").build();
 
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
             when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
 
             StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("123456789012345"), "Venta de contado");
@@ -300,7 +336,7 @@ class ProductoServiceTest {
             ProductoImei pi = ProductoImei.builder()
                     .id(1L).producto(otro).imei("123456789012345").estado("DISPONIBLE").build();
 
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
             when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
 
             StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("123456789012345"), null);
@@ -319,7 +355,7 @@ class ProductoServiceTest {
             ProductoImei pi = ProductoImei.builder()
                     .id(1L).producto(p).imei("123456789012345").estado("VENDIDO").build();
 
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
             when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
 
             StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("123456789012345"), null);
@@ -333,7 +369,7 @@ class ProductoServiceTest {
         @DisplayName("IMEI inexistente en salida: 404")
         void salida_imeiInexistente_lanza404() {
             Producto p = celular(BigDecimal.ONE);
-            when(productoRepository.findByCodpro(CODPRO)).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
             when(productoImeiRepository.findByImei("999999999999999")).thenReturn(Optional.empty());
 
             StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("999999999999999"), null);
@@ -354,7 +390,7 @@ class ProductoServiceTest {
         @DisplayName("ENTRADA suma directamente al stock")
         void entrada_sumaStock() {
             Producto p = accesorio(BigDecimal.valueOf(5));
-            when(productoRepository.findByCodpro(p.getCodpro())).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
             productoService.ajustarStock(p.getCodpro(), dto("ENTRADA", BigDecimal.TEN, null, null));
 
@@ -366,7 +402,7 @@ class ProductoServiceTest {
         @DisplayName("SALIDA con stock insuficiente: 400 y no queda en negativo")
         void salida_stockInsuficiente_lanzaBadRequest() {
             Producto p = accesorio(BigDecimal.valueOf(3));
-            when(productoRepository.findByCodpro(p.getCodpro())).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
             assertThatThrownBy(() ->
                     productoService.ajustarStock(p.getCodpro(), dto("SALIDA", BigDecimal.TEN, null, null)))
@@ -380,7 +416,7 @@ class ProductoServiceTest {
         @DisplayName("AJUSTE fija el stock al valor exacto enviado")
         void ajuste_fijaValorExacto() {
             Producto p = accesorio(BigDecimal.valueOf(3));
-            when(productoRepository.findByCodpro(p.getCodpro())).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
             productoService.ajustarStock(p.getCodpro(), dto("AJUSTE", BigDecimal.valueOf(100), null, null));
 
@@ -391,7 +427,7 @@ class ProductoServiceTest {
         @DisplayName("tipo de ajuste desconocido: 400")
         void tipoDesconocido_lanzaBadRequest() {
             Producto p = accesorio(BigDecimal.ZERO);
-            when(productoRepository.findByCodpro(p.getCodpro())).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
             assertThatThrownBy(() ->
                     productoService.ajustarStock(p.getCodpro(), dto("TRASPASO", BigDecimal.ONE, null, null)))

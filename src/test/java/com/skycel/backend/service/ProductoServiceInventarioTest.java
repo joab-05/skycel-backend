@@ -333,7 +333,7 @@ class ProductoServiceInventarioTest {
         void actualizarUmbral() {
             Producto p = Producto.builder().idproducto(3).codpro("ACC-000001").tienda(tienda)
                     .productoMaster(master(TipoProducto.ACCESORIO)).stock(new BigDecimal("4")).build();
-            when(productoRepository.findByCodpro("ACC-000001")).thenReturn(Optional.of(p));
+            when(productoRepository.findAllByCodpro("ACC-000001")).thenReturn(List.of(p));
             ProductoUpdateDTO dto = new ProductoUpdateDTO();
             dto.setStockMinimo(new BigDecimal("6"));
 

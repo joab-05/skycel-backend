@@ -1700,7 +1700,7 @@ async function pantallaProductoDetalle(param) {
     document.getElementById('pd-guardar-precio').onclick = async (e) => {
       e.target.disabled = true;
       try {
-        await api('PUT', `/api/productos/${encodeURIComponent(codpro)}`, {
+        await api('PUT', `/api/productos/${encodeURIComponent(codpro)}?codti=${encodeURIComponent(codti)}`, {
           precioCompra: Number(document.getElementById('pd-precompra').value) || null,
           precioVenta: Number(document.getElementById('pd-preventa').value) || null,
           stockMinimo: Number(document.getElementById('pd-stockmin').value) || 0,
@@ -1722,7 +1722,7 @@ async function pantallaProductoDetalle(param) {
         if (!comentario) { mostrarMensaje(root, 'Indica el motivo del movimiento.', 'error'); return; }
         e.target.disabled = true;
         try {
-          await api('PATCH', `/api/productos/${encodeURIComponent(codpro)}/stock`, {
+          await api('PATCH', `/api/productos/${encodeURIComponent(codpro)}/stock?codti=${encodeURIComponent(codti)}`, {
             tipo: document.getElementById('pd-tipo-mov').value, cantidad, comentario,
           });
           mostrarMensaje(root, 'Movimiento registrado.', 'ok');

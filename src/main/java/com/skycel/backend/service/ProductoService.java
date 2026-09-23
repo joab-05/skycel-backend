@@ -188,7 +188,10 @@ public class ProductoService {
         // Generar codpro si viene vacío
         String codpro = dto.getCodpro();
         if (codpro == null || codpro.trim().isEmpty()) {
-            codpro = generarCodigoPara(master);
+            // Si otra sucursal ya tiene este artículo, se reutiliza su código: el código identifica al artículo.
+            final ProductoMaster masterFinal = master;
+            codpro = codigoDeOtraSucursal(masterFinal, dto.getIdColor(), tienda.getCodti())
+                    .orElseGet(() -> generarCodigoPara(masterFinal));
         } else {
             codpro = codpro.trim();
         }
@@ -256,11 +259,35 @@ public class ProductoService {
 
     // ── Actualizar precios / datos ────────────────────────────────────────────
 
+    /**
+     * El producto de un código. Como un artículo lleva el mismo código en todas las sucursales, hay que decir
+     * de cuál se habla con {@code codti}; sin él solo se acepta si el código existe en una única sucursal.
+     */
+    private Producto porCodigo(String codpro, Integer codti) {
+        if (codti != null) {
+            return productoRepository.findByCodproAndTienda_Codti(codpro, codti)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Producto no encontrado: " + codpro + " en la sucursal " + codti));
+        }
+        List<Producto> filas = productoRepository.findAllByCodpro(codpro);
+        if (filas.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado: " + codpro);
+        }
+        if (filas.size() > 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El código '" + codpro + "' existe en varias sucursales; indique cuál con el parámetro codti.");
+        }
+        return filas.get(0);
+    }
+
     @Transactional
     public ProductoResponseDTO actualizar(String codpro, ProductoUpdateDTO dto) {
-        Producto p = productoRepository.findByCodpro(codpro)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Producto no encontrado: " + codpro));
+        return actualizar(codpro, null, dto);
+    }
+
+    @Transactional
+    public ProductoResponseDTO actualizar(String codpro, Integer codti, ProductoUpdateDTO dto) {
+        Producto p = porCodigo(codpro, codti);
 
         if (dto.getPrecioCompra() != null) p.setPreciopro(dto.getPrecioCompra());
         if (dto.getPrecioVenta()  != null) p.setPreciopub(dto.getPrecioVenta());
@@ -323,9 +350,12 @@ public class ProductoService {
 
     @Transactional
     public ProductoResponseDTO ajustarStock(String codpro, StockAjusteDTO dto) {
-        Producto p = productoRepository.findByCodpro(codpro)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Producto no encontrado: " + codpro));
+        return ajustarStock(codpro, null, dto);
+    }
+
+    @Transactional
+    public ProductoResponseDTO ajustarStock(String codpro, Integer codti, StockAjusteDTO dto) {
+        Producto p = porCodigo(codpro, codti);
 
         com.skycel.backend.domain.enums.TipoProducto tipoProd = p.getProductoMaster().getTipo();
 
@@ -469,10 +499,19 @@ public class ProductoService {
 
     @Transactional
     public void eliminarProducto(String codpro) {
-        productoRepository.findByCodpro(codpro).ifPresent(p -> {
-            p.setActivo(false);
-            productoRepository.save(p);
-        });
+        eliminarProducto(codpro, null);
+    }
+
+    @Transactional
+    public void eliminarProducto(String codpro, Integer codti) {
+        // Idempotente: si el código no existe no falla (igual que antes); si es ambiguo sí pide la sucursal.
+        List<Producto> filas = codti != null
+                ? productoRepository.findByCodproAndTienda_Codti(codpro, codti).stream().toList()
+                : productoRepository.findAllByCodpro(codpro);
+        if (filas.isEmpty()) return;
+        Producto p = porCodigo(codpro, codti);
+        p.setActivo(false);
+        productoRepository.save(p);
     }
 
     // ── Precio por IMEI ─────────────────────────────────────────────────────
@@ -705,6 +744,20 @@ public class ProductoService {
         categoriaFolioRepository.incrementar(categoria.getIdcat());
         Long folio = categoriaFolioRepository.obtenerUltimoFolioGenerado(categoria.getIdcat());
         return categoria.getCodigo().trim().toUpperCase() + "-" + String.format("%06d", folio);
+    }
+
+    /**
+     * El código con que otra sucursal ya maneja este artículo (mismo maestro y color), si lo hay y la sucursal
+     * indicada no lo usa ya. Así un artículo lleva el mismo código en todas las tiendas, igual que en un traspaso.
+     */
+    private Optional<String> codigoDeOtraSucursal(ProductoMaster master, Short idColor, Integer codti) {
+        List<Producto> filas = productoRepository.findByProductoMaster_IdprodmasterOrderByIdproductoAsc(master.getIdprodmaster());
+        return filas.stream()
+                .filter(p -> !codti.equals(p.getTienda().getCodti()))
+                .filter(p -> java.util.Objects.equals(idColor, p.getColor() != null ? p.getColor().getIdcolor() : null))
+                .map(Producto::getCodpro)
+                .filter(c -> filas.stream().noneMatch(o -> codti.equals(o.getTienda().getCodti()) && c.equals(o.getCodpro())))
+                .findFirst();
     }
 
     /**
