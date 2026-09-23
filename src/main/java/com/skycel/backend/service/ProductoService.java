@@ -140,16 +140,18 @@ public class ProductoService {
             if (existingMaster.isPresent()) {
                 master = existingMaster.get();
             } else {
-                // Resolver categoría (para ACCESORIO/SERVICIO, esta ES el "Tipo 2")
+                // Resolver categoría (para ACCESORIO/SERVICIO, esta ES el "Tipo 2") — solo entre las de este mismo tipo
+                final com.skycel.backend.domain.enums.TipoProducto tipoFinal = tipo;
                 Categoria cat = null;
                 if (dto.getCategoriaMaster() != null) {
                     cat = categoriaRepository.findAll().stream()
-                            .filter(c -> c.getNombre().equalsIgnoreCase(dto.getCategoriaMaster().trim()))
+                            .filter(c -> c.getNombre().equalsIgnoreCase(dto.getCategoriaMaster().trim()) && c.getTipo() == tipoFinal)
                             .findFirst().orElse(null);
                 }
                 if (cat == null) {
-                    cat = categoriaRepository.findAll().stream().findFirst()
-                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "No hay ninguna categoría registrada en el sistema."));
+                    cat = categoriaRepository.findAll().stream().filter(c -> c.getTipo() == tipoFinal).findFirst()
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                    "No hay ninguna categoría de tipo " + tipoFinal + " registrada en el sistema."));
                 }
 
                 boolean esEquipo = tipo == com.skycel.backend.domain.enums.TipoProducto.CELULAR;

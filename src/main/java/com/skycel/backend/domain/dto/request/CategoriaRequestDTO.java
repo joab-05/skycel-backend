@@ -6,10 +6,14 @@ import lombok.Data;
 
 @Data
 public class CategoriaRequestDTO {
-    
+
     @NotBlank(message = "El nombre de la categoría es obligatorio")
     @Size(max = 20, message = "El nombre no puede exceder los 20 caracteres")
     private String nombreCat;
+
+    // CELULAR, ACCESORIO, SERVICIO o TABLET — para que cada tipo de producto solo vea sus propias categorías.
+    @NotBlank(message = "El tipo de la categoría es obligatorio")
+    private String tipo;
 
     private Short idCategoriaSuperior;
 

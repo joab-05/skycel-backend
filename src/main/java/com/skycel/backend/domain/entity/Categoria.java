@@ -1,5 +1,6 @@
 package com.skycel.backend.domain.entity;
 
+import com.skycel.backend.domain.enums.TipoProducto;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.SQLRestriction;
@@ -30,6 +31,11 @@ public class Categoria {
     // que se usen para registrar productos — ver ProductoService.generarCodigoAccesorio.
     @Column(name = "codigo", length = 10)
     private String codigo;
+
+    /** A qué tipo de producto pertenece esta categoría (ordinal/TINYINT): un Accesorio no debe ver categorías de Servicio o viceversa. */
+    @Enumerated(EnumType.ORDINAL)
+    @Column(name = "tipo", nullable = false)
+    private TipoProducto tipo;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "idcatsup")

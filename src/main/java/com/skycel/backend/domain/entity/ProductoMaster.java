@@ -56,8 +56,9 @@ public class ProductoMaster {
     @Column(name = "dias_garantia")
     private Integer diasGarantia;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "tipo", nullable = false, length = 20)
+    // Ordinal (TINYINT): ver TipoProducto — nunca reordenar sus valores.
+    @Enumerated(EnumType.ORDINAL)
+    @Column(name = "tipo", nullable = false)
     private TipoProducto tipo = TipoProducto.ACCESORIO;
 
     @Column(name = "activo", columnDefinition = "TINYINT DEFAULT 1")

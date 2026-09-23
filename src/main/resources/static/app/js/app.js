@@ -1437,7 +1437,7 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       </div>
       <label class="obligatorio">Categoría</label>
       <div class="fila">
-        <select id="np-categoria">${categorias.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías</option>'}</select>
+        <select id="np-categoria"></select>
         <button id="np-nueva-categoria" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
       </div>
       <div id="np-categoria-form" class="oculto"></div>
@@ -1455,8 +1455,23 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   const segCel = document.getElementById('np-seg-celular');
   const camposAcc = document.getElementById('np-campos-accesorio');
   const camposCel = document.getElementById('np-campos-celular');
-  segAcc.onclick = () => { tipo = 'ACCESORIO'; segAcc.classList.add('activo'); segCel.classList.remove('activo'); camposAcc.classList.remove('oculto'); camposCel.classList.add('oculto'); };
-  segCel.onclick = () => { tipo = 'CELULAR'; segCel.classList.add('activo'); segAcc.classList.remove('activo'); camposCel.classList.remove('oculto'); camposAcc.classList.add('oculto'); };
+
+  // El selector de categoría solo muestra las del tipo actual: un Accesorio no debe ver categorías de Celular ni viceversa.
+  // Recuerda la selección de cada tipo por separado, para no perderla al ir y venir entre segmentos.
+  const seleccionPorTipo = {};
+  function renderCategorias() {
+    const sel = document.getElementById('np-categoria');
+    const delTipo = categorias.filter(c => c.tipo === tipo);
+    sel.innerHTML = delTipo.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías de este tipo</option>';
+    if (seleccionPorTipo[tipo] && delTipo.some(c => c.nombre === seleccionPorTipo[tipo])) {
+      sel.value = seleccionPorTipo[tipo];
+    }
+    sel.onchange = () => { seleccionPorTipo[tipo] = sel.value; };
+  }
+  renderCategorias();
+
+  segAcc.onclick = () => { seleccionPorTipo[tipo] = document.getElementById('np-categoria').value; tipo = 'ACCESORIO'; segAcc.classList.add('activo'); segCel.classList.remove('activo'); camposAcc.classList.remove('oculto'); camposCel.classList.add('oculto'); renderCategorias(); };
+  segCel.onclick = () => { seleccionPorTipo[tipo] = document.getElementById('np-categoria').value; tipo = 'CELULAR'; segCel.classList.add('activo'); segAcc.classList.remove('activo'); camposCel.classList.remove('oculto'); camposAcc.classList.add('oculto'); renderCategorias(); };
 
   document.getElementById('np-nueva-categoria').onclick = () => {
     const contCat = document.getElementById('np-categoria-form');
@@ -1474,12 +1489,11 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       e.target.disabled = true;
       try {
         const nueva = await api('POST', '/api/categorias', {
-          nombreCat, codigo: document.getElementById('nc-codigo').value.trim() || null,
+          nombreCat, tipo, codigo: document.getElementById('nc-codigo').value.trim() || null,
         });
         categorias.push(nueva);
-        const sel = document.getElementById('np-categoria');
-        sel.insertAdjacentHTML('beforeend', `<option value="${escapar(nueva.nombre)}">${escapar(nueva.nombre)}</option>`);
-        sel.value = nueva.nombre;
+        seleccionPorTipo[tipo] = nueva.nombre;
+        renderCategorias();
         contCat.classList.add('oculto');
         mostrarMensaje(root, `Categoría "${nueva.nombre}" creada.`, 'ok');
       } catch (err) {

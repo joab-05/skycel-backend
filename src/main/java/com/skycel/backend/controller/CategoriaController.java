@@ -23,12 +23,12 @@ public class CategoriaController {
 
     private final CategoriaService categoriaService;
 
-    @Operation(summary = "Listar categorías activas")
+    @Operation(summary = "Listar categorías activas", description = "Con tipo, solo las de ese tipo (CELULAR, ACCESORIO, SERVICIO, TABLET).")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<CategoriaResponseDTO>> listar() {
-        return ResponseEntity.ok(categoriaService.listarActivas());
+    public ResponseEntity<List<CategoriaResponseDTO>> listar(@RequestParam(required = false) String tipo) {
+        return ResponseEntity.ok(categoriaService.listarActivas(tipo));
     }
 
     @Operation(summary = "Crear categoría o subcategoría")
