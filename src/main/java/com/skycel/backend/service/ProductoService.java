@@ -3,6 +3,7 @@ package com.skycel.backend.service;
 import com.skycel.backend.domain.dto.request.*;
 import com.skycel.backend.domain.dto.response.*;
 import com.skycel.backend.domain.entity.*;
+import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.domain.mapper.ProductoMapper;
 import com.skycel.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -119,10 +120,10 @@ public class ProductoService {
         } else {
             // Resolver tipo de producto primero — decide cómo se arma el nombre y qué
             // campos (marca/modelo vs descripción/descripción2) aplican.
-            com.skycel.backend.domain.enums.TipoProducto tipo = com.skycel.backend.domain.enums.TipoProducto.ACCESORIO;
+            TipoProducto tipo = TipoProducto.ACCESORIO;
             if (dto.getTipoMaster() != null) {
                 try {
-                    tipo = com.skycel.backend.domain.enums.TipoProducto.valueOf(dto.getTipoMaster().toUpperCase().trim());
+                    tipo = TipoProducto.valueOf(dto.getTipoMaster().toUpperCase().trim());
                 } catch (IllegalArgumentException e) {
                     // ignorar, se queda el default
                 }
@@ -131,7 +132,7 @@ public class ProductoService {
             String nombreComputado = construirNombreBase(tipo, dto);
             if (nombreComputado == null || nombreComputado.isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        tipo == com.skycel.backend.domain.enums.TipoProducto.CELULAR
+                        esEquipoConImei(tipo)
                                 ? "Debes indicar marca y modelo para registrar un equipo."
                                 : "Debes indicar una descripción para registrar el producto.");
             }
@@ -141,7 +142,7 @@ public class ProductoService {
                 master = existingMaster.get();
             } else {
                 // Resolver categoría (para ACCESORIO/SERVICIO, esta ES el "Tipo 2") — solo entre las de este mismo tipo
-                final com.skycel.backend.domain.enums.TipoProducto tipoFinal = tipo;
+                final TipoProducto tipoFinal = tipo;
                 Categoria cat = null;
                 if (dto.getCategoriaMaster() != null) {
                     cat = categoriaRepository.findAll().stream()
@@ -154,8 +155,8 @@ public class ProductoService {
                                     "No hay ninguna categoría de tipo " + tipoFinal + " registrada en el sistema."));
                 }
 
-                boolean esEquipo = tipo == com.skycel.backend.domain.enums.TipoProducto.CELULAR;
-                boolean esServicio = tipo == com.skycel.backend.domain.enums.TipoProducto.SERVICIO;
+                boolean esEquipo = esEquipoConImei(tipo);
+                boolean esServicio = tipo == TipoProducto.SERVICIO;
 
                 master = ProductoMaster.builder()
                         .nombreBase(nombreComputado)
@@ -199,12 +200,12 @@ public class ProductoService {
 
         // Validaciones especiales por tipo de producto
         List<UnidadEquipoDTO> unidades = List.of();
-        if (master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR) {
+        if (esEquipoConImei(master.getTipo())) {
             unidades = unidadesDe(dto.getImeis(), dto.getUnidades());
             BigDecimal stock = dto.getStock() != null ? dto.getStock() : BigDecimal.ZERO;
             int cantidad = stock.intValue();
             if (stock.compareTo(BigDecimal.valueOf(cantidad)) != 0 || cantidad < 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El stock para celulares debe ser un número entero no negativo.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El stock para equipos debe ser un número entero no negativo.");
             }
             if (cantidad > 0) {
                 if (unidades.size() != cantidad) {
@@ -335,7 +336,7 @@ public class ProductoService {
         BigDecimal stockActual = p.getStock() != null ? p.getStock() : BigDecimal.ZERO;
         BigDecimal cantidad    = dto.getCantidad() != null ? dto.getCantidad() : BigDecimal.ZERO;
 
-        if (tipoProd == com.skycel.backend.domain.enums.TipoProducto.CELULAR) {
+        if (esEquipoConImei(tipoProd)) {
             int cantInt = cantidad.intValue();
             if (cantidad.compareTo(BigDecimal.valueOf(cantInt)) != 0 || cantInt < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidad para celulares debe ser un número entero no negativo.");
@@ -548,7 +549,7 @@ public class ProductoService {
         dto.setStockMinimo(minimo);
         dto.setBajoStock(!esServicio && minimo.signum() > 0 && stock.compareTo(minimo) <= 0);
 
-        if (p.getProductoMaster() != null && p.getProductoMaster().getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR) {
+        if (p.getProductoMaster() != null && esEquipoConImei(p.getProductoMaster().getTipo())) {
             List<ImeiInfoDTO> availableImeis = productoImeiRepository.findByProducto_IdproductoAndEstado(p.getIdproducto(), "DISPONIBLE")
                     .stream()
                     .map(pi -> toImeiInfo(pi, p))
@@ -666,17 +667,22 @@ public class ProductoService {
      *   SERVICIO: "{descripcion} — {descripcion2}" ej. "Cambio de Pantalla — Samsung A56 5G"
      *   ACCESORIO/otros: "{descripcion}"       ej. "AirPods Pro 2 Gen"
      */
-    private String construirNombreBase(com.skycel.backend.domain.enums.TipoProducto tipo, ProductoRequestDTO dto) {
+    /** CELULAR y TABLET son "equipos": marca/modelo en vez de descripción, y unidades por IMEI/serie. */
+    private boolean esEquipoConImei(TipoProducto tipo) {
+        return tipo == TipoProducto.CELULAR || tipo == TipoProducto.TABLET;
+    }
+
+    private String construirNombreBase(TipoProducto tipo, ProductoRequestDTO dto) {
         if (dto.getNombreMaster() != null && !dto.getNombreMaster().isBlank()) {
             return dto.getNombreMaster().trim();
         }
-        if (tipo == com.skycel.backend.domain.enums.TipoProducto.CELULAR) {
+        if (esEquipoConImei(tipo)) {
             String marca = dto.getMarca() != null ? dto.getMarca().trim() : "";
             String modelo = dto.getModelo() != null ? dto.getModelo().trim() : "";
             return (marca + " " + modelo).trim();
         }
         String descripcion = dto.getDescripcion() != null ? dto.getDescripcion().trim() : "";
-        if (tipo == com.skycel.backend.domain.enums.TipoProducto.SERVICIO
+        if (tipo == TipoProducto.SERVICIO
                 && dto.getDescripcion2() != null && !dto.getDescripcion2().isBlank()) {
             return descripcion + " — " + dto.getDescripcion2().trim();
         }

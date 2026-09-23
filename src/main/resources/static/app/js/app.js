@@ -1327,7 +1327,7 @@ async function pantallaReportes() {
 
 // ── Inventario ───────────────────────────────────────────────────────────
 
-const TIPO_ICONO = { CELULAR: '📱', ACCESORIO: '🎧', SERVICIO: '🛠️' };
+const TIPO_ICONO = { CELULAR: '📱', TABLET: '📱', ACCESORIO: '🎧', SERVICIO: '🛠️' };
 
 async function pantallaInventario() {
   const s = Sesion.obtener();
@@ -1417,7 +1417,8 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       <h2 style="margin-top:0;">Nuevo producto</h2>
       <div class="segmentado">
         <button id="np-seg-accesorio" class="activo">Accesorio</button>
-        <button id="np-seg-celular">Celular</button>
+        <button id="np-seg-equipo">Equipo</button>
+        <button id="np-seg-servicio">Servicio</button>
       </div>
       <div id="np-campos-accesorio">
         <label class="obligatorio">Descripción</label>
@@ -1427,13 +1428,25 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
         <label class="obligatorio">Stock inicial</label>
         <input id="np-stock" type="number" inputmode="decimal" min="0" step="1" value="1">
       </div>
-      <div id="np-campos-celular" class="oculto">
+      <div id="np-campos-equipo" class="oculto">
+        <div class="segmentado">
+          <button id="np-sub-celular" class="activo">Celular</button>
+          <button id="np-sub-tablet">Tablet</button>
+        </div>
         <label class="obligatorio">Marca</label>
         <input id="np-marca" placeholder="Samsung, Apple...">
         <label class="obligatorio">Modelo</label>
         <input id="np-modelo" placeholder="A54, iPhone 13...">
         <label class="obligatorio">IMEIs (uno por línea)</label>
         <textarea id="np-imeis" placeholder="Un IMEI o serie por línea. El stock inicial es la cantidad que captures aquí."></textarea>
+      </div>
+      <div id="np-campos-servicio" class="oculto">
+        <label class="obligatorio">Nombre del servicio</label>
+        <input id="np-servicio-nombre" placeholder="Cambio de Pantalla">
+        <label>Equipo al que aplica</label>
+        <input id="np-servicio-equipo" placeholder="Opcional, ej. Samsung A56 5G">
+        <label>Minutos estimados</label>
+        <input id="np-servicio-tiempo" type="number" inputmode="numeric" min="0" placeholder="Opcional">
       </div>
       <label class="obligatorio">Categoría</label>
       <div class="fila">
@@ -1450,16 +1463,33 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       <button id="np-guardar" class="btn btn-verde">Guardar producto</button>
     </div>`;
 
-  let tipo = 'ACCESORIO';
+  let grupo = 'ACCESORIO'; // ACCESORIO | EQUIPO | SERVICIO
+  let subEquipo = 'CELULAR'; // CELULAR | TABLET, solo aplica cuando grupo === 'EQUIPO'
+  const tipoActual = () => grupo === 'EQUIPO' ? subEquipo : grupo;
+
   const segAcc = document.getElementById('np-seg-accesorio');
-  const segCel = document.getElementById('np-seg-celular');
+  const segEquipo = document.getElementById('np-seg-equipo');
+  const segServicio = document.getElementById('np-seg-servicio');
   const camposAcc = document.getElementById('np-campos-accesorio');
-  const camposCel = document.getElementById('np-campos-celular');
+  const camposEquipo = document.getElementById('np-campos-equipo');
+  const camposServicio = document.getElementById('np-campos-servicio');
+  const subCelular = document.getElementById('np-sub-celular');
+  const subTablet = document.getElementById('np-sub-tablet');
+
+  function mostrarGrupo() {
+    camposAcc.classList.toggle('oculto', grupo !== 'ACCESORIO');
+    camposEquipo.classList.toggle('oculto', grupo !== 'EQUIPO');
+    camposServicio.classList.toggle('oculto', grupo !== 'SERVICIO');
+    segAcc.classList.toggle('activo', grupo === 'ACCESORIO');
+    segEquipo.classList.toggle('activo', grupo === 'EQUIPO');
+    segServicio.classList.toggle('activo', grupo === 'SERVICIO');
+  }
 
   // El selector de categoría solo muestra las del tipo actual: un Accesorio no debe ver categorías de Celular ni viceversa.
   // Recuerda la selección de cada tipo por separado, para no perderla al ir y venir entre segmentos.
   const seleccionPorTipo = {};
   function renderCategorias() {
+    const tipo = tipoActual();
     const sel = document.getElementById('np-categoria');
     const delTipo = categorias.filter(c => c.tipo === tipo);
     sel.innerHTML = delTipo.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías de este tipo</option>';
@@ -1470,8 +1500,25 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   }
   renderCategorias();
 
-  segAcc.onclick = () => { seleccionPorTipo[tipo] = document.getElementById('np-categoria').value; tipo = 'ACCESORIO'; segAcc.classList.add('activo'); segCel.classList.remove('activo'); camposAcc.classList.remove('oculto'); camposCel.classList.add('oculto'); renderCategorias(); };
-  segCel.onclick = () => { seleccionPorTipo[tipo] = document.getElementById('np-categoria').value; tipo = 'CELULAR'; segCel.classList.add('activo'); segAcc.classList.remove('activo'); camposCel.classList.remove('oculto'); camposAcc.classList.add('oculto'); renderCategorias(); };
+  const cambiarGrupo = (nuevo) => {
+    seleccionPorTipo[tipoActual()] = document.getElementById('np-categoria').value;
+    grupo = nuevo;
+    mostrarGrupo();
+    renderCategorias();
+  };
+  segAcc.onclick = () => cambiarGrupo('ACCESORIO');
+  segEquipo.onclick = () => cambiarGrupo('EQUIPO');
+  segServicio.onclick = () => cambiarGrupo('SERVICIO');
+
+  const cambiarSubEquipo = (nuevo) => {
+    seleccionPorTipo[tipoActual()] = document.getElementById('np-categoria').value;
+    subEquipo = nuevo;
+    subCelular.classList.toggle('activo', subEquipo === 'CELULAR');
+    subTablet.classList.toggle('activo', subEquipo === 'TABLET');
+    renderCategorias();
+  };
+  subCelular.onclick = () => cambiarSubEquipo('CELULAR');
+  subTablet.onclick = () => cambiarSubEquipo('TABLET');
 
   document.getElementById('np-nueva-categoria').onclick = () => {
     const contCat = document.getElementById('np-categoria-form');
@@ -1488,6 +1535,7 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       if (!nombreCat) { mostrarMensaje(root, 'Indica el nombre de la categoría.', 'error'); return; }
       e.target.disabled = true;
       try {
+        const tipo = tipoActual();
         const nueva = await api('POST', '/api/categorias', {
           nombreCat, tipo, codigo: document.getElementById('nc-codigo').value.trim() || null,
         });
@@ -1511,14 +1559,14 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
     if (!precioVenta || precioVenta <= 0) { mostrarMensaje(root, 'Indica el precio de venta.', 'error'); return; }
 
     const payload = {
-      tipoMaster: tipo,
+      tipoMaster: tipoActual(),
       categoriaMaster,
       codti: obtenerCodti(),
       precioCompra,
       precioVenta,
       diasGarantia: document.getElementById('np-garantia').value ? Number(document.getElementById('np-garantia').value) : null,
     };
-    if (tipo === 'CELULAR') {
+    if (grupo === 'EQUIPO') {
       const marca = document.getElementById('np-marca').value.trim();
       const modelo = document.getElementById('np-modelo').value.trim();
       const imeis = document.getElementById('np-imeis').value.split('\n').map(s => s.trim()).filter(Boolean);
@@ -1528,6 +1576,13 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       payload.modelo = modelo;
       payload.imeis = imeis;
       payload.stock = imeis.length;
+    } else if (grupo === 'SERVICIO') {
+      const nombreServicio = document.getElementById('np-servicio-nombre').value.trim();
+      if (!nombreServicio) { mostrarMensaje(root, 'Indica el nombre del servicio.', 'error'); return; }
+      payload.descripcion = nombreServicio;
+      payload.descripcion2 = document.getElementById('np-servicio-equipo').value.trim() || null;
+      payload.tiempoEstimadoMin = document.getElementById('np-servicio-tiempo').value ? Number(document.getElementById('np-servicio-tiempo').value) : null;
+      payload.stock = 0;
     } else {
       const descripcion = document.getElementById('np-descripcion').value.trim();
       const stock = Number(document.getElementById('np-stock').value);
