@@ -66,6 +66,18 @@ def desenvolver(j):
     return j['data'] if isinstance(j, dict) and 'data' in j and 'success' in j else j
 
 
+def leer_credenciales(ruta):
+    """Archivo de 2 líneas: usuario y contraseña, con o sin etiqueta ("usuario: x"). Nunca se imprimen."""
+    import re
+    lineas = [l.strip() for l in open(ruta, encoding='utf-8-sig').read().splitlines() if l.strip()]
+    if len(lineas) < 2: sys.exit('El archivo de credenciales debe tener el usuario en la línea 1 y la contraseña en la línea 2.')
+    valores = []
+    for l in lineas[:2]:
+        m = re.match(r'^[^\W\d_]{3,15}\s*[:=]\s*(.+)$', l)      # etiqueta de solo letras seguida de : o =
+        valores.append(m.group(1).strip() if m else l)
+    return valores[0], valores[1]
+
+
 def mensaje(j):
     if isinstance(j, dict):
         return str(j.get('description') or j.get('message') or j.get('title') or j.get('detail') or j)[:300]
@@ -171,8 +183,9 @@ def aplicar_nombres(plan, ruta_xlsx):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--url', required=True); ap.add_argument('--usuario', required=True)
+    ap.add_argument('--url', required=True); ap.add_argument('--usuario')
     ap.add_argument('--password-file', help='archivo con la contraseña en la primera línea')
+    ap.add_argument('--credenciales', help='archivo de 2 líneas: usuario y contraseña')
     ap.add_argument('--plan', required=True); ap.add_argument('--nombres')
     ap.add_argument('--tienda', type=int, help='solo esta tienda (código VIEJO)'); ap.add_argument('--limite', type=int)
     ap.add_argument('--solo-catalogos', action='store_true'); ap.add_argument('--progreso', default='progreso_carga.json')
@@ -181,6 +194,8 @@ def main():
 
     pw = os.environ.get('SKYCEL_PASSWORD')
     if a.password_file: pw = open(a.password_file, encoding='utf-8').readline().strip()
+    if a.credenciales: a.usuario, pw = leer_credenciales(a.credenciales)
+    if not a.usuario: sys.exit('Indique --usuario o --credenciales.')
     if not pw: pw = getpass.getpass('Contraseña: ')
     plan = json.load(open(a.plan, encoding='utf-8'))
     if a.nombres: print(f'Nombres corregidos aplicados: {aplicar_nombres(plan, a.nombres)}')

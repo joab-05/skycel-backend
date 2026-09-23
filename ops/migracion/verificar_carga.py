@@ -10,16 +10,18 @@ Termina con código 0 solo si no hay diferencias.
 """
 import argparse, collections, json, os, sys, getpass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cargar_inventario import Api, MAPA_TIENDAS, TIPOS_EQUIPO, mensaje, aplicar_nombres
+from cargar_inventario import Api, MAPA_TIENDAS, TIPOS_EQUIPO, mensaje, aplicar_nombres, leer_credenciales
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--url', required=True); ap.add_argument('--usuario', required=True)
-    ap.add_argument('--password-file'); ap.add_argument('--plan', required=True); ap.add_argument('--nombres'); ap.add_argument('--tienda', type=int)
+    ap.add_argument('--url', required=True); ap.add_argument('--usuario')
+    ap.add_argument('--credenciales'); ap.add_argument('--password-file'); ap.add_argument('--plan', required=True); ap.add_argument('--nombres'); ap.add_argument('--tienda', type=int)
     a = ap.parse_args()
     pw = os.environ.get('SKYCEL_PASSWORD')
     if a.password_file: pw = open(a.password_file, encoding='utf-8').readline().strip()
+    if a.credenciales: a.usuario, pw = leer_credenciales(a.credenciales)
+    if not a.usuario: sys.exit('Indique --usuario o --credenciales.')
     if not pw: pw = getpass.getpass('Contraseña: ')
     datos = json.load(open(a.plan, encoding='utf-8'))
     if a.nombres: aplicar_nombres(datos, a.nombres)

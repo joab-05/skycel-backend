@@ -138,6 +138,17 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <!-- El jar NO debe llevar secrets.yml (credenciales locales de desarrollo). En el servidor las da el
+                 servicio por variables de entorno; en desarrollo se sigue leyendo de target/classes. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>secrets.yml</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
             <!-- Compiler Plugin for MapStruct + Lombok Integration -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
