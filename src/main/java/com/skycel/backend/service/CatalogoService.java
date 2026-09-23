@@ -189,6 +189,15 @@ public class CatalogoService {
         return catalogoMapper.toColorResponse(colorRepository.save(catalogoMapper.toColorEntity(dto)));
     }
 
+    /** Siembra la magnitud base ("Pieza") si no hay ninguna — sin al menos una, dar de alta cualquier producto falla. */
+    @Transactional
+    public void asegurarMagnitudBase() {
+        if (magnitudRepository.count() == 0) {
+            magnitudRepository.save(Magnitud.builder()
+                    .nombre("Pieza").abreviatura("Pza").criterio((short) 0).activo(true).build());
+        }
+    }
+
     @CacheEvict(value = "magnitudesCache", allEntries = true)
     @Transactional
     public MagnitudResponseDTO crearMagnitud(MagnitudRequestDTO dto) {
