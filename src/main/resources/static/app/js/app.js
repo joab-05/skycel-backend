@@ -1365,7 +1365,7 @@ async function pantallaInventario() {
   if (SUPERIOR.includes(s.rol)) {
     contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="iv-codti"><option>Cargando...</option></select>`;
     try {
-      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const tiendas = await api('GET', '/api/tiendas'); // incluye el almacén: ahí se da de alta la mercancía antes de traspasarla a tiendas
       const sel = document.getElementById('iv-codti');
       sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
       codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
