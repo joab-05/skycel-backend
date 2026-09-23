@@ -557,15 +557,17 @@ public class TraspasoService {
     }
 
     /**
-     * El producto equivalente en la tienda destino (mismo maestro y color); si no lo tiene, se crea con los datos
-     * del origen. Conserva el código del origen: un artículo lleva el mismo código en todas las sucursales.
+     * El producto de la tienda destino con el MISMO CÓDIGO que el del origen; si no lo tiene, se crea con los datos
+     * del origen y ese mismo código. El código es la identidad del artículo (es el que trae la etiqueta pegada al
+     * producto y el que se escanea en la venta), así que nunca se mezcla con otro código aunque sea el mismo modelo
+     * y color, ni cambia al pasar de una sucursal a otra.
      */
     private Producto productoEnDestino(Producto enOrigen, Tienda destino) {
-        return productoRepository
-                .findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(enOrigen.getProductoMaster().getIdprodmaster(), destino.getCodti())
-                .stream()
-                .filter(p -> Objects.equals(idColorDe(enOrigen), idColorDe(p)))
-                .findFirst()
+        return productoRepository.findByCodproAndTienda_Codti(enOrigen.getCodpro(), destino.getCodti())
+                .map(p -> {
+                    p.setActivo(true);   // si la tienda lo había dado de baja, vuelve a existir al llegar mercancía
+                    return p;
+                })
                 .orElseGet(() -> productoRepository.save(Producto.builder()
                         .codpro(enOrigen.getCodpro())
                         .tienda(destino)
@@ -582,10 +584,6 @@ public class TraspasoService {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private Short idColorDe(Producto p) {
-        return p.getColor() != null ? p.getColor().getIdcolor() : null;
-    }
 
     private Traspaso obtenerActivo(Integer id) {
         Traspaso t = traspasoRepository.findById(id)

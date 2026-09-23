@@ -340,29 +340,43 @@ class TraspasoServiceTest {
         }
 
         @Test
-        @DisplayName("si la tienda destino ya tiene ese producto (mismo maestro y color), le suma el stock")
+        @DisplayName("si la tienda destino ya tiene ese código, le suma el stock y no crea otro producto")
         void sumaAlProductoExistente() {
             stock("ACC-000001", almacen, accesorio, "40", negro);
-            Producto yaTenia = stock("ACC-000050", zocalo, accesorio, "5", negro);
+            Producto yaTenia = stock("ACC-000001", zocalo, accesorio, "5", negro);
             int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "15")), "root").getIdtraspaso();
 
             service.recibir(id, "abigail");
 
             assertThat(yaTenia.getStock()).isEqualByComparingTo("20");
-            assertThat(productos).noneMatch(p -> p.getTienda().equals(zocalo) && p.getCodpro().equals("ACC-000001"));
+            assertThat(productos).filteredOn(p -> p.getTienda().equals(zocalo) && p.getCodpro().equals("ACC-000001")).hasSize(1);
         }
 
         @Test
-        @DisplayName("un producto de otro color en la destino no se mezcla: se crea el suyo")
-        void otroColorNoSeMezcla() {
+        @DisplayName("otro código en la destino no se mezcla aunque sea el mismo modelo y color: se crea el del código que llegó")
+        void otroCodigoNoSeMezcla() {
             stock("ACC-000001", almacen, accesorio, "40", negro);
-            Producto azulDestino = stock("ACC-000050", zocalo, accesorio, "5", azul);
+            Producto otroCodigo = stock("ACC-000050", zocalo, accesorio, "5", negro);   // mismo maestro y color, otra etiqueta
             int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "15")), "root").getIdtraspaso();
 
             service.recibir(id, "abigail");
 
-            assertThat(azulDestino.getStock()).isEqualByComparingTo("5");
+            assertThat(otroCodigo.getStock()).isEqualByComparingTo("5");
             assertThat(enTienda("ACC-000001", zocalo).getStock()).isEqualByComparingTo("15");
+        }
+
+        @Test
+        @DisplayName("si la destino había dado de baja ese código, al llegar mercancía vuelve a estar activo")
+        void reactivaElProductoDadoDeBaja() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            Producto baja = stock("ACC-000001", zocalo, accesorio, "0", negro);
+            baja.setActivo(false);
+            int id = service.crearEnvio(envio(1, 2, linea("ACC-000001", "15")), "root").getIdtraspaso();
+
+            service.recibir(id, "abigail");
+
+            assertThat(baja.getActivo()).isTrue();
+            assertThat(baja.getStock()).isEqualByComparingTo("15");
         }
 
         @Test
