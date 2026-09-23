@@ -1429,10 +1429,6 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
         <input id="np-stock" type="number" inputmode="decimal" min="0" step="1" value="1">
       </div>
       <div id="np-campos-equipo" class="oculto">
-        <div class="segmentado">
-          <button id="np-sub-celular" class="activo">Celular</button>
-          <button id="np-sub-tablet">Tablet</button>
-        </div>
         <label class="obligatorio">Marca</label>
         <input id="np-marca" placeholder="Samsung, Apple...">
         <label class="obligatorio">Modelo</label>
@@ -1464,8 +1460,6 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
     </div>`;
 
   let grupo = 'ACCESORIO'; // ACCESORIO | EQUIPO | SERVICIO
-  let subEquipo = 'CELULAR'; // CELULAR | TABLET, solo aplica cuando grupo === 'EQUIPO'
-  const tipoActual = () => grupo === 'EQUIPO' ? subEquipo : grupo;
 
   const segAcc = document.getElementById('np-seg-accesorio');
   const segEquipo = document.getElementById('np-seg-equipo');
@@ -1473,8 +1467,6 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   const camposAcc = document.getElementById('np-campos-accesorio');
   const camposEquipo = document.getElementById('np-campos-equipo');
   const camposServicio = document.getElementById('np-campos-servicio');
-  const subCelular = document.getElementById('np-sub-celular');
-  const subTablet = document.getElementById('np-sub-tablet');
 
   function mostrarGrupo() {
     camposAcc.classList.toggle('oculto', grupo !== 'ACCESORIO');
@@ -1485,23 +1477,29 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
     segServicio.classList.toggle('activo', grupo === 'SERVICIO');
   }
 
-  // El selector de categoría solo muestra las del tipo actual: un Accesorio no debe ver categorías de Celular ni viceversa.
-  // Recuerda la selección de cada tipo por separado, para no perderla al ir y venir entre segmentos.
-  const seleccionPorTipo = {};
+  // El selector de categoría solo muestra las del grupo actual: un Accesorio no debe ver categorías de Equipo ni
+  // viceversa. Equipo junta Celular y Tablet en una sola lista — cuál de los dos es se decide por la categoría
+  // elegida (cada una ya sabe si es Celular o Tablet), no por otro control aparte.
+  // Recuerda la selección de cada grupo por separado, para no perderla al ir y venir entre segmentos.
+  const seleccionPorGrupo = {};
+  function categoriasDelGrupo() {
+    return grupo === 'EQUIPO'
+      ? categorias.filter(c => c.tipo === 'CELULAR' || c.tipo === 'TABLET')
+      : categorias.filter(c => c.tipo === grupo);
+  }
   function renderCategorias() {
-    const tipo = tipoActual();
     const sel = document.getElementById('np-categoria');
-    const delTipo = categorias.filter(c => c.tipo === tipo);
-    sel.innerHTML = delTipo.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías de este tipo</option>';
-    if (seleccionPorTipo[tipo] && delTipo.some(c => c.nombre === seleccionPorTipo[tipo])) {
-      sel.value = seleccionPorTipo[tipo];
+    const delGrupo = categoriasDelGrupo();
+    sel.innerHTML = delGrupo.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías de este tipo</option>';
+    if (seleccionPorGrupo[grupo] && delGrupo.some(c => c.nombre === seleccionPorGrupo[grupo])) {
+      sel.value = seleccionPorGrupo[grupo];
     }
-    sel.onchange = () => { seleccionPorTipo[tipo] = sel.value; };
+    sel.onchange = () => { seleccionPorGrupo[grupo] = sel.value; };
   }
   renderCategorias();
 
   const cambiarGrupo = (nuevo) => {
-    seleccionPorTipo[tipoActual()] = document.getElementById('np-categoria').value;
+    seleccionPorGrupo[grupo] = document.getElementById('np-categoria').value;
     grupo = nuevo;
     mostrarGrupo();
     renderCategorias();
@@ -1510,16 +1508,6 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   segEquipo.onclick = () => cambiarGrupo('EQUIPO');
   segServicio.onclick = () => cambiarGrupo('SERVICIO');
 
-  const cambiarSubEquipo = (nuevo) => {
-    seleccionPorTipo[tipoActual()] = document.getElementById('np-categoria').value;
-    subEquipo = nuevo;
-    subCelular.classList.toggle('activo', subEquipo === 'CELULAR');
-    subTablet.classList.toggle('activo', subEquipo === 'TABLET');
-    renderCategorias();
-  };
-  subCelular.onclick = () => cambiarSubEquipo('CELULAR');
-  subTablet.onclick = () => cambiarSubEquipo('TABLET');
-
   document.getElementById('np-nueva-categoria').onclick = () => {
     const contCat = document.getElementById('np-categoria-form');
     contCat.classList.toggle('oculto');
@@ -1527,6 +1515,10 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
     contCat.innerHTML = `
       <label class="obligatorio">Nombre</label>
       <input id="nc-nombre" placeholder="Ej. Cargadores">
+      ${grupo === 'EQUIPO' ? `
+        <label class="obligatorio">Tipo de equipo</label>
+        <select id="nc-tipo-equipo"><option value="CELULAR">Celular</option><option value="TABLET">Tablet</option></select>
+      ` : ''}
       <label>Código corto</label>
       <input id="nc-codigo" placeholder="Opcional, ej. CAR — para el código de sus productos" maxlength="10">
       <button id="nc-guardar" class="btn btn-azul btn-chico">Guardar categoría</button>`;
@@ -1535,12 +1527,12 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       if (!nombreCat) { mostrarMensaje(root, 'Indica el nombre de la categoría.', 'error'); return; }
       e.target.disabled = true;
       try {
-        const tipo = tipoActual();
+        const tipo = grupo === 'EQUIPO' ? document.getElementById('nc-tipo-equipo').value : grupo;
         const nueva = await api('POST', '/api/categorias', {
           nombreCat, tipo, codigo: document.getElementById('nc-codigo').value.trim() || null,
         });
         categorias.push(nueva);
-        seleccionPorTipo[tipo] = nueva.nombre;
+        seleccionPorGrupo[grupo] = nueva.nombre;
         renderCategorias();
         contCat.classList.add('oculto');
         mostrarMensaje(root, `Categoría "${nueva.nombre}" creada.`, 'ok');
@@ -1558,8 +1550,15 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
     if (!precioCompra || precioCompra < 0) { mostrarMensaje(root, 'Indica el precio de compra.', 'error'); return; }
     if (!precioVenta || precioVenta <= 0) { mostrarMensaje(root, 'Indica el precio de venta.', 'error'); return; }
 
+    let tipoMaster = grupo;
+    if (grupo === 'EQUIPO') {
+      const categoriaElegida = categorias.find(c => c.nombre === categoriaMaster);
+      if (!categoriaElegida) { mostrarMensaje(root, 'Selecciona o crea primero una categoría (dice si es Celular o Tablet).', 'error'); return; }
+      tipoMaster = categoriaElegida.tipo;
+    }
+
     const payload = {
-      tipoMaster: tipoActual(),
+      tipoMaster,
       categoriaMaster,
       codti: obtenerCodti(),
       precioCompra,
