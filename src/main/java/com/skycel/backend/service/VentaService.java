@@ -555,7 +555,14 @@ public class VentaService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "No hay stock registrado de '" + master.getNombreBase() + "' en la tienda " + tienda.getCodti());
         }
-        return candidatos.get(0);
+        // Una tienda puede tener el mismo artículo con varios códigos (cada lote trae su etiqueta): sin un código
+        // explícito se vende del primero (el más antiguo) que alcance para la cantidad pedida, no del primero a secas.
+        BigDecimal pedida = d.getCantidad() == null ? BigDecimal.ONE : BigDecimal.valueOf(d.getCantidad());
+        return candidatos.stream()
+                .sorted(java.util.Comparator.comparing(Producto::getIdproducto, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .filter(p -> p.getStock() != null && p.getStock().compareTo(pedida) >= 0)
+                .findFirst()
+                .orElse(candidatos.get(0));
     }
 
     private void aplicarDescuentoStock(LineaResuelta linea, Venta venta, boolean sinConexion) {

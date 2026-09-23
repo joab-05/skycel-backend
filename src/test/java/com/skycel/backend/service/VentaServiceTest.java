@@ -770,6 +770,24 @@ class VentaServiceTest {
         }
 
         @Test
+        @DisplayName("varios códigos del mismo artículo en la tienda: sin código explícito se vende del que tiene stock")
+        void variosCodigos_vendeDelQueTieneStock() {
+            ProductoMaster master = masterAccesorio();
+            Producto agotado = productoAccesorio(master, BigDecimal.ZERO);           // idproducto 20, ACC-0001
+            Producto conStock = productoAccesorio(master, BigDecimal.TEN);
+            conStock.setIdproducto(21);
+            conStock.setCodpro("ACC-0002");
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(agotado, conStock));
+
+            ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 3))), ID_VENDEDOR);
+
+            assertThat(conStock.getStock()).isEqualByComparingTo("7");
+            assertThat(agotado.getStock()).isEqualByComparingTo("0");
+        }
+
+        @Test
         @DisplayName("la caja no pertenece a la tienda indicada: 400")
         void cajaDeOtraTienda_lanzaBadRequest() {
             Tienda otraTienda = Tienda.builder().codti(2).nombre("Sucursal Norte").build();
