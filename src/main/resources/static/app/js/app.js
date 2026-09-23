@@ -186,6 +186,7 @@ document.getElementById('btn-salir').onclick = () => {
   navegar('#/login');
 };
 document.getElementById('btn-ajustes').onclick = () => navegar('#/ajustes');
+document.getElementById('btn-notificaciones').onclick = () => navegar('#/notificaciones');
 
 // ── Router ────────────────────────────────────────────────────────────────
 
@@ -224,6 +225,7 @@ async function render() {
     if (ruta === 'devoluciones') return pantallaDevoluciones();
     if (ruta === 'devolucion' && param) return pantallaDevolucionDetalle(param);
     if (ruta === 'ajustes') return pantallaAjustes();
+    if (ruta === 'notificaciones') return pantallaNotificaciones();
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -265,6 +267,7 @@ function pantallaLogin() {
         rol: r.rol, codti: r.codti, tecnicoEncargado: r.tecnicoEncargado,
       });
       navegar('#/menu');
+      actualizarBadgeNotificaciones();
     } catch (err) {
       mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : (err.message || 'Usuario o contraseña incorrectos'), 'error');
       btn.disabled = false;
@@ -2507,6 +2510,79 @@ async function pantallaDevolucionDetalle(id) {
   }
 }
 
+// ── Notificaciones ───────────────────────────────────────────────────────
+
+async function actualizarBadgeNotificaciones() {
+  const badge = document.getElementById('notif-badge');
+  if (!badge) return;
+  const s = Sesion.obtener();
+  if (!s) { badge.classList.add('oculto'); return; }
+  try {
+    const n = await api('GET', '/api/notificaciones/pendientes');
+    if (n > 0) { badge.textContent = n > 9 ? '9+' : String(n); badge.classList.remove('oculto'); }
+    else badge.classList.add('oculto');
+  } catch { /* sin conexión: se deja como estaba */ }
+}
+setInterval(actualizarBadgeNotificaciones, 45000);
+
+async function pantallaNotificaciones() {
+  root.innerHTML = `
+    <h1>🔔 Notificaciones</h1>
+    <div class="segmentado">
+      <button id="nt-seg-pendientes" class="activo">Pendientes</button>
+      <button id="nt-seg-todas">Todas</button>
+    </div>
+    <div class="grupo-botones" style="margin:10px 0;">
+      <button id="nt-marcar-todas" class="btn btn-gris btn-chico">Marcar todas como leídas</button>
+    </div>
+    <div id="nt-lista"><div class="vacio">Cargando...</div></div>`;
+
+  let soloPendientes = true;
+  const segPend = document.getElementById('nt-seg-pendientes');
+  const segTodas = document.getElementById('nt-seg-todas');
+  segPend.onclick = () => { soloPendientes = true; segPend.classList.add('activo'); segTodas.classList.remove('activo'); cargar(); };
+  segTodas.onclick = () => { soloPendientes = false; segTodas.classList.add('activo'); segPend.classList.remove('activo'); cargar(); };
+
+  document.getElementById('nt-marcar-todas').onclick = async (e) => {
+    e.target.disabled = true;
+    try {
+      await api('PATCH', '/api/notificaciones/leer-todas');
+      actualizarBadgeNotificaciones();
+      cargar();
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+    }
+    e.target.disabled = false;
+  };
+
+  async function cargar() {
+    const cont = document.getElementById('nt-lista');
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const lista = await api('GET', '/api/notificaciones' + (soloPendientes ? '' : '?todas=true'));
+      if (lista.length === 0) {
+        cont.innerHTML = `<div class="vacio">${soloPendientes ? 'No tienes notificaciones pendientes.' : 'Sin notificaciones.'}</div>`;
+        return;
+      }
+      cont.innerHTML = lista.map(n => `
+        <div class="notif-item ${n.leida ? '' : 'sin-leer'}" data-id="${n.idnotificacion}" data-ruta="${n.ruta ? escapar(n.ruta) : ''}">
+          <div class="notif-titulo">${!n.leida ? '<span class="notif-punto"></span>' : ''}${escapar(n.titulo)}</div>
+          <div class="ayuda">${formatoFecha(n.fechaCreacion)}</div>
+        </div>`).join('');
+      cont.querySelectorAll('.notif-item').forEach(el => el.onclick = async () => {
+        const id = el.dataset.id;
+        const ruta = el.dataset.ruta;
+        try { await api('PATCH', `/api/notificaciones/${id}/leer`); actualizarBadgeNotificaciones(); } catch { /* si falla, igual navega */ }
+        if (ruta) navegar(ruta);
+        else cargar();
+      });
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+  cargar();
+}
+
 // ── Ajustes ──────────────────────────────────────────────────────────────
 
 function pantallaAjustes() {
@@ -2552,6 +2628,7 @@ function pantallaAjustes() {
 
 Net.iniciar();
 render();
+actualizarBadgeNotificaciones();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

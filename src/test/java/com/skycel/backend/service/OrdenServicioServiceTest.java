@@ -53,6 +53,7 @@ class OrdenServicioServiceTest {
     @Mock private MovimientoCajaService            movimientoCajaService;
     @Mock private VentaService                     ventaService;
     @Mock private ClienteService                   clienteService;
+    @Mock private NotificacionService              notificacionService;
 
     @InjectMocks
     private OrdenServicioService service;

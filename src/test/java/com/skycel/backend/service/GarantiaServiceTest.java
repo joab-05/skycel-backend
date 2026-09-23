@@ -45,6 +45,7 @@ class GarantiaServiceTest {
     @Mock private TiendaRepository            tiendaRepository;
     @Mock private UsuarioRepository           usuarioRepository;
     @Mock private CategoriaFolioRepository    categoriaFolioRepository;
+    @Mock private NotificacionService         notificacionService;
 
     @InjectMocks
     private GarantiaService service;

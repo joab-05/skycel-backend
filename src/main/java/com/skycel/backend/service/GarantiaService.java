@@ -74,6 +74,7 @@ public class GarantiaService {
     private final TiendaRepository            tiendaRepository;
     private final UsuarioRepository           usuarioRepository;
     private final CategoriaFolioRepository    categoriaFolioRepository;
+    private final NotificacionService         notificacionService;
 
     /** Lo que se necesita saber de un producto vendido para reclamarle la garantía. */
     private record Cobertura(Venta venta, Producto producto, ProductoMaster master, String imei, int dias, LocalDate fechaVenta, LocalDate vence) {}
@@ -190,7 +191,11 @@ public class GarantiaService {
         g.setEstadoActual(hacia);
         registrar(g, usuario, trimOrNull(dto.getComentario()) != null ? dto.getComentario().trim()
                 : estadoDisplay(hacia) + (reemplazo != null ? " (equipo nuevo: " + reemplazo + ")" : ""));
-        return toDto(garantiaRepository.save(g));
+        GarantiaResponseDto resultado = toDto(garantiaRepository.save(g));
+        notificacionService.notificarTienda(g.getTienda().getCodti(), "GARANTIA_AVANCE",
+                "Garantía " + g.getFolioSeguimiento() + ": ahora está «" + estadoDisplay(hacia) + "»",
+                "#/garantia/" + g.getIdgarantia());
+        return resultado;
     }
 
     // ── Consultas ────────────────────────────────────────────────────────────

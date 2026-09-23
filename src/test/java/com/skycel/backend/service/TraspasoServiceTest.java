@@ -44,6 +44,7 @@ class TraspasoServiceTest {
     @Mock private ProductoImeiRepository    productoImeiRepository;
     @Mock private ProductoService           productoService;
     @Mock private MovimientoInventarioService movimientoInventarioService;
+    @Mock private NotificacionService       notificacionService;
 
     @InjectMocks
     private TraspasoService service;

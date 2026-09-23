@@ -62,6 +62,7 @@ public class OrdenServicioService {
     private final MovimientoCajaService            movimientoCajaService;
     private final VentaService                     ventaService;
     private final ClienteService                   clienteService;
+    private final NotificacionService              notificacionService;
 
     // ── Recibir el equipo ────────────────────────────────────────────────────
 
@@ -132,6 +133,9 @@ public class OrdenServicioService {
                 .fechaIngreso(fechaRecepcion)
                 .build());
         registrar(orden, usuario, (orden.getFolioLocal() != null ? "Equipo recibido sin conexión (" + orden.getFolioLocal() + ")" : "Equipo recibido") + (tecnico != null ? ". Técnico asignado: " + tecnico.getNombreCompleto() : ""));
+        notificacionService.notificarRol(Rol.TECNICO, "ORDEN_NUEVA",
+                "Nuevo equipo en el taller: " + orden.getMarca() + " " + orden.getModelo() + " (" + orden.getFolio() + ")",
+                "#/orden/" + orden.getIdorden());
 
         if (dto.getLineas() != null) {
             for (OrdenLineaRequestDto l : dto.getLineas()) nuevaLinea(orden, l, usuario);
@@ -270,7 +274,9 @@ public class OrdenServicioService {
         }
         orden.setEstado(EN_REPARACION);
         registrar(orden, usuario, "Reparación iniciada");
-        return toDto(ordenRepository.save(orden));
+        OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
+        notificarCambioOrden(orden, "Se inició la reparación");
+        return resultado;
     }
 
     /** La reparación terminó: el equipo queda listo para entregar. Exige renglones y refacciones con stock. */
@@ -298,7 +304,9 @@ public class OrdenServicioService {
         orden.setEstado(LISTA);
         orden.setFechaLista(LocalDateTime.now());
         registrar(orden, usuario, "Equipo listo para entrega");
-        return toDto(ordenRepository.save(orden));
+        OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
+        notificarCambioOrden(orden, "El equipo ya está listo para entrega");
+        return resultado;
     }
 
     /** Vuelve a reparación una orden ya marcada como lista (p. ej. el cliente detectó otra falla). */
@@ -311,7 +319,9 @@ public class OrdenServicioService {
         orden.setEstado(EN_REPARACION);
         orden.setFechaLista(null);
         registrar(orden, usuario, "Reabierta: " + dto.getComentario().trim());
-        return toDto(ordenRepository.save(orden));
+        OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
+        notificarCambioOrden(orden, "Se reabrió la reparación: " + dto.getComentario().trim());
+        return resultado;
     }
 
     // ── Dinero ───────────────────────────────────────────────────────────────
@@ -381,7 +391,9 @@ public class OrdenServicioService {
         }
         registrar(orden, usuario, "Equipo entregado. Venta #" + creada.getIdventa() + ", saldo cobrado $" + saldo
                 + (dias > 0 ? ". Garantía hasta " + orden.getFechaGarantiaHasta() : ""));
-        return toDto(ordenRepository.save(orden));
+        OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
+        notificarCambioOrden(orden, "El equipo fue entregado");
+        return resultado;
     }
 
     @Transactional
@@ -404,7 +416,15 @@ public class OrdenServicioService {
         orden.setMotivoCancelacion(dto.getMotivo().trim());
         registrar(orden, usuario, "Cancelada: " + dto.getMotivo().trim()
                 + (devuelto.signum() > 0 ? ". Anticipo devuelto en efectivo: $" + devuelto : ""));
-        return toDto(ordenRepository.save(orden));
+        OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
+        notificarCambioOrden(orden, "Se canceló: " + dto.getMotivo().trim());
+        return resultado;
+    }
+
+    private void notificarCambioOrden(OrdenServicio orden, String mensaje) {
+        notificacionService.notificarTienda(orden.getTienda().getCodti(), "ORDEN_AVANCE",
+                "Orden " + orden.getFolio() + " (" + orden.getMarca() + " " + orden.getModelo() + "): " + mensaje,
+                "#/orden/" + orden.getIdorden());
     }
 
     // ── Consultas ────────────────────────────────────────────────────────────

@@ -61,6 +61,7 @@ html, body {
 .encabezado .subtitulo { font-size: 12px; color: #94a3b8; }
 .encabezado-acciones { display: flex; align-items: center; gap: 8px; }
 .btn-icono {
+  position: relative;
   background: rgba(255,255,255,0.12);
   border: none;
   color: white;
@@ -69,6 +70,19 @@ html, body {
   font-size: 16px;
   cursor: pointer;
 }
+.notif-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: var(--rojo); color: white; font-size: 10px; font-weight: 700;
+  min-width: 16px; height: 16px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 3px; border: 2px solid var(--oscuro);
+}
+
+/* ── Notificaciones ────────────────────────────────────────────────────── */
+.notif-item { background: white; border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
+.notif-item.sin-leer { border-left: 3px solid var(--azul); }
+.notif-titulo { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.notif-punto { width: 8px; height: 8px; border-radius: 50%; background: var(--azul); flex: 0 0 auto; }
 
 /* ── Layout general ────────────────────────────────────────────────────── */
 main {

@@ -58,6 +58,7 @@ public class TraspasoService {
     private final ProductoImeiRepository    productoImeiRepository;
     private final ProductoService           productoService;
     private final MovimientoInventarioService movimientoInventarioService;
+    private final NotificacionService       notificacionService;
 
     /** Renglón ya resuelto para despachar: producto de la tienda origen, cantidad y, en equipos, sus IMEI. */
     private record LineaDespacho(String codpro, BigDecimal cantidad, List<String> imeis) {}
@@ -105,6 +106,8 @@ public class TraspasoService {
             if (p.getProductoMaster().getTipo() == TipoProducto.CELULAR) enteroPositivo(l.getCantidad(), codpro);
             detalleRepository.save(TraspasoDetalle.builder().traspaso(solicitud).codpro(codpro).cantidad(l.getCantidad()).build());
         }
+        notificacionService.notificarTienda(surte.getCodti(), "TRASPASO_SOLICITUD",
+                solicitante.getNombre() + " te pidió mercancía (traspaso #" + solicitud.getIdtraspaso() + ")", null);
         return toDto(solicitud);
     }
 
