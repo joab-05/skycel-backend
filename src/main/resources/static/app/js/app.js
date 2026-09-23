@@ -1433,7 +1433,11 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
         <textarea id="np-imeis" placeholder="Un IMEI o serie por línea. El stock inicial es la cantidad que captures aquí."></textarea>
       </div>
       <label class="obligatorio">Categoría</label>
-      <select id="np-categoria">${categorias.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías</option>'}</select>
+      <div class="fila">
+        <select id="np-categoria">${categorias.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías</option>'}</select>
+        <button id="np-nueva-categoria" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+      </div>
+      <div id="np-categoria-form" class="oculto"></div>
       <label class="obligatorio">Precio de compra</label>
       <input id="np-precio-compra" type="number" inputmode="decimal" min="0" step="0.01">
       <label class="obligatorio">Precio de venta</label>
@@ -1450,6 +1454,37 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   const camposCel = document.getElementById('np-campos-celular');
   segAcc.onclick = () => { tipo = 'ACCESORIO'; segAcc.classList.add('activo'); segCel.classList.remove('activo'); camposAcc.classList.remove('oculto'); camposCel.classList.add('oculto'); };
   segCel.onclick = () => { tipo = 'CELULAR'; segCel.classList.add('activo'); segAcc.classList.remove('activo'); camposCel.classList.remove('oculto'); camposAcc.classList.add('oculto'); };
+
+  document.getElementById('np-nueva-categoria').onclick = () => {
+    const contCat = document.getElementById('np-categoria-form');
+    contCat.classList.toggle('oculto');
+    if (contCat.classList.contains('oculto')) return;
+    contCat.innerHTML = `
+      <label class="obligatorio">Nombre</label>
+      <input id="nc-nombre" placeholder="Ej. Cargadores">
+      <label>Código corto</label>
+      <input id="nc-codigo" placeholder="Opcional, ej. CAR — para el código de sus productos" maxlength="10">
+      <button id="nc-guardar" class="btn btn-azul btn-chico">Guardar categoría</button>`;
+    document.getElementById('nc-guardar').onclick = async (e) => {
+      const nombreCat = document.getElementById('nc-nombre').value.trim();
+      if (!nombreCat) { mostrarMensaje(root, 'Indica el nombre de la categoría.', 'error'); return; }
+      e.target.disabled = true;
+      try {
+        const nueva = await api('POST', '/api/categorias', {
+          nombreCat, codigo: document.getElementById('nc-codigo').value.trim() || null,
+        });
+        categorias.push(nueva);
+        const sel = document.getElementById('np-categoria');
+        sel.insertAdjacentHTML('beforeend', `<option value="${escapar(nueva.nombre)}">${escapar(nueva.nombre)}</option>`);
+        sel.value = nueva.nombre;
+        contCat.classList.add('oculto');
+        mostrarMensaje(root, `Categoría "${nueva.nombre}" creada.`, 'ok');
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        e.target.disabled = false;
+      }
+    };
+  };
 
   document.getElementById('np-guardar').onclick = async (e) => {
     const categoriaMaster = document.getElementById('np-categoria').value;
@@ -1673,17 +1708,51 @@ async function pantallaCaja() {
     const contCaja = document.getElementById('cj-caja');
     try {
       const cajas = await api('GET', '/api/cajas/tienda/' + codti);
-      if (cajas.length === 0) { contCaja.innerHTML = '<div class="mensaje info">Esta sucursal no tiene cajas.</div>'; return; }
-      if (cajas.length > 1) {
-        contCaja.innerHTML = `<label>Caja</label><select id="cj-idcaja">${cajas.map(c => `<option value="${c.idCaja}">${escapar(c.nombreCaja)}</option>`).join('')}</select>`;
+      let html = '';
+      idCaja = null;
+      if (cajas.length === 0) {
+        html = '<div class="mensaje info">Esta sucursal no tiene cajas.</div>';
+      } else if (cajas.length > 1) {
+        html = `<label>Caja</label><select id="cj-idcaja">${cajas.map(c => `<option value="${c.idCaja}">${escapar(c.nombreCaja)}</option>`).join('')}</select>`;
         idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0].idCaja;
-        document.getElementById('cj-idcaja').value = idCaja;
-        document.getElementById('cj-idcaja').onchange = (e) => { idCaja = Number(e.target.value); cargarSaldoYMovimientos(); };
       } else {
-        contCaja.innerHTML = '';
         idCaja = cajas[0].idCaja;
       }
-      cargarSaldoYMovimientos();
+      if (SUPERIOR.includes(s.rol)) {
+        html += `<button id="cj-nueva-caja" class="btn btn-azul btn-chico" style="margin-top:8px;">+ Nueva caja</button><div id="cj-caja-form" class="oculto"></div>`;
+      }
+      contCaja.innerHTML = html;
+      if (cajas.length > 1) {
+        document.getElementById('cj-idcaja').value = idCaja;
+        document.getElementById('cj-idcaja').onchange = (e) => { idCaja = Number(e.target.value); cargarSaldoYMovimientos(); };
+      }
+      if (SUPERIOR.includes(s.rol)) {
+        document.getElementById('cj-nueva-caja').onclick = () => {
+          const contForm = document.getElementById('cj-caja-form');
+          contForm.classList.toggle('oculto');
+          if (contForm.classList.contains('oculto')) return;
+          contForm.innerHTML = `
+            <div class="tarjeta">
+              <label class="obligatorio">Nombre de la caja</label>
+              <input id="ncj-nombre" placeholder="Ej. Caja 2, Caja mostrador">
+              <button id="ncj-guardar" class="btn btn-verde">Guardar caja</button>
+            </div>`;
+          document.getElementById('ncj-guardar').onclick = async (e) => {
+            const nombreCaja = document.getElementById('ncj-nombre').value.trim();
+            if (!nombreCaja) { mostrarMensaje(root, 'Indica el nombre de la caja.', 'error'); return; }
+            e.target.disabled = true;
+            try {
+              await api('POST', '/api/cajas', { nombreCaja, codti });
+              mostrarMensaje(root, `Caja "${nombreCaja}" creada.`, 'ok');
+              cargarCajaYSaldo();
+            } catch (err) {
+              mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+              e.target.disabled = false;
+            }
+          };
+        };
+      }
+      if (idCaja != null) cargarSaldoYMovimientos();
     } catch (err) {
       contCaja.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }
@@ -1880,7 +1949,7 @@ async function pantallaEmpleados() {
 
 async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
   let tiendas = [];
-  try { tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen); } catch { /* sin conexión: se deja vacío */ }
+  try { tiendas = await api('GET', '/api/tiendas'); } catch { /* sin conexión: se deja vacío */ }
 
   cont.innerHTML = `
     <div class="tarjeta">

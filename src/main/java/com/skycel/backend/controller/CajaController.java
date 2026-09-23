@@ -1,5 +1,6 @@
 package com.skycel.backend.controller;
 
+import com.skycel.backend.dto.caja.CajaRequestDto;
 import com.skycel.backend.dto.caja.CajaResponseDto;
 import com.skycel.backend.dto.caja.MovimientoCajaRequestDto;
 import com.skycel.backend.dto.caja.MovimientoCajaResponseDto;
@@ -38,6 +39,14 @@ public class CajaController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<CajaResponseDto>> listarPorTienda(@PathVariable Integer codti) {
         return ResponseEntity.ok(cajaService.listarPorTienda(codti));
+    }
+
+    @Operation(summary = "Da de alta una caja nueva en una sucursal")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<StandardApiResponse<CajaResponseDto>> crear(@Valid @RequestBody CajaRequestDto request) {
+        return ResponseEntityBuilder.created(cajaService.crear(request), "caja");
     }
 
     @Operation(summary = "Registrar un movimiento manual de efectivo (fondo, gasto, retiro, etc.)")
