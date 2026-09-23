@@ -230,7 +230,12 @@ public class CatalogoService {
     @CacheEvict(value = "proveedoresCache", allEntries = true)
     @Transactional
     public ProveedorResponseDTO crearProveedor(ProveedorRequestDTO dto) {
-        return catalogoMapper.toProveedorResponse(proveedorRepository.save(catalogoMapper.toProveedorEntity(dto)));
+        Proveedor proveedor = catalogoMapper.toProveedorEntity(dto);
+        // La razón social es obligatoria en la base pero opcional en la API: sin ella se usa el nombre corto.
+        if (proveedor.getNombreFiscal() == null || proveedor.getNombreFiscal().isBlank()) {
+            proveedor.setNombreFiscal(proveedor.getNombreCorto());
+        }
+        return catalogoMapper.toProveedorResponse(proveedorRepository.save(proveedor));
     }
 
     @CacheEvict(value = "seccionesCache", allEntries = true)
