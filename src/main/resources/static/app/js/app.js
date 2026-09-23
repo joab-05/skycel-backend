@@ -226,6 +226,7 @@ async function render() {
     if (ruta === 'devolucion' && param) return pantallaDevolucionDetalle(param);
     if (ruta === 'ajustes') return pantallaAjustes();
     if (ruta === 'notificaciones') return pantallaNotificaciones();
+    if (ruta === 'catalogos') return pantallaCatalogos();
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -1343,6 +1344,7 @@ async function pantallaInventario() {
     ${GESTOR_ROLES.includes(s.rol) ? `
       <div class="grupo-botones" style="margin: 10px 0;">
         <button id="iv-nuevo" class="btn btn-verde">+ Nuevo producto</button>
+        <button id="iv-catalogos" class="btn btn-gris">🎨 Catálogos</button>
       </div>
       <div id="iv-form" class="oculto"></div>` : ''}
     <div id="iv-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
@@ -1405,6 +1407,7 @@ async function pantallaInventario() {
       }
       dibujarFormularioProducto(cont, categorias, () => codti, () => { cont.classList.add('oculto'); cargar(); });
     };
+    document.getElementById('iv-catalogos').onclick = () => navegar('#/catalogos');
   }
 }
 
@@ -2691,6 +2694,173 @@ function pantallaAjustes() {
     e.target.disabled = false;
     e.target.textContent = 'Guardar';
   };
+}
+
+// ── Catálogos (colores, secciones, proveedores) ─────────────────────────────
+// Usa /api/catalogos/*, que ya existía en el backend sin ninguna pantalla.
+
+async function pantallaCatalogos() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver catálogos.</div>'; return; }
+  root.innerHTML = `
+    <h1>🎨 Catálogos</h1>
+    <div class="segmentado">
+      <button id="ct-seg-colores" class="activo">Colores</button>
+      <button id="ct-seg-secciones">Secciones</button>
+      <button id="ct-seg-proveedores">Proveedores</button>
+    </div>
+    <div id="ct-contenido"><div class="vacio">Cargando...</div></div>`;
+
+  let pestana = 'colores';
+  const segs = {
+    colores: document.getElementById('ct-seg-colores'),
+    secciones: document.getElementById('ct-seg-secciones'),
+    proveedores: document.getElementById('ct-seg-proveedores'),
+  };
+  const activar = (p) => {
+    pestana = p;
+    Object.entries(segs).forEach(([k, el]) => el.classList.toggle('activo', k === p));
+    dibujar();
+  };
+  segs.colores.onclick = () => activar('colores');
+  segs.secciones.onclick = () => activar('secciones');
+  segs.proveedores.onclick = () => activar('proveedores');
+
+  async function dibujar() {
+    const cont = document.getElementById('ct-contenido');
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    if (pestana === 'colores') return dibujarColores(cont);
+    if (pestana === 'secciones') return dibujarSecciones(cont);
+    return dibujarProveedores(cont);
+  }
+
+  async function dibujarColores(cont) {
+    try {
+      const colores = await api('GET', '/api/catalogos/colores');
+      cont.innerHTML = `
+        <div class="tarjeta">
+          <h2 style="margin-top:0;">Nuevo color</h2>
+          <label class="obligatorio">Nombre</label>
+          <div class="fila">
+            <input id="ct-color-nombre" placeholder="Ej. Verde menta">
+            <button id="ct-color-guardar" class="btn btn-verde btn-chico" style="flex:0 0 auto;">Guardar</button>
+          </div>
+        </div>
+        <h2>Colores registrados</h2>
+        ${colores.length === 0 ? '<div class="vacio">Sin colores.</div>'
+          : colores.map(c => `<span class="pastilla" style="margin:0 6px 6px 0; display:inline-block; background:var(--gris-claro); color:var(--texto);">${escapar(c.nombre)}</span>`).join('')}`;
+      document.getElementById('ct-color-guardar').onclick = async (e) => {
+        const nombre = document.getElementById('ct-color-nombre').value.trim();
+        if (!nombre) { mostrarMensaje(root, 'Indica el nombre del color.', 'error'); return; }
+        e.target.disabled = true;
+        try {
+          await api('POST', '/api/catalogos/colores', { nombre });
+          mostrarMensaje(root, `Color "${nombre}" creado.`, 'ok');
+          dibujarColores(cont);
+        } catch (err) {
+          mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+          e.target.disabled = false;
+        }
+      };
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+
+  async function dibujarSecciones(cont) {
+    try {
+      const [secciones, tiendas] = await Promise.all([
+        api('GET', '/api/catalogos/secciones'),
+        api('GET', '/api/tiendas'),
+      ]);
+      let codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
+      const render = () => {
+        const deLaTienda = secciones.filter(sec => sec.codti === codti);
+        cont.innerHTML = `
+          <div class="tarjeta">
+            <h2 style="margin-top:0;">Nueva sección</h2>
+            <label class="obligatorio">Sucursal</label>
+            <select id="ct-seccion-tienda">${tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('')}</select>
+            <label class="obligatorio">Nombre</label>
+            <div class="fila">
+              <input id="ct-seccion-nombre" placeholder="Ej. Vitrina 2, Bodega">
+              <button id="ct-seccion-guardar" class="btn btn-verde btn-chico" style="flex:0 0 auto;">Guardar</button>
+            </div>
+          </div>
+          <h2>Secciones de ${escapar(tiendas.find(t => t.codti === codti)?.nombre || '')}</h2>
+          ${deLaTienda.length === 0 ? '<div class="vacio">Sin secciones.</div>'
+            : deLaTienda.map(sec => `<div class="detalle-fila"><span class="k">${escapar(sec.nombre)}</span></div>`).join('')}`;
+        document.getElementById('ct-seccion-tienda').value = codti;
+        document.getElementById('ct-seccion-tienda').onchange = (e) => { codti = Number(e.target.value); render(); };
+        document.getElementById('ct-seccion-guardar').onclick = async (e) => {
+          const nombre = document.getElementById('ct-seccion-nombre').value.trim();
+          if (!nombre) { mostrarMensaje(root, 'Indica el nombre de la sección.', 'error'); return; }
+          e.target.disabled = true;
+          try {
+            await api('POST', '/api/catalogos/secciones', { codti, nombre });
+            mostrarMensaje(root, `Sección "${nombre}" creada.`, 'ok');
+            dibujarSecciones(cont);
+          } catch (err) {
+            mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+            e.target.disabled = false;
+          }
+        };
+      };
+      render();
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+
+  async function dibujarProveedores(cont) {
+    try {
+      const proveedores = await api('GET', '/api/catalogos/proveedores');
+      cont.innerHTML = `
+        <div class="tarjeta">
+          <h2 style="margin-top:0;">Nuevo proveedor</h2>
+          <label class="obligatorio">Nombre corto</label>
+          <input id="ct-prov-corto" placeholder="Ej. Mayorista Movil MX">
+          <label>Razón social</label>
+          <input id="ct-prov-fiscal" placeholder="Opcional">
+          <label>RFC / Tax ID</label>
+          <input id="ct-prov-rfc" placeholder="Opcional">
+          <label>Teléfono</label>
+          <input id="ct-prov-tel" inputmode="tel" placeholder="Opcional">
+          <label>Días de crédito</label>
+          <input id="ct-prov-credito" type="number" inputmode="numeric" min="0" placeholder="Opcional">
+          <button id="ct-prov-guardar" class="btn btn-verde">Guardar proveedor</button>
+        </div>
+        <h2>Proveedores registrados</h2>
+        ${proveedores.length === 0 ? '<div class="vacio">Sin proveedores.</div>' : proveedores.map(p => `
+          <div class="orden-item">
+            <div class="orden-cab"><span class="orden-folio">${escapar(p.nombreCorto)}</span></div>
+            ${p.telefono || p.rfcTaxid ? `<div class="orden-equipo">${[p.telefono, p.rfcTaxid].filter(Boolean).map(escapar).join(' · ')}</div>` : ''}
+          </div>`).join('')}`;
+      document.getElementById('ct-prov-guardar').onclick = async (e) => {
+        const nombreCorto = document.getElementById('ct-prov-corto').value.trim();
+        if (!nombreCorto) { mostrarMensaje(root, 'Indica el nombre corto del proveedor.', 'error'); return; }
+        e.target.disabled = true;
+        try {
+          await api('POST', '/api/catalogos/proveedores', {
+            nombreCorto,
+            nombreFiscal: document.getElementById('ct-prov-fiscal').value.trim() || null,
+            rfcTaxid: document.getElementById('ct-prov-rfc').value.trim() || null,
+            telefono: document.getElementById('ct-prov-tel').value.trim() || null,
+            diasCredito: document.getElementById('ct-prov-credito').value ? Number(document.getElementById('ct-prov-credito').value) : null,
+          });
+          mostrarMensaje(root, `Proveedor "${nombreCorto}" creado.`, 'ok');
+          dibujarProveedores(cont);
+        } catch (err) {
+          mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+          e.target.disabled = false;
+        }
+      };
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+
+  dibujar();
 }
 
 // ── Arranque ──────────────────────────────────────────────────────────────
