@@ -35,7 +35,11 @@ Todo lo que contiene datos del negocio (exportación, plan, Excel de revisión) 
 6. **Verificar**: `python verificar_carga.py --url URL --usuario root --plan plan_migracion.json --nombres nombres_articulos.xlsx`
    compara por tienda unidades, códigos, IMEI, costo, precio y nombre; sale con código 0 solo sin diferencias.
 
-La contraseña nunca va como argumento: variable `SKYCEL_PASSWORD`, `--password-file` o se pide al ejecutar.
+La contraseña nunca va como argumento: `--credenciales archivo` (2 líneas: usuario y contraseña, con o sin etiqueta),
+variable `SKYCEL_PASSWORD` con `--password-file`, o se pide al ejecutar.
+
+`preparar_plan.py` NO sobrescribe `nombres_articulos.xlsx` si ya existe (tiene las correcciones del usuario); para
+regenerarla a propósito: `--forzar-hoja`.
 
 ## Antes de cargar en el servidor real
 

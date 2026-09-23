@@ -2,23 +2,35 @@
 --
 -- Borra: traspasos, productos, unidades (IMEI), movimientos de inventario, artículos maestros, categorías,
 --        colores y proveedores, y reinicia el contador de códigos de equipos (CEL-).
--- NO toca: tiendas, usuarios, empleados, cajas, configuración, motivos de caja, clientes, ventas ni órdenes
+-- Además borra la ÚNICA venta de prueba conocida (idventa 1, $79, SIM-000003, 2026-09-23) con su detalle y su
+-- movimiento de caja "Venta #1" ($79), porque depende de los productos de prueba.
+-- NO toca: tiendas, usuarios, empleados, cajas, configuración, motivos de caja, clientes, otras ventas ni órdenes
 --          de servicio, ni el historial de auditoría (*_aud).
 --
--- Seguridad: si ya existen ventas, órdenes o garantías que dependan de esos productos/proveedores, el script
--- se detiene ANTES de borrar nada (esos datos no son de prueba y hay que revisarlos a mano).
+-- Seguridad: los borrados de la venta están acotados por id, monto y observaciones; cualquier otra venta, orden o
+-- garantía que dependa de los productos hace fallar el borrado por llave foránea (y no se borra nada). Antes de
+-- correrlo, revisar la guardia: debe dar 1 venta, 1 detalle y 0 órdenes/garantías.
 --
+-- OJO: si una sentencia falla a mitad, la transacción queda ABIERTA: correr ROLLBACK; antes de reintentar.
 -- Correr en MySQL Workbench conectado como root, con la base skyceldb2 seleccionada. Por defecto termina con
 -- ROLLBACK (solo muestra qué borraría); para aplicar de verdad cambiar el ROLLBACK final por COMMIT.
 
 USE skyceldb2;
+-- El modo seguro del Workbench rechaza DELETE sin WHERE (error 1175) y deja la transacción a medias.
+SET SQL_SAFE_UPDATES = 0;
 
 -- 1) Guardia: nada de esto debe estar en uso por datos reales.
 SELECT
-  (SELECT COUNT(*) FROM venta_detalle)          AS ventas_detalle,
-  (SELECT COUNT(*) FROM orden_servicio_detalle) AS ordenes_detalle,
-  (SELECT COUNT(*) FROM garantia)               AS garantias;
--- Los tres deben ser 0. Si alguno no lo es, NO continuar.
+  (SELECT COUNT(*) FROM venta)                  AS ventas,            -- debe ser 1
+  (SELECT COUNT(*) FROM venta_detalle)          AS ventas_detalle,    -- debe ser 1
+  (SELECT COUNT(*) FROM venta_pago_detalle)     AS ventas_pagos,      -- debe ser 0
+  (SELECT COUNT(*) FROM movimiento_caja)        AS mov_caja,          -- debe ser 1 ("Venta #1")
+  (SELECT COUNT(*) FROM orden_servicio)         AS ordenes,           -- debe ser 0
+  (SELECT COUNT(*) FROM orden_servicio_detalle) AS ordenes_detalle,   -- debe ser 0
+  (SELECT COUNT(*) FROM garantia)               AS garantias,         -- debe ser 0
+  (SELECT COUNT(*) FROM cuenta_por_cobrar)      AS cuentas,           -- debe ser 0
+  (SELECT COUNT(*) FROM devolucion)             AS devoluciones;      -- debe ser 0
+-- Si algo no coincide, NO continuar.
 
 START TRANSACTION;
 
@@ -26,9 +38,13 @@ START TRANSACTION;
 SELECT 'traspaso' t, COUNT(*) n FROM traspaso UNION ALL SELECT 'producto', COUNT(*) FROM producto
 UNION ALL SELECT 'producto_imei', COUNT(*) FROM producto_imei UNION ALL SELECT 'movimiento_inventario', COUNT(*) FROM movimiento_inventario
 UNION ALL SELECT 'producto_master', COUNT(*) FROM producto_master UNION ALL SELECT 'categoria', COUNT(*) FROM categoria
-UNION ALL SELECT 'color', COUNT(*) FROM color UNION ALL SELECT 'proveedor', COUNT(*) FROM proveedor;
+UNION ALL SELECT 'color', COUNT(*) FROM color UNION ALL SELECT 'proveedor', COUNT(*) FROM proveedor
+UNION ALL SELECT 'venta', COUNT(*) FROM venta UNION ALL SELECT 'movimiento_caja', COUNT(*) FROM movimiento_caja;
 
 -- 3) Borrado en orden de dependencias.
+DELETE FROM movimiento_caja WHERE idmovimiento = 1 AND observaciones = 'Venta #1' AND monto = 79.00;
+DELETE FROM venta_detalle WHERE idventa = 1;
+DELETE FROM venta WHERE idventa = 1 AND total = 79.00;
 DELETE FROM traspaso_faltante_mov;
 DELETE FROM traspaso_detalle;
 DELETE FROM traspaso;
@@ -51,7 +67,8 @@ DELETE FROM categoria_folio WHERE idcat > 0;
 SELECT 'traspaso' t, COUNT(*) n FROM traspaso UNION ALL SELECT 'producto', COUNT(*) FROM producto
 UNION ALL SELECT 'producto_imei', COUNT(*) FROM producto_imei UNION ALL SELECT 'movimiento_inventario', COUNT(*) FROM movimiento_inventario
 UNION ALL SELECT 'producto_master', COUNT(*) FROM producto_master UNION ALL SELECT 'categoria', COUNT(*) FROM categoria
-UNION ALL SELECT 'color', COUNT(*) FROM color UNION ALL SELECT 'proveedor', COUNT(*) FROM proveedor;
+UNION ALL SELECT 'color', COUNT(*) FROM color UNION ALL SELECT 'proveedor', COUNT(*) FROM proveedor
+UNION ALL SELECT 'venta', COUNT(*) FROM venta UNION ALL SELECT 'movimiento_caja', COUNT(*) FROM movimiento_caja;
 
 -- ROLLBACK = solo probar. Cambiar por COMMIT para aplicar de verdad.
 ROLLBACK;

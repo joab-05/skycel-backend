@@ -32,6 +32,8 @@ def hoja(i): return wb[wb.sheetnames[i]]
 TIPOS = {}   # tipo viejo -> (categoria, codigo corto, tipo nuevo)
 for r in hoja(1).iter_rows(min_row=2, values_only=True):
     if r[0] and r[0] != 'TOTAL': TIPOS[r[0]] = (r[5].strip(), r[6].strip(), r[7].strip())
+# Aclaración del usuario (2026-09-23): las baterías externas con existencia son power banks -> Bateria Portatil.
+TIPOS['BATERIA EXTERNA'] = ('Bateria Portatil', 'BPO', 'Accesorio')
 COLORES = {}  # color viejo (upper) -> (color limpio o None, estilo o None)
 for r in hoja(2).iter_rows(min_row=2, values_only=True):
     if r[0] and r[0] != 'TOTAL':
@@ -175,7 +177,10 @@ for row in w2.iter_rows(min_row=2, max_row=w2.max_row):
         if c.column == 8: c.font = Font(name=F, size=9, color='808080')
 for j, w in enumerate([18, 62, 34, 40, 10, 10, 22, 50], 1): w2.column_dimensions[get_column_letter(j)].width = w
 w2.freeze_panes = 'C2'; w2.auto_filter.ref = f'A1:H{w2.max_row}'; w2.row_dimensions[1].height = 30
-out.save(OUT)
+if os.path.exists(OUT) and '--forzar-hoja' not in sys.argv:
+    print(f'AVISO: {OUT} ya existe (puede tener correcciones del usuario) y NO se sobrescribió. Use --forzar-hoja para regenerarla.')
+else:
+    out.save(OUT)
 
 # ---------- plan de migración (una entrada por fila vieja) ----------
 plan = []
