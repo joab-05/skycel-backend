@@ -19,7 +19,10 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Audited
-@Table(name = "orden_servicio")
+@Table(name = "orden_servicio", indexes = {
+        @Index(name = "idx_orden_tienda_estado", columnList = "codti, estado"),
+        @Index(name = "idx_orden_fecha_ingreso", columnList = "fecha_ingreso")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class OrdenServicio {
 

@@ -12,7 +12,7 @@ import java.math.BigDecimal;
  * destino (la que surte).
  */
 @Entity
-@Table(name = "traspaso_detalle")
+@Table(name = "traspaso_detalle", indexes = @Index(name = "idx_traspaso_detalle_codpro", columnList = "codpro"))
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class TraspasoDetalle {
 

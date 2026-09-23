@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Audited
-@Table(name = "movimiento_caja")
+@Table(name = "movimiento_caja", indexes = @Index(name = "idx_mov_caja_caja_fecha", columnList = "id_caja, fecha_mov"))
 @Getter
 @Setter
 @NoArgsConstructor

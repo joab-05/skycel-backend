@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 
 @Entity
 @Audited
-@Table(name = "venta_detalle")
+@Table(name = "venta_detalle", indexes = @Index(name = "idx_venta_detalle_codpro", columnList = "codpro"))
 @Getter
 @Setter
 @NoArgsConstructor

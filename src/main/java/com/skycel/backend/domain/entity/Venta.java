@@ -11,7 +11,10 @@ import java.time.LocalDateTime;
 
 @Entity
 @Audited
-@Table(name = "venta")
+@Table(name = "venta", indexes = {
+        @Index(name = "idx_venta_tienda_fecha", columnList = "codti, fecha_venta"),
+        @Index(name = "idx_venta_fecha", columnList = "fecha_venta")
+})
 @Getter
 @Setter
 @NoArgsConstructor

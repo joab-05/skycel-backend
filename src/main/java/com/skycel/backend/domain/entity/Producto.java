@@ -12,7 +12,11 @@ import java.time.LocalDateTime;
 
 @Entity
 @Audited
-@Table(name = "producto")
+// (codpro, codti) único: un artículo lleva el mismo código en todas las sucursales, pero una sola vez por sucursal.
+// Antes solo lo validaba el código; dos altas simultáneas podían duplicarlo.
+@Table(name = "producto",
+        uniqueConstraints = @UniqueConstraint(name = "uk_producto_codpro_tienda", columnNames = {"codpro", "codti"}),
+        indexes = @Index(name = "idx_producto_tienda_activo", columnList = "codti, activo"))
 @Getter
 @Setter
 @NoArgsConstructor

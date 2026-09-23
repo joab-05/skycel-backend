@@ -21,7 +21,10 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Audited
-@Table(name = "traspaso")
+@Table(name = "traspaso", indexes = {
+        @Index(name = "idx_traspaso_origen_estado", columnList = "codti_origen, estado"),
+        @Index(name = "idx_traspaso_destino_estado", columnList = "codti_destino, estado")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Traspaso {
 
