@@ -294,8 +294,33 @@ public class ProductoService {
         return actualizar(codpro, null, dto);
     }
 
+    /**
+     * Igual que {@link #actualizar(String, Integer, ProductoUpdateDTO)}; con {@code aTodasLasSucursales} el nuevo precio
+     * de compra/venta se aplica también a las demás sucursales que tienen este código (mismo artículo). El resto de los
+     * datos (color, proveedor, sección, stock mínimo...) solo cambian en la sucursal indicada.
+     */
+    @Transactional
+    public ProductoResponseDTO actualizar(String codpro, Integer codti, boolean aTodasLasSucursales, ProductoUpdateDTO dto) {
+        ProductoResponseDTO resultado = actualizar(codpro, codti, dto);
+        if (aTodasLasSucursales && (dto.getPrecioVenta() != null || dto.getPrecioCompra() != null)) {
+            for (Producto otro : productoRepository.findAllByCodpro(codpro)) {
+                if (otro.getIdproducto().equals(resultado.getIdproducto())) continue;
+                if (dto.getPrecioCompra() != null) otro.setPreciopro(dto.getPrecioCompra());
+                if (dto.getPrecioVenta() != null) otro.setPreciopub(dto.getPrecioVenta());
+                productoRepository.save(otro);
+            }
+        }
+        return resultado;
+    }
+
     @Transactional
     public ProductoResponseDTO actualizar(String codpro, Integer codti, ProductoUpdateDTO dto) {
+        if (dto.getPrecioVenta() != null && dto.getPrecioVenta().signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El precio de venta debe ser mayor a $0.");
+        }
+        if (dto.getPrecioCompra() != null && dto.getPrecioCompra().signum() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El precio de compra no puede ser negativo.");
+        }
         Producto p = porCodigo(codpro, codti);
 
         if (dto.getPrecioCompra() != null) p.setPreciopro(dto.getPrecioCompra());
@@ -317,6 +342,22 @@ public class ProductoService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Producto maestro no encontrado: " + idprodmaster));
 
+        if (dto.getNombreBase() != null) {
+            String nombre = dto.getNombreBase().trim().replaceAll("\\s+", " ");
+            if (nombre.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre del artículo no puede quedar vacío.");
+            productoMasterRepository.findByNombreBaseIgnoreCaseAndActivoTrue(nombre)
+                    .filter(otro -> !otro.getIdprodmaster().equals(master.getIdprodmaster()))
+                    .ifPresent(otro -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe otro artículo llamado '" + nombre + "'."); });
+            master.setNombreBase(nombre);
+        }
+        if (dto.getIdCategoria() != null) {
+            Categoria cat = categoriaRepository.findById(dto.getIdCategoria())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Categoría no encontrada."));
+            if (cat.getTipo() != master.getTipo()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La categoría '" + cat.getNombre() + "' es de otro tipo de producto.");
+            }
+            master.setCategoria(cat);
+        }
         if (dto.getCompatibilidad() != null) master.setCompatibilidad(trimOrNull(dto.getCompatibilidad()));
         if (dto.getTiempoEstimadoMin() != null) {
             if (master.getTipo() != com.skycel.backend.domain.enums.TipoProducto.SERVICIO) {

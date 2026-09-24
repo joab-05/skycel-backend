@@ -11,6 +11,13 @@ import lombok.Data;
 @Data
 public class ProductoMasterUpdateDTO {
 
+    /** Nuevo nombre del artículo (cambia en todas las sucursales). No puede repetir el de otro artículo activo. */
+    @Size(max = 255, message = "El nombre no puede exceder los 255 caracteres")
+    private String nombreBase;
+
+    /** Nueva categoría (del mismo tipo de producto que el artículo). */
+    private Short idCategoria;
+
     @Size(max = 255, message = "La compatibilidad no puede exceder los 255 caracteres")
     private String compatibilidad;
 

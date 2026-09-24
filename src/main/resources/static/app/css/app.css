@@ -10,6 +10,10 @@
   --borde: #e2e8f0;
   --oscuro: #0f172a;
   --texto: #1e293b;
+  --gris-medio: #64748b;
+  --sombra-sm: 0 1px 2px rgba(15,23,42,0.05), 0 1px 3px rgba(15,23,42,0.04);
+  --sombra-md: 0 4px 14px rgba(15,23,42,0.08);
+  --radio: 14px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -296,4 +300,125 @@ button { -webkit-appearance: none; appearance: none; touch-action: manipulation;
     .btn:not(:disabled):hover { filter: brightness(1.07); }
     .btn-chico:not(:disabled):hover { filter: brightness(1.05); }
   }
+}
+
+
+/* ══ Refinamiento visual ═══════════════════════════════════════════════════
+   Iconos SVG (Lucide) en lugar de emojis, jerarquía tipográfica, tarjetas con relieve suave, menú por áreas con color,
+   estados de foco visibles (teclado) y objetivos táctiles de 44px. */
+
+.ic { width: 1.2em; height: 1.2em; flex: none; vertical-align: -0.22em; }
+.pastilla .ic { width: 12px; height: 12px; vertical-align: -1px; margin-right: 2px; }
+.btn .ic { width: 18px; height: 18px; vertical-align: middle; }
+.btn-chico .ic { width: 16px; height: 16px; }
+.ayuda .ic, .mensaje .ic { width: 15px; height: 15px; vertical-align: -3px; }
+
+:focus-visible { outline: 3px solid rgba(37,99,235,0.45); outline-offset: 2px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px rgba(37,99,235,0.18); }
+::placeholder { color: #94a3b8; }
+
+h1 { display: flex; align-items: center; gap: 10px; font-size: 22px; letter-spacing: -0.01em; }
+h1 .ic { width: 26px; height: 26px; color: var(--azul); }
+h1.saludo { font-size: 24px; margin-bottom: 4px; }
+h2 { font-size: 15px; }
+
+.tarjeta, .orden-item, .boton-menu, .notif-item { box-shadow: var(--sombra-sm); }
+.tarjeta { border-radius: var(--radio); }
+
+/* Encabezado */
+.encabezado { background: linear-gradient(180deg, #111c33 0%, #0f172a 100%); box-shadow: 0 1px 0 rgba(255,255,255,0.06); }
+.encabezado .logo { display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 10px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.encabezado .logo .ic { width: 20px; height: 20px; color: white; }
+.encabezado .marca { font-size: 16px; letter-spacing: 0.01em; }
+.btn-icono { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; transition: background 0.15s; }
+.btn-icono .ic { width: 20px; height: 20px; }
+.btn-icono:active { background: rgba(255,255,255,0.22); }
+
+/* Menú de inicio por áreas */
+.menu-grupo { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gris-medio); margin: 22px 2px 10px 2px; }
+.menu-grupo:first-of-type { margin-top: 14px; }
+.rejilla-menu { gap: 10px; }
+.boton-menu { position: relative; padding: 16px 10px 14px 10px; gap: 10px; transition: transform 0.08s, box-shadow 0.15s; }
+.boton-menu:active { transform: scale(0.97); }
+.boton-menu .icono, .sidebar button .icono { --fg: #475569; --bg: #f1f5f9; display: flex; align-items: center; justify-content: center; color: var(--fg); background: var(--bg); }
+.boton-menu .icono { width: 48px; height: 48px; border-radius: 14px; font-size: inherit; }
+.boton-menu .icono .ic { width: 24px; height: 24px; }
+.boton-menu .badge { position: absolute; top: 10px; right: 10px; margin: 0; }
+.g-taller  { --fg: #1d4ed8; --bg: #dbeafe; }
+.g-ventas  { --fg: #15803d; --bg: #dcfce7; }
+.g-finanzas{ --fg: #a16207; --bg: #fef3c7; }
+.g-clientes{ --fg: #6d28d9; --bg: #ede9fe; }
+.g-admin   { --fg: #be123c; --bg: #ffe4e6; }
+.boton-menu[class*="g-"] .icono, .sidebar button[class*="g-"] .icono { color: var(--fg); background: var(--bg); }
+
+/* Barra inferior */
+.nav-inferior button .icono { display: flex; }
+.nav-inferior button .icono .ic { width: 22px; height: 22px; }
+.nav-inferior button.activo { color: var(--azul); background: #eff6ff; }
+
+/* Barra lateral */
+.sidebar-marca { font-size: 17px; }
+.sidebar-marca .logo { display: flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 9px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.sidebar-marca .logo .ic { width: 18px; height: 18px; color: white; }
+.sidebar button .icono { width: 28px; height: 28px; border-radius: 8px; }
+.sidebar button .icono .ic { width: 16px; height: 16px; }
+.sidebar button.activo { background: #eff6ff; color: var(--azul); }
+
+/* Botones */
+.btn { min-height: 44px; border-radius: 11px; transition: filter 0.12s, transform 0.06s; box-shadow: 0 1px 2px rgba(15,23,42,0.12); }
+.btn:not(:disabled):active { transform: translateY(1px); filter: brightness(0.94); }
+.btn-chico { min-height: 38px; }
+.btn-gris { background: #e2e8f0; color: #1e293b; box-shadow: none; }
+.btn-gris .ic { color: var(--gris); }
+.segmentado button { min-height: 38px; }
+.segmentado button.activo { color: var(--azul); }
+
+/* Listas y pastillas */
+.orden-item { transition: box-shadow 0.15s, border-color 0.15s; }
+.orden-item:active { background: #f8fafc; }
+.pastilla { display: inline-flex; align-items: center; gap: 3px; }
+.vacio { padding: 36px 12px; }
+.mensaje { display: flex; gap: 8px; align-items: flex-start; line-height: 1.4; }
+
+/* Inicio de sesión */
+.login-marca { text-align: center; margin-bottom: 22px; }
+.login-marca h1 { justify-content: center; margin: 10px 0 2px 0; font-size: 26px; }
+.login-logo { display: inline-flex; width: 64px; height: 64px; align-items: center; justify-content: center; border-radius: 18px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow: 0 8px 20px rgba(29,78,216,0.35); }
+.login-logo .ic { width: 34px; height: 34px; color: white; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Punto de venta: precio de solo lectura y línea del carrito */
+.precio-fijo { display: flex; align-items: center; gap: 6px; padding: 11px 12px; border-radius: 10px; background: var(--gris-claro); border: 1px dashed #cbd5e1; font-weight: 700; color: var(--texto); }
+.precio-fijo .ic { width: 15px; height: 15px; color: var(--gris-medio); }
+.importe-linea { font-weight: 800; font-size: 15px; }
+
+/* Edición de producto */
+label.casilla { display: flex; align-items: center; gap: 10px; font-weight: 500; margin-top: 14px; color: var(--texto); cursor: pointer; }
+label.casilla input { width: 20px; height: 20px; flex: none; accent-color: var(--azul); -webkit-appearance: auto; appearance: auto; }
+.unidad-edit { border: 1px solid var(--borde); border-radius: 12px; padding: 10px 12px 12px 12px; margin-top: 10px; background: #f8fafc; }
+.unidad-imei { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.unidad-edit .fila { gap: 8px; }
+.unidad-edit label { font-size: 12px; margin-top: 8px; }
+.unidad-edit input, .unidad-edit select { padding: 9px 8px; font-size: 15px; }
+
+/* Total del punto de venta: barra fija sobre la navegación para que el cobro nunca se pierda al desplazar */
+.barra-total {
+  position: sticky; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--oscuro); color: white; border-radius: 14px; padding: 12px 16px; margin-bottom: 14px;
+  box-shadow: 0 8px 22px rgba(15,23,42,0.28);
+}
+.barra-total .bt-detalle { font-size: 13px; color: #cbd5e1; font-weight: 600; }
+.barra-total .bt-total { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.barra-total small { font-size: 12px; font-weight: 600; color: #94a3b8; margin-right: 4px; }
+.btn-grande { min-height: 52px; font-size: 16px; }
+.pv-mas { display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 8px; background: #dcfce7; color: var(--verde); margin-left: 6px; vertical-align: middle; }
+.pv-mas .ic { width: 16px; height: 16px; vertical-align: 0; }
+@media (min-width: 900px) { .barra-total { bottom: 16px; } }
+
+/* Casillas y opciones: con el reset global de inputs quedaban sin marca visible al activarlas */
+input[type="checkbox"], input[type="radio"] {
+  -webkit-appearance: auto; appearance: auto;
+  width: 22px; height: 22px; padding: 0; flex: none; accent-color: var(--azul); cursor: pointer;
 }

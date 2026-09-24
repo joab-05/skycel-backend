@@ -64,7 +64,7 @@ public class ClienteController {
     }
 
     @PatchMapping("/{id}/puntos")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
     public ResponseEntity<StandardApiResponse<ClienteResponseDto>> sumarPuntos(
             @PathVariable Integer id, @RequestParam int cantidad) {
         return ResponseEntityBuilder.updated(clienteService.sumarPuntos(id, cantidad), "cliente");

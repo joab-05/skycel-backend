@@ -62,16 +62,22 @@ public class VentaController {
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/local/{folio}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<StandardApiResponse<VentaResponseDto>> obtenerPorFolioLocal(@PathVariable String folio) {
-        return ResponseEntityBuilder.ok(ventaService.obtenerPorFolioLocal(folio), "venta");
+    public ResponseEntity<StandardApiResponse<VentaResponseDto>> obtenerPorFolioLocal(@PathVariable String folio,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        VentaResponseDto v = ventaService.obtenerPorFolioLocal(folio);
+        ventaService.validarAccesoAVenta(v.getCodti(), userDetails.getUsername());
+        return ResponseEntityBuilder.ok(v, "venta");
     }
 
     @Operation(summary = "Obtener una venta por ID")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<StandardApiResponse<VentaResponseDto>> obtener(@PathVariable Integer id) {
-        return ResponseEntityBuilder.ok(ventaService.obtenerPorId(id), "venta");
+    public ResponseEntity<StandardApiResponse<VentaResponseDto>> obtener(@PathVariable Integer id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        VentaResponseDto v = ventaService.obtenerPorId(id);
+        ventaService.validarAccesoAVenta(v.getCodti(), userDetails.getUsername());
+        return ResponseEntityBuilder.ok(v, "venta");
     }
 
     @Operation(summary = "Listar ventas de una tienda en un rango de fechas (por defecto, el día de hoy)")

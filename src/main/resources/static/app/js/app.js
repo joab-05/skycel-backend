@@ -77,12 +77,12 @@ function actualizarBarraConexion() {
     Net.cantidadConError().then(err => {
       if (Net.enLinea()) {
         barraConexion.className = pend > 0 ? 'enviando' : 'en-linea';
-        barraConexion.textContent = pend > 0 ? `🟡 Enviando ${pend} recepción(es) guardada(s)...` : '';
+        barraConexion.textContent = pend > 0 ? `Enviando ${pend} recepción(es) guardada(s)...` : '';
       } else {
         barraConexion.className = '';
-        barraConexion.textContent = `🔴 Sin conexión — se guarda en este dispositivo${pend > 0 ? ' · ' + pend + ' por enviar' : ''}`;
+        barraConexion.textContent = `Sin conexión — se guarda en este dispositivo${pend > 0 ? ' · ' + pend + ' por enviar' : ''}`;
       }
-      if (err > 0) barraConexion.textContent += `  ·  ⚠️ ${err} para revisar`;
+      if (err > 0) barraConexion.textContent += `  ·  ${ic('triangle-alert')} ${err} para revisar`;
       barraConexion.style.display = (Net.enLinea() && pend === 0 && err === 0) ? 'none' : 'block';
       barraConexion.onclick = () => navegar('#/pendientes');
       barraConexion.style.cursor = 'pointer';
@@ -109,10 +109,10 @@ function dibujarNavInferior() {
   const s = Sesion.obtener();
   if (!s) return;
   const ruta = location.hash.split('/')[1] || 'menu';
-  const items = [{ h: '#/menu', i: '🏠', t: 'Inicio', clave: 'menu' }];
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: '📥', t: 'Recibir', clave: 'recepcion' });
-  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: '🔧', t: 'Taller', clave: 'taller' });
-  items.push({ h: '#/consultar', i: '🔎', t: 'Buscar', clave: 'consultar' });
+  const items = [{ h: '#/menu', i: ic('house'), t: 'Inicio', clave: 'menu' }];
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir', clave: 'recepcion' });
+  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', clave: 'taller' });
+  items.push({ h: '#/consultar', i: ic('search'), t: 'Buscar', clave: 'consultar' });
   navInferior.innerHTML = items.map(it =>
     `<button data-h="${it.h}" class="${ruta === it.clave ? 'activo' : ''}"><span class="icono">${it.i}</span>${it.t}</button>`
   ).join('');
@@ -137,20 +137,20 @@ async function obtenerBajoStock(codti) {
  */
 function itemsMenu(s, pend, err, bajoStock) {
   const items = [];
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: '📥', t: 'Recibir equipo', grupo: 'Taller' });
-  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: '🔧', t: 'Taller', grupo: 'Taller' });
-  items.push({ h: '#/consultar', i: '🔎', t: 'Consultar orden', grupo: 'Taller' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/pos', i: '💰', t: 'Punto de venta', grupo: 'Ventas' });
-  items.push({ h: '#/inventario', i: '📦', t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Ventas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/traspasos', i: '🚚', t: 'Traspasos', grupo: 'Ventas' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: '↩️', t: 'Devoluciones', grupo: 'Ventas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: '🧾', t: 'Caja', grupo: 'Finanzas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: '💳', t: 'Cuentas por cobrar', grupo: 'Finanzas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: '📊', t: 'Reporte de ventas', grupo: 'Finanzas' });
-  items.push({ h: '#/clientes', i: '👥', t: 'Clientes', grupo: 'Clientes' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: '🛡️', t: 'Garantías', grupo: 'Clientes' });
-  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: '🧑‍💼', t: 'Empleados', grupo: 'Administración' });
-  items.push({ h: '#/pendientes', i: '📤', t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir equipo', grupo: 'Taller' });
+  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', grupo: 'Taller' });
+  items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/pos', i: ic('shopping-cart'), t: 'Punto de venta', grupo: 'Ventas' });
+  items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Ventas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Ventas' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: ic('undo-2'), t: 'Devoluciones', grupo: 'Ventas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reporte de ventas', grupo: 'Finanzas' });
+  items.push({ h: '#/clientes', i: ic('users'), t: 'Clientes', grupo: 'Clientes' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: ic('shield-check'), t: 'Garantías', grupo: 'Clientes' });
+  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
+  items.push({ h: '#/pendientes', i: ic('cloud-upload'), t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
   return items;
 }
 
@@ -169,13 +169,13 @@ async function dibujarSidebar() {
       ? (grupoAnterior = it.grupo, it.grupo ? `<div class="sidebar-grupo">${escapar(it.grupo)}</div>` : '<div class="sidebar-separador"></div>')
       : '';
     return encabezadoGrupo + `
-      <button data-h="${it.h}" class="${ruta === it.h.slice(2) ? 'activo' : ''}">
+      <button data-h="${it.h}" class="g-${claseGrupo(it.grupo)} ${ruta === it.h.slice(2) ? 'activo' : ''}">
         <span class="icono">${it.i}</span><span class="texto">${escapar(it.t)}</span>
         ${it.badge ? `<span class="badge">${it.badge}</span>` : ''}
       </button>`;
   }).join('');
   sidebar.innerHTML = `
-    <div class="sidebar-marca" id="sidebar-inicio"><span class="logo">📱</span> Skycel</div>
+    <div class="sidebar-marca" id="sidebar-inicio"><span class="logo">${ic('smartphone')}</span> Skycel</div>
     <div class="sidebar-items">${filas}</div>`;
   sidebar.querySelectorAll('button[data-h]').forEach(b => b.onclick = () => navegar(b.dataset.h));
   document.getElementById('sidebar-inicio').onclick = () => navegar('#/menu');
@@ -219,6 +219,7 @@ async function render() {
     if (ruta === 'reportes') return pantallaReportes();
     if (ruta === 'inventario') return pantallaInventario();
     if (ruta === 'producto' && param) return pantallaProductoDetalle(param);
+    if (ruta === 'producto-editar' && param) return pantallaProductoEditar(param);
     if (ruta === 'caja') return pantallaCaja();
     if (ruta === 'empleados') return pantallaEmpleados();
     if (ruta === 'empleado' && param) return pantallaEmpleadoDetalle(param);
@@ -246,9 +247,9 @@ window.navegar = navegar;
 function pantallaLogin() {
   root.innerHTML = `
     <div class="pantalla-centrada">
-      <div style="text-align:center; margin-bottom:22px;">
-        <div style="font-size:40px;">📱</div>
-        <h1 style="margin-bottom:0;">Skycel</h1>
+      <div class="login-marca">
+        <div class="login-logo">${ic('smartphone')}</div>
+        <h1>Skycel</h1>
         <div class="ayuda">Recepción de equipos y taller</div>
       </div>
       <div class="tarjeta">
@@ -286,6 +287,22 @@ function pantallaLogin() {
 
 // ── Menú ──────────────────────────────────────────────────────────────────
 
+/** Clase de color por área de trabajo (los iconos del menú y de la barra lateral se tiñen igual). */
+function claseGrupo(g) {
+  return ({ 'Taller': 'taller', 'Ventas': 'ventas', 'Finanzas': 'finanzas', 'Clientes': 'clientes', 'Administración': 'admin' })[g] || 'otro';
+}
+/** Agrupa las tarjetas del menú por área conservando el orden; las sueltas (sin grupo) van al final sin título. */
+function gruposDeMenu(items) {
+  const grupos = [];
+  items.forEach(it => {
+    const nombre = it.grupo || '';
+    let g = grupos.find(x => x.nombre === nombre);
+    if (!g) grupos.push(g = { nombre, items: [] });
+    g.items.push(it);
+  });
+  return grupos;
+}
+
 async function pantallaMenu() {
   const s = Sesion.obtener();
   const pend = await Net.cantidadPendiente();
@@ -294,15 +311,17 @@ async function pantallaMenu() {
   const tarjetas = itemsMenu(s, pend, err, bajoStock);
 
   root.innerHTML = `
-    <h1>Hola, ${escapar((s.nombreCompleto || s.username).split(' ')[0])}</h1>
-    <div class="rejilla-menu">
-      ${tarjetas.map(t => `
-        <div class="boton-menu" data-h="${t.h}">
-          <span class="icono">${t.i}</span>
-          <span class="texto">${t.t}</span>
-          ${t.badge ? `<span class="badge">${t.badge}</span>` : ''}
-        </div>`).join('')}
-    </div>
+    <h1 class="saludo">Hola, ${escapar((s.nombreCompleto || s.username).split(' ')[0])}</h1>
+    ${gruposDeMenu(tarjetas).map(g => `
+      ${g.nombre ? `<h2 class="menu-grupo">${escapar(g.nombre)}</h2>` : ''}
+      <div class="rejilla-menu">
+        ${g.items.map(t => `
+          <div class="boton-menu g-${claseGrupo(t.grupo)}" data-h="${t.h}">
+            <span class="icono">${t.i}</span>
+            <span class="texto">${t.t}</span>
+            ${t.badge ? `<span class="badge">${t.badge}</span>` : ''}
+          </div>`).join('')}
+      </div>`).join('')}
     <div class="ayuda" style="text-align:center; margin-top:20px;">
       Para pagos mixtos, ventas a crédito y cambios de producto, usa JSystem en la tienda.
     </div>`;
@@ -316,7 +335,7 @@ async function pantallaRecepcion() {
   if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para recibir equipos.</div>'; return; }
 
   root.innerHTML = `
-    <h1>📥 Recibir equipo</h1>
+    <h1>${ic('inbox')} Recibir equipo</h1>
     <div class="tarjeta">
       <div id="rc-tienda"></div>
 
@@ -434,12 +453,12 @@ async function pantallaRecepcion() {
     try {
       const c = await api('GET', '/api/clientes/telefono/' + encodeURIComponent(tel));
       clienteEncontrado = c;
-      out.innerHTML = `✅ <strong>${escapar(c.nombreCompleto)}</strong>`;
+      out.innerHTML = `${ic('circle-check')} <strong>${escapar(c.nombreCompleto)}</strong>`;
     } catch (err) {
       clienteEncontrado = null;
       out.innerHTML = err.network
-        ? '🔴 Sin conexión: pasa a "Cliente nuevo" y captura nombre y teléfono; se enlazará al enviarse.'
-        : `⚠️ No se encontró. Usa "Cliente nuevo".`;
+        ? ic('circle-alert') + ' Sin conexión: pasa a "Cliente nuevo" y captura nombre y teléfono; se enlazará al enviarse.'
+        : `${ic('triangle-alert')} No se encontró. Usa "Cliente nuevo".`;
     }
   };
 
@@ -534,7 +553,7 @@ async function pantallaRecepcion() {
 async function pantallaTaller() {
   const s = Sesion.obtener();
   if (!TALLER_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver el taller.</div>'; return; }
-  root.innerHTML = `<h1>🔧 Taller</h1><div id="ta-lista"><div class="vacio">Cargando...</div></div>`;
+  root.innerHTML = `<h1>${ic('wrench')} Taller</h1><div id="ta-lista"><div class="vacio">Cargando...</div></div>`;
   const cont = document.getElementById('ta-lista');
   try {
     const ordenes = await api('GET', '/api/ordenes-servicio/taller');
@@ -552,13 +571,13 @@ function itemOrden(o, s) {
     <div class="orden-item" data-id="${o.idorden}">
       <div class="orden-cab">
         <span class="orden-folio">${escapar(o.folio)}</span>
-        ${porTomar ? '<span class="pastilla por-tomar">⏳ Por tomar</span>' : pastillaEstado(o.estadoDisplay)}
+        ${porTomar ? '<span class="pastilla por-tomar">' + ic('hourglass') + ' Por tomar</span>' : pastillaEstado(o.estadoDisplay)}
       </div>
       <div class="orden-equipo">${escapar(o.marca)} ${escapar(o.modelo)}</div>
       <div class="orden-cliente">${escapar(o.nombreCliente)} · ${escapar(o.nombreTienda)}</div>
       <div class="orden-meta">
         <span class="orden-fecha">${formatoFecha(o.fechaIngreso)}</span>
-        <span style="font-size:12px; color:var(--gris);">${o.idTecnico ? '👤 ' + escapar(o.nombreTecnico) : 'Sin técnico'}</span>
+        <span style="font-size:12px; color:var(--gris);">${o.idTecnico ? ic('user') + escapar(o.nombreTecnico) : 'Sin técnico'}</span>
       </div>
     </div>`;
 }
@@ -568,7 +587,7 @@ function itemOrden(o, s) {
 async function pantallaConsultar() {
   const s = Sesion.obtener();
   root.innerHTML = `
-    <h1>🔎 Consultar orden</h1>
+    <h1>${ic('search')} Consultar orden</h1>
     <div class="buscador">
       <input id="co-folio" placeholder="Folio (OS-000123)" autocapitalize="characters">
       <button id="co-btn" class="btn btn-azul btn-chico">Buscar</button>
@@ -674,10 +693,10 @@ async function pantallaOrdenDetalle(id) {
   contAcc.classList.remove('oculto');
   const acciones = [];
 
-  if (esTecnicoLibre) acciones.push({ t: '🖐 Tomar', color: 'btn-azul', fn: () => accionSimple(id, 'tomar', 'POST') });
+  if (esTecnicoLibre) acciones.push({ t: ic('hand') + ' Tomar', color: 'btn-azul', fn: () => accionSimple(id, 'tomar', 'POST') });
   if (puedeTrabajar && o.estado === 1 && o.idTecnico) acciones.push({ t: '▶️ Iniciar reparación', color: 'btn-verde', fn: () => accionSimple(id, 'iniciar', 'POST') });
-  if (puedeTrabajar && o.estado === 2) acciones.push({ t: '✅ Marcar lista', color: 'btn-verde', fn: () => accionSimple(id, 'lista', 'POST') });
-  if (puedeTrabajar) acciones.push({ t: '📝 Agregar observación', color: 'btn-gris', fn: () => document.getElementById('dt-nota-cont').classList.toggle('oculto') });
+  if (puedeTrabajar && o.estado === 2) acciones.push({ t: ic('circle-check') + ' Marcar lista', color: 'btn-verde', fn: () => accionSimple(id, 'lista', 'POST') });
+  if (puedeTrabajar) acciones.push({ t: ic('clipboard-pen') + ' Agregar observación', color: 'btn-gris', fn: () => document.getElementById('dt-nota-cont').classList.toggle('oculto') });
 
   if (acciones.length === 0) { contAcc.classList.add('oculto'); return; }
   botones.innerHTML = acciones.map((a, i) => `<button class="btn ${a.color}" data-i="${i}">${a.t}</button>`).join('');
@@ -708,9 +727,9 @@ async function pantallaOrdenDetalle(id) {
 
 async function pantallaPendientes() {
   root.innerHTML = `
-    <h1>📤 Guardado en este equipo</h1>
+    <h1>${ic('cloud-upload')} Guardado en este equipo</h1>
     <div class="grupo-botones" style="margin-bottom:14px;">
-      <button id="pe-sincronizar" class="btn btn-verde">🔁 Intentar enviar todo ahora</button>
+      <button id="pe-sincronizar" class="btn btn-verde">${ic('refresh-cw')} Intentar enviar todo ahora</button>
     </div>
     <h2>Equipos recibidos sin conexión</h2>
     <div id="pe-ordenes"><div class="vacio">Cargando...</div></div>
@@ -738,8 +757,8 @@ async function dibujarColaOrdenes() {
         <div class="orden-cab">
           <span class="orden-folio">${escapar(it.payload.folioLocal || it.folio || '—')}</span>
           ${it.estado === 'enviada'
-            ? `<span class="pastilla lista">✅ Enviada${it.folio ? ' (' + escapar(it.folio) + ')' : ''}</span>`
-            : it.estado === 'error' ? '<span class="pastilla error">⚠️ Revisar</span>' : '<span class="pastilla pendiente">⏳ Por enviar</span>'}
+            ? `<span class="pastilla lista">${ic('circle-check')} Enviada${it.folio ? ' (' + escapar(it.folio) + ')' : ''}</span>`
+            : it.estado === 'error' ? '<span class="pastilla error">' + ic('triangle-alert') + ' Revisar</span>' : '<span class="pastilla pendiente">' + ic('hourglass') + ' Por enviar</span>'}
         </div>
         <div class="orden-equipo">${escapar(it.resumen)}</div>
         <div class="orden-cliente">${escapar(it.clienteResumen || '')}</div>
@@ -771,8 +790,8 @@ async function dibujarColaAbonos() {
       <div class="orden-item" data-clave="${it.clave}">
         <div class="orden-cab">
           <span class="orden-folio">${escapar(it.noFactura)}</span>
-          ${it.estado === 'enviada' ? '<span class="pastilla lista">✅ Enviado</span>'
-            : it.estado === 'error' ? '<span class="pastilla error">⚠️ Revisar</span>' : '<span class="pastilla pendiente">⏳ Por enviar</span>'}
+          ${it.estado === 'enviada' ? '<span class="pastilla lista">' + ic('circle-check') + ' Enviado</span>'
+            : it.estado === 'error' ? '<span class="pastilla error">' + ic('triangle-alert') + ' Revisar</span>' : '<span class="pastilla pendiente">' + ic('hourglass') + ' Por enviar</span>'}
         </div>
         <div class="orden-equipo">${formatoDinero(it.payload.monto)} · ${escapar(it.metodoPago)}</div>
         <div class="orden-cliente">${escapar(it.cliente || '')}</div>
@@ -799,7 +818,7 @@ async function pantallaClientes() {
   const s = Sesion.obtener();
   const puedeCrear = GESTOR_ROLES.includes(s.rol);
   root.innerHTML = `
-    <h1>👥 Clientes</h1>
+    <h1>${ic('users')} Clientes</h1>
     <div class="buscador">
       <input id="cl-buscar" placeholder="Nombre o teléfono">
       ${puedeCrear ? '<button id="cl-nuevo" class="btn btn-verde btn-chico">+ Nuevo</button>' : ''}
@@ -909,8 +928,8 @@ async function pantallaClienteDetalle(id) {
 
   const acciones = document.getElementById('cd-acciones');
   const botones = [];
-  if (GESTOR_ROLES.includes(s.rol)) botones.push({ t: '✏️ Editar', color: 'btn-azul', fn: () => dibujarFormularioCliente(document.getElementById('cd-form'), c, () => pantallaClienteDetalle(id)) });
-  if (SUPERIOR.includes(s.rol)) botones.push({ t: '🗑 Desactivar', color: 'btn-rojo', fn: async () => {
+  if (GESTOR_ROLES.includes(s.rol)) botones.push({ t: ic('pencil') + ' Editar', color: 'btn-azul', fn: () => dibujarFormularioCliente(document.getElementById('cd-form'), c, () => pantallaClienteDetalle(id)) });
+  if (SUPERIOR.includes(s.rol)) botones.push({ t: ic('trash-2') + ' Desactivar', color: 'btn-rojo', fn: async () => {
     if (!confirm('¿Desactivar a ' + c.nombreCompleto + '? Ya no aparecerá en la lista.')) return;
     try { await api('DELETE', '/api/clientes/' + id); navegar('#/clientes'); }
     catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
@@ -929,7 +948,7 @@ async function pantallaCxC() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver cuentas por cobrar.</div>'; return; }
   root.innerHTML = `
-    <h1>💳 Cuentas por cobrar</h1>
+    <h1>${ic('credit-card')} Cuentas por cobrar</h1>
     <div id="cx-resumen"></div>
     <div id="cx-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>`;
 
@@ -1090,7 +1109,7 @@ const GARANTIA_NOMBRES = {
 };
 
 function pastillaGarantia(g) {
-  if (g.vencida) return '<span class="pastilla error">⚠️ Vencida</span>';
+  if (g.vencida) return '<span class="pastilla error">' + ic('triangle-alert') + ' Vencida</span>';
   const clave = g.estado === 11 ? 'entregada' : g.estado === 8 ? 'cancelada' : g.estado >= 9 ? 'lista' : g.estado === 1 ? 'recibida' : 'reparacion';
   return `<span class="pastilla ${clave}">${escapar(g.estadoDisplay)}</span>`;
 }
@@ -1099,7 +1118,7 @@ async function pantallaGarantias() {
   const s = Sesion.obtener();
   if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver garantías.</div>'; return; }
   root.innerHTML = `
-    <h1>🛡️ Garantías</h1>
+    <h1>${ic('shield-check')} Garantías</h1>
     <div class="buscador">
       <input id="ga-folio" placeholder="Folio (GAR-000123)" autocapitalize="characters">
       <button id="ga-buscar" class="btn btn-azul btn-chico">Buscar</button>
@@ -1248,7 +1267,7 @@ async function pantallaReportes() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
   root.innerHTML = `
-    <h1>📊 Reporte de ventas</h1>
+    <h1>${ic('chart-column')} Reporte de ventas</h1>
     <div id="rp-tienda"></div>
     <div class="segmentado">
       <button id="rp-hoy" class="activo">Hoy</button>
@@ -1332,13 +1351,13 @@ async function pantallaReportes() {
 
 // ── Inventario ───────────────────────────────────────────────────────────
 
-const TIPO_ICONO = { CELULAR: '📱', TABLET: '📱', ACCESORIO: '🎧', SERVICIO: '🛠️' };
+const TIPO_ICONO = { CELULAR: ic('smartphone'), TABLET: ic('smartphone'), ACCESORIO: ic('headphones'), SERVICIO: ic('wrench') };
 
 async function pantallaInventario() {
   const s = Sesion.obtener();
   bajoStockCache.expira = 0; // se refresca el badge del menú la próxima vez que se dibuje, por si aquí cambia el stock
   root.innerHTML = `
-    <h1>📦 Inventario</h1>
+    <h1>${ic('package')} Inventario</h1>
     <div id="iv-tienda"></div>
     <div class="buscador">
       <input id="iv-buscar" placeholder="Nombre, código, marca o modelo">
@@ -1346,10 +1365,10 @@ async function pantallaInventario() {
     <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
       <input type="checkbox" id="iv-bajo-stock" style="width:auto;"> Solo bajo stock
     </label>
-    ${GESTOR_ROLES.includes(s.rol) ? `
+    ${SUPERIOR.includes(s.rol) ? `
       <div class="grupo-botones" style="margin: 10px 0;">
-        <button id="iv-nuevo" class="btn btn-verde">+ Nuevo producto</button>
-        <button id="iv-catalogos" class="btn btn-gris">🎨 Catálogos</button>
+        <button id="iv-nuevo" class="btn btn-verde">${ic('plus')} Nuevo producto</button>
+        <button id="iv-catalogos" class="btn btn-gris">${ic('tags')} Catálogos</button>
       </div>
       <div id="iv-form" class="oculto"></div>` : ''}
     <div id="iv-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
@@ -1394,7 +1413,7 @@ async function pantallaInventario() {
   document.getElementById('iv-bajo-stock').addEventListener('change', cargar);
   cargar();
 
-  if (GESTOR_ROLES.includes(s.rol)) {
+  if (SUPERIOR.includes(s.rol)) {
     let categorias = null;
     document.getElementById('iv-nuevo').onclick = async () => {
       const cont = document.getElementById('iv-form');
@@ -1619,7 +1638,7 @@ function dibujarInventario(cont, productos) {
     <div class="orden-item" data-codti="${p.codti}~${escapar(p.codpro)}">
       <div class="orden-cab">
         <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
-        ${p.bajoStock ? '<span class="pastilla error">⚠️ Bajo stock</span>' : ''}
+        ${p.bajoStock ? '<span class="pastilla error">' + ic('triangle-alert') + ' Bajo stock</span>' : ''}
       </div>
       <div class="orden-cliente">${escapar(p.codpro)} · ${escapar(p.nombreCategoria || '')}</div>
       <div class="orden-meta">
@@ -1646,18 +1665,19 @@ async function pantallaProductoDetalle(param) {
     return;
   }
 
-  const puedeEditar = GESTOR_ROLES.includes(s.rol);
+  const puedeEditar = GESTOR_ROLES.includes(s.rol);      // ajustar stock, ver costos y movimientos
+  const puedeEditarDatos = SUPERIOR.includes(s.rol);   // cambiar precios y datos del artículo: vista aparte
   root.innerHTML = `
     <h1>${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</h1>
     <div class="tarjeta">
-      ${p.bajoStock ? '<span class="pastilla error">⚠️ Bajo stock</span>' : ''}
+      ${p.bajoStock ? '<span class="pastilla error">' + ic('triangle-alert') + ' Bajo stock</span>' : ''}
       <div class="detalle-fila"><span class="k">Código</span><span class="v">${escapar(p.codpro)}</span></div>
       ${p.marca ? `<div class="detalle-fila"><span class="k">Marca / Modelo</span><span class="v">${escapar(p.marca)} ${escapar(p.modelo)}</span></div>` : ''}
       <div class="detalle-fila"><span class="k">Categoría</span><span class="v">${escapar(p.nombreCategoria || '—')}</span></div>
       ${p.descripcion ? `<div class="detalle-fila"><span class="k">Descripción</span><span class="v">${escapar(p.descripcion)}</span></div>` : ''}
       ${p.compatibilidad ? `<div class="detalle-fila"><span class="k">Compatibilidad</span><span class="v">${escapar(p.compatibilidad)}</span></div>` : ''}
       ${p.tipo !== 'SERVICIO' ? `<div class="detalle-fila"><span class="k">Stock</span><span class="v">${Number(p.stock)}${Number(p.stockMinimo) > 0 ? ' (mínimo ' + Number(p.stockMinimo) + ')' : ''}</span></div>` : ''}
-      <div class="detalle-fila"><span class="k">Precio compra</span><span class="v">${formatoDinero(p.preciopro)}</span></div>
+      ${puedeEditar ? `<div class="detalle-fila"><span class="k">Precio compra</span><span class="v">${formatoDinero(p.preciopro)}</span></div>` : ''}
       <div class="detalle-fila"><span class="k">Precio venta</span><span class="v">${formatoDinero(p.preciopub)}</span></div>
       ${p.diasGarantia ? `<div class="detalle-fila"><span class="k">Garantía</span><span class="v">${p.diasGarantia} días</span></div>` : ''}
     </div>
@@ -1670,17 +1690,13 @@ async function pantallaProductoDetalle(param) {
       `).join('')}
     </div>` : ''}
 
-    ${puedeEditar ? `
+    ${puedeEditarDatos ? `
     <div class="tarjeta">
-      <h2>Editar precios</h2>
-      <label>Precio de compra</label>
-      <input id="pd-precompra" type="number" inputmode="decimal" step="0.01" value="${p.preciopro ?? ''}">
-      <label>Precio de venta</label>
-      <input id="pd-preventa" type="number" inputmode="decimal" step="0.01" value="${p.preciopub ?? ''}">
-      <label>Stock mínimo (alerta)</label>
-      <input id="pd-stockmin" type="number" inputmode="decimal" step="1" value="${p.stockMinimo ?? 0}">
-      <button id="pd-guardar-precio" class="btn btn-azul">Guardar</button>
-    </div>
+      <h2>Datos y precios</h2>
+      <div class="ayuda">Nombre, categoría, precios, garantía, compatibilidad y stock mínimo se cambian aquí; el punto de venta solo cobra lo que diga Inventario.</div>
+      <button id="pd-editar" class="btn btn-azul">${ic('pencil')} Editar producto</button>
+    </div>` : ''}
+    ${puedeEditar ? `
     ${p.tipo === 'ACCESORIO' ? `
     <div class="tarjeta">
       <h2>Ajustar stock</h2>
@@ -1701,23 +1717,10 @@ async function pantallaProductoDetalle(param) {
       <div id="pd-historial"><div class="vacio">Cargando...</div></div>
     </div>` : ''}`;
 
+  if (puedeEditarDatos) {
+    document.getElementById('pd-editar').onclick = () => navegar(`#/producto-editar/${encodeURIComponent(codti)}~${encodeURIComponent(codpro)}`);
+  }
   if (puedeEditar) {
-    document.getElementById('pd-guardar-precio').onclick = async (e) => {
-      e.target.disabled = true;
-      try {
-        await api('PUT', `/api/productos/${encodeURIComponent(codpro)}?codti=${encodeURIComponent(codti)}`, {
-          precioCompra: Number(document.getElementById('pd-precompra').value) || null,
-          precioVenta: Number(document.getElementById('pd-preventa').value) || null,
-          stockMinimo: Number(document.getElementById('pd-stockmin').value) || 0,
-        });
-        mostrarMensaje(root, 'Precios actualizados.', 'ok');
-        setTimeout(() => pantallaProductoDetalle(param), 600);
-      } catch (err) {
-        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
-        e.target.disabled = false;
-      }
-    };
-
     const btnStock = document.getElementById('pd-guardar-stock');
     if (btnStock) {
       btnStock.onclick = async (e) => {
@@ -1743,6 +1746,157 @@ async function pantallaProductoDetalle(param) {
   }
 }
 
+/**
+ * Edición del artículo — solo ROOT/ADMIN. Aquí (y solo aquí) se cambian precios y datos del registro; el punto de venta
+ * cobra lo que diga Inventario. Tres bloques: datos del artículo (comunes a todas las sucursales), precios de esta
+ * sucursal (con opción de aplicarlos en todas) y, en celulares, cada unidad (condición, costo, precio propio).
+ */
+async function pantallaProductoEditar(param) {
+  const [codti, codpro] = param.split('~').map(decodeURIComponent);
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador puede editar productos.</div>'; return; }
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let p, categorias = [];
+  const volver = `#/producto/${encodeURIComponent(codti)}~${encodeURIComponent(codpro)}`;
+  try {
+    const productos = await api('GET', `/api/productos/tienda/${codti}`);
+    p = productos.find(x => x.codpro === codpro);
+    if (!p) throw new ApiError('No se encontró el producto.', {});
+    try {
+      const aplanar = (lista) => lista.flatMap(c => [c, ...(c.subcategorias ? aplanar(c.subcategorias) : [])]);
+      categorias = aplanar(await api('GET', '/api/categorias'));
+    } catch { /* sin categorías se puede editar lo demás */ }
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/inventario')">Ir a inventario</button></div>`;
+    return;
+  }
+
+  const esEquipo = p.tipo === 'CELULAR' || p.tipo === 'TABLET';
+  const esServicio = p.tipo === 'SERVICIO';
+  const catsDelTipo = categorias.filter(c => c.tipo === p.tipo);
+  const catActual = catsDelTipo.find(c => c.nombre === p.nombreCategoria);
+  const ayudaSucursal = `Precios de <strong>${escapar(p.nombreTienda || 'esta sucursal')}</strong>`;
+
+  root.innerHTML = `
+    <button class="enlace" id="pe-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver al producto</button>
+    <h1>${ic('pencil')} Editar producto</h1>
+    <div class="ayuda" style="margin:-8px 0 14px 0;">${escapar(p.nombreProductoMaster)} · código <strong>${escapar(p.codpro)}</strong> (el código no cambia)</div>
+
+    <div class="tarjeta">
+      <h2>Datos del artículo</h2>
+      <div class="ayuda">Se aplican en <strong>todas las sucursales</strong>.</div>
+      <label class="obligatorio">Nombre</label>
+      <input id="pe-nombre" maxlength="255" value="${escapar(p.nombreProductoMaster)}">
+      ${catsDelTipo.length ? `
+        <label>Categoría</label>
+        <select id="pe-categoria">${catsDelTipo.map(c => `<option value="${c.idcat}" ${catActual && catActual.idcat === c.idcat ? 'selected' : ''}>${escapar(c.nombre)}</option>`).join('')}</select>` : ''}
+      ${!esEquipo ? `<label>Compatibilidad</label><input id="pe-compat" maxlength="255" value="${escapar(p.compatibilidad || '')}" placeholder="Modelos con los que sirve">` : ''}
+      <label>Días de garantía</label>
+      <input id="pe-garantia" type="number" inputmode="numeric" min="0" step="1" value="${p.diasGarantia ?? ''}">
+      <button id="pe-guardar-datos" class="btn btn-azul">Guardar datos</button>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Precios y alerta de stock</h2>
+      <div class="ayuda">${ayudaSucursal}.</div>
+      <div class="fila">
+        <div><label>Precio de compra</label><input id="pe-precompra" type="number" inputmode="decimal" step="0.01" min="0" value="${p.preciopro ?? ''}"></div>
+        <div><label class="obligatorio">Precio de venta</label><input id="pe-preventa" type="number" inputmode="decimal" step="0.01" min="0.01" value="${p.preciopub ?? ''}"></div>
+      </div>
+      ${esServicio ? '' : `<label>Stock mínimo (alerta)</label><input id="pe-stockmin" type="number" inputmode="decimal" step="1" min="0" value="${p.stockMinimo ?? 0}">`}
+      <label class="casilla"><input type="checkbox" id="pe-todas"> Aplicar el precio de venta en <strong>todas las sucursales</strong></label>
+      <button id="pe-guardar-precios" class="btn btn-azul">Guardar precios</button>
+    </div>
+
+    ${esEquipo && p.imeisDisponibles?.length ? `
+    <div class="tarjeta">
+      <h2>Unidades disponibles (${p.imeisDisponibles.length})</h2>
+      <div class="ayuda">Cada unidad puede tener su propio costo y precio (por ejemplo un equipo usado). Sin precio propio se cobra el del modelo.</div>
+      ${p.imeisDisponibles.map((u, idx) => `
+        <div class="unidad-edit" data-idx="${idx}">
+          <div class="unidad-imei">${escapar(u.imei)} ${u.tienePrecioPropio ? '<span class="pastilla reparacion">Precio propio</span>' : ''}</div>
+          <div class="fila">
+            <div><label>Condición</label>
+              <select class="ue-condicion">${['NUEVO', 'USADO', 'REACONDICIONADO'].map(c => `<option ${u.condicion === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+            <div><label>Costo</label><input class="ue-costo" type="number" inputmode="decimal" step="0.01" min="0" value="${u.costoUnitario ?? ''}"></div>
+            <div><label>Precio</label><input class="ue-precio" type="number" inputmode="decimal" step="0.01" min="0.01" value="${u.precioVenta ?? ''}"></div>
+          </div>
+          <div class="grupo-botones">
+            <button class="btn btn-azul btn-chico ue-guardar">Guardar unidad</button>
+            ${u.tienePrecioPropio ? '<button class="btn btn-gris btn-chico ue-quitar">Volver al precio del modelo</button>' : ''}
+          </div>
+        </div>`).join('')}
+    </div>` : ''}`;
+
+  document.getElementById('pe-volver').onclick = () => navegar(volver);
+  const errorDe = (err) => err.network ? 'Sin conexión con el servidor.' : err.message;
+  const numero = (id) => { const v = document.getElementById(id)?.value; return v === '' || v == null ? null : Number(v); };
+
+  document.getElementById('pe-guardar-datos').onclick = async (e) => {
+    const nombre = document.getElementById('pe-nombre').value.trim();
+    if (!nombre) { mostrarMensaje(root, 'El nombre no puede quedar vacío.', 'error'); return; }
+    const cuerpo = { nombreBase: nombre };
+    const cat = document.getElementById('pe-categoria');
+    if (cat && cat.value) cuerpo.idCategoria = Number(cat.value);
+    const compat = document.getElementById('pe-compat');
+    if (compat) cuerpo.compatibilidad = compat.value.trim();
+    const gar = numero('pe-garantia');
+    if (gar != null) cuerpo.diasGarantia = gar;
+    e.target.disabled = true;
+    try {
+      await api('PATCH', `/api/productos/master/${p.idProductoMaster}`, cuerpo);
+      mostrarMensaje(root, 'Datos actualizados en todas las sucursales.', 'ok');
+      setTimeout(() => pantallaProductoEditar(param), 700);
+    } catch (err) { mostrarMensaje(root, errorDe(err), 'error'); e.target.disabled = false; }
+  };
+
+  document.getElementById('pe-guardar-precios').onclick = async (e) => {
+    const venta = numero('pe-preventa');
+    if (venta == null || venta <= 0) { mostrarMensaje(root, 'Indica un precio de venta mayor a cero.', 'error'); return; }
+    const todas = document.getElementById('pe-todas').checked;
+    const cuerpo = { precioCompra: numero('pe-precompra'), precioVenta: venta };
+    if (!esServicio) cuerpo.stockMinimo = numero('pe-stockmin') ?? 0;
+    e.target.disabled = true;
+    try {
+      await api('PUT', `/api/productos/${encodeURIComponent(codpro)}?codti=${encodeURIComponent(codti)}&aTodasLasSucursales=${todas}`, cuerpo);
+      mostrarMensaje(root, todas ? 'Precio actualizado en todas las sucursales.' : 'Precios actualizados.', 'ok');
+      setTimeout(() => pantallaProductoEditar(param), 700);
+    } catch (err) { mostrarMensaje(root, errorDe(err), 'error'); e.target.disabled = false; }
+  };
+
+  root.querySelectorAll('.unidad-edit').forEach(fila => {
+    const u = p.imeisDisponibles[Number(fila.dataset.idx)];
+    fila.querySelector('.ue-guardar').onclick = async (e) => {
+      const precio = Number(fila.querySelector('.ue-precio').value);
+      const costoTxt = fila.querySelector('.ue-costo').value;
+      if (!(precio > 0)) { mostrarMensaje(root, 'Indica un precio mayor a cero para la unidad.', 'error'); return; }
+      e.target.disabled = true;
+      try {
+        await api('PATCH', `/api/productos/imei/${encodeURIComponent(u.imei)}`, {
+          condicion: fila.querySelector('.ue-condicion').value,
+          costoUnitario: costoTxt === '' ? null : Number(costoTxt),
+        });
+        // solo se fija precio propio si cambió respecto al que ya cobraba esa unidad
+        if (Math.abs(precio - Number(u.precioVenta)) > 0.004) {
+          await api('PATCH', `/api/productos/imei/${encodeURIComponent(u.imei)}/precio`, { precioVenta: precio });
+        }
+        mostrarMensaje(root, 'Unidad actualizada.', 'ok');
+        setTimeout(() => pantallaProductoEditar(param), 700);
+      } catch (err) { mostrarMensaje(root, errorDe(err), 'error'); e.target.disabled = false; }
+    };
+    const quitar = fila.querySelector('.ue-quitar');
+    if (quitar) quitar.onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        await api('PATCH', `/api/productos/imei/${encodeURIComponent(u.imei)}/precio`, { precioVenta: null });
+        mostrarMensaje(root, 'La unidad vuelve a cobrar el precio del modelo.', 'ok');
+        setTimeout(() => pantallaProductoEditar(param), 700);
+      } catch (err) { mostrarMensaje(root, errorDe(err), 'error'); e.target.disabled = false; }
+    };
+  });
+}
+
 async function cargarHistorialInventario(codti, codpro) {
   const cont = document.getElementById('pd-historial');
   if (!cont) return;
@@ -1764,7 +1918,7 @@ async function pantallaCaja() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver caja.</div>'; return; }
   root.innerHTML = `
-    <h1>🧾 Caja</h1>
+    <h1>${ic('receipt')} Caja</h1>
     <div id="cj-tienda"></div>
     <div id="cj-caja"></div>
     <div id="cj-saldo"></div>
@@ -1855,7 +2009,7 @@ async function pantallaCaja() {
       const movs = await api('GET', `/api/cajas/${idCaja}/movimientos`);
       contLista.innerHTML = movs.length === 0 ? '<div class="vacio">Sin movimientos hoy.</div>' : movs.map(m => `
         <div class="historial-item">
-          <div class="historial-comentario">${m.tipo === 1 ? '➕' : '➖'} ${escapar(m.nombreMotivo)} · ${formatoDinero(m.monto)}</div>
+          <div class="historial-comentario">${m.tipo === 1 ? ic('plus') : ic('minus')} ${escapar(m.nombreMotivo)} · ${formatoDinero(m.monto)}</div>
           <div class="historial-meta">${escapar(m.nombreEncargado)} · ${formatoFecha(m.fechaMov)}${m.observaciones ? ' · ' + escapar(m.observaciones) : ''}</div>
         </div>`).join('');
     } catch (err) {
@@ -1943,7 +2097,7 @@ async function pantallaCaja() {
       <div class="tarjeta">
         <h2>Nuevo movimiento</h2>
         <label class="obligatorio">Motivo</label>
-        <select id="cj-motivo">${motivos.map(m => `<option value="${m.idmotivo}">${m.tipoMov === 1 ? '➕' : '➖'} ${escapar(m.nombre)}</option>`).join('')}</select>
+        <select id="cj-motivo">${motivos.map(m => `<option value="${m.idmotivo}">${m.tipoMov === 1 ? '+' : '−'} ${escapar(m.nombre)}</option>`).join('')}</select>
         <label class="obligatorio">Monto</label>
         <input id="cj-monto" type="number" inputmode="decimal" min="0" step="0.01">
         <label>Observaciones</label>
@@ -1980,7 +2134,7 @@ async function pantallaEmpleados() {
   const s = Sesion.obtener();
   if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver empleados.</div>'; return; }
   root.innerHTML = `
-    <h1>🧑‍💼 Empleados</h1>
+    <h1>${ic('briefcase')} Empleados</h1>
     <div class="buscador">
       <input id="em-buscar" placeholder="Nombre o usuario">
       <button id="em-nuevo" class="btn btn-verde btn-chico">+ Nuevo</button>
@@ -2128,8 +2282,8 @@ async function pantallaEmpleadoDetalle(id) {
     </div>
     <div id="ed-form"></div>
     <div class="grupo-botones">
-      <button id="ed-editar" class="btn btn-azul">✏️ Editar</button>
-      <button id="ed-desactivar" class="btn btn-rojo">🗑 Desactivar</button>
+      <button id="ed-editar" class="btn btn-azul">${ic('pencil')} Editar</button>
+      <button id="ed-desactivar" class="btn btn-rojo">${ic('trash-2')} Desactivar</button>
     </div>`;
 
   document.getElementById('ed-editar').onclick = () => dibujarFormularioEmpleado(document.getElementById('ed-form'), u, () => pantallaEmpleadoDetalle(id));
@@ -2191,7 +2345,7 @@ async function pantallaPOS() {
   posCarrito = [];
 
   root.innerHTML = `
-    <h1>💰 Punto de venta</h1>
+    <h1>${ic('shopping-cart')} Punto de venta</h1>
     <div class="buscador">
       <input id="pv-buscar" placeholder="Buscar producto...">
     </div>
@@ -2199,7 +2353,7 @@ async function pantallaPOS() {
 
     <h2 style="margin-top:16px;">Carrito</h2>
     <div id="pv-carrito"><div class="vacio">Agrega productos arriba.</div></div>
-    <div id="pv-total" class="tarjeta" style="text-align:right; font-size:20px; font-weight:800;">Total: $0.00</div>
+    <div id="pv-total" class="barra-total"></div>
 
     <div class="tarjeta">
       <h2 style="margin-top:0;">Cliente</h2>
@@ -2225,7 +2379,7 @@ async function pantallaPOS() {
       </div>
       <label>Observaciones</label>
       <input id="pv-obs" placeholder="Opcional">
-      <button id="pv-cobrar" class="btn btn-verde">Cobrar</button>
+      <button id="pv-cobrar" class="btn btn-verde btn-grande">${ic('banknote')} Cobrar</button>
     </div>`;
 
   // El catálogo y la caja se piden a la vez (y el catálogo se usa al instante si ya se tenía: ver cargarCatalogoPOS)
@@ -2312,7 +2466,7 @@ async function pantallaPOS() {
     } catch (err) {
       mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: esta venta no se guardó. Usa JSystem en la tienda mientras tanto.' : err.message, 'error');
       e.target.disabled = false;
-      e.target.textContent = 'Cobrar';
+      e.target.innerHTML = ic('banknote') + ' Cobrar';
     }
   };
 }
@@ -2323,7 +2477,7 @@ function dibujarResultadosPOS(cont, productos) {
     <div class="orden-item" data-codpro="${escapar(p.codpro)}">
       <div class="orden-cab">
         <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
-        <span style="font-weight:700;">${formatoDinero(p.preciopub)}</span>
+        <span style="font-weight:700; white-space:nowrap;">${formatoDinero(p.preciopub)}${p.tipo !== 'CELULAR' ? ' <span class="pv-mas">' + ic('plus') + '</span>' : ''}</span>
       </div>
       <div class="orden-cliente">${escapar(p.codpro)}${p.tipo !== 'SERVICIO' ? ' · Stock: ' + Number(p.stock) : ''}</div>
       ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
@@ -2373,9 +2527,9 @@ function actualizarCarritoPOS() {
         ${i.imei ? `<div class="orden-cliente">IMEI: ${escapar(i.imei)}</div>` : ''}
         <div class="fila" style="margin-top:8px; align-items:center;">
           ${!i.imei ? `<div><label style="margin:0 0 2px 0;">Cantidad</label><input type="number" min="1" ${i.stockMax ? 'max="' + i.stockMax + '"' : ''} value="${i.cantidad}" class="pv-cantidad" data-idx="${idx}"></div>` : ''}
-          <div><label style="margin:0 0 2px 0;">Precio unitario</label><input type="number" min="0" step="0.01" value="${i.precioUnitarioFinal}" class="pv-precio" data-idx="${idx}"></div>
+          <div><label style="margin:0 0 2px 0;">Precio unitario</label><div class="precio-fijo" title="El precio lo define Inventario; no se cambia al vender">${ic('lock')} ${formatoDinero(i.precioUnitarioFinal)}</div></div>
         </div>
-        <div class="orden-meta"><span></span><span style="font-weight:700;">${formatoDinero(i.cantidad * i.precioUnitarioFinal)}</span></div>
+        <div class="orden-meta"><span class="ayuda" style="margin:0;">${i.cantidad} × ${formatoDinero(i.precioUnitarioFinal)}</span><span class="importe-linea">${formatoDinero(i.cantidad * i.precioUnitarioFinal)}</span></div>
       </div>`).join('');
 
     cont.querySelectorAll('.pv-quitar').forEach(b => b.onclick = () => { posCarrito.splice(Number(b.dataset.idx), 1); actualizarCarritoPOS(); });
@@ -2386,13 +2540,10 @@ function actualizarCarritoPOS() {
       posCarrito[idx].cantidad = v;
       actualizarCarritoPOS();
     });
-    cont.querySelectorAll('.pv-precio').forEach(inp => inp.onchange = () => {
-      posCarrito[Number(inp.dataset.idx)].precioUnitarioFinal = Math.max(0, Number(inp.value) || 0);
-      actualizarCarritoPOS();
-    });
   }
   const total = posCarrito.reduce((sum, i) => sum + i.cantidad * i.precioUnitarioFinal, 0);
-  contTotal.textContent = 'Total: ' + formatoDinero(total);
+  const piezas = posCarrito.reduce((sum, i) => sum + i.cantidad, 0);
+  contTotal.innerHTML = `<span class="bt-detalle">${piezas} ${piezas === 1 ? 'artículo' : 'artículos'}</span><span class="bt-total"><small>Total</small> ${formatoDinero(total)}</span>`;
   actualizarCambioPOS();
 }
 
@@ -2432,11 +2583,11 @@ function dibujarSelectorClientePOS(cont, alSeleccionar) {
     out.textContent = 'Buscando...';
     try {
       const c = await api('GET', '/api/clientes/telefono/' + encodeURIComponent(tel));
-      out.innerHTML = `✅ <strong>${escapar(c.nombreCompleto)}</strong>`;
+      out.innerHTML = `${ic('circle-check')} <strong>${escapar(c.nombreCompleto)}</strong>`;
       contNuevo.classList.add('oculto');
       alSeleccionar({ idcliente: c.idcliente });
     } catch {
-      out.innerHTML = '⚠️ No se encontró.';
+      out.innerHTML = ic('triangle-alert') + ' No se encontró.';
       contNuevo.classList.remove('oculto');
       alSeleccionar(null);
       const btnRegistrar = document.getElementById('pv-cli-registrar');
@@ -2447,7 +2598,7 @@ function dibujarSelectorClientePOS(cont, alSeleccionar) {
           btnRegistrar.disabled = true;
           try {
             const nuevo = await api('POST', '/api/clientes', { nombreCompleto: nombre, telefono: tel });
-            out.innerHTML = `✅ <strong>${escapar(nuevo.nombreCompleto)}</strong> (registrado)`;
+            out.innerHTML = `${ic('circle-check')} <strong>${escapar(nuevo.nombreCompleto)}</strong> (registrado)`;
             contNuevo.classList.add('oculto');
             alSeleccionar({ idcliente: nuevo.idcliente });
           } catch (err) {
@@ -2473,7 +2624,7 @@ async function pantallaDevoluciones() {
   if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
 
   root.innerHTML = `
-    <h1>↩️ Devoluciones</h1>
+    <h1>${ic('undo-2')} Devoluciones</h1>
     <div class="tarjeta">
       <h2 style="margin-top:0;">Solicitar devolución</h2>
       <label class="obligatorio">ID de venta</label>
@@ -2631,7 +2782,7 @@ async function pantallaDevolucionDetalle(id) {
   }
 
   root.innerHTML = `
-    <h1>↩️ ${escapar(d.folio)}</h1>
+    <h1>${ic('undo-2')} ${escapar(d.folio)}</h1>
     <div class="tarjeta">
       <div class="orden-cab">
         ${pastillaDevolucion(d.estadoDisplay)}
@@ -2660,8 +2811,8 @@ async function pantallaDevolucionDetalle(id) {
         <label>Comentario</label>
         <textarea id="dv-comentario" placeholder="Opcional para aprobar; obligatorio para rechazar"></textarea>
         <div class="fila">
-          <button id="dv-aprobar" class="btn btn-verde">✔️ Aprobar</button>
-          <button id="dv-rechazar" class="btn btn-rojo">✖️ Rechazar</button>
+          <button id="dv-aprobar" class="btn btn-verde">${ic('check')} Aprobar</button>
+          <button id="dv-rechazar" class="btn btn-rojo">${ic('x')} Rechazar</button>
         </div>
       </div>` : ''}
     <button class="btn btn-gris" onclick="navegar('#/devoluciones')" style="margin-top:10px;">Volver</button>`;
@@ -2733,13 +2884,13 @@ async function pantallaTraspasos() {
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
 
   root.innerHTML = `
-    <h1>🚚 Traspasos</h1>
+    <h1>${ic('truck')} Traspasos</h1>
     <div id="tr-tienda"></div>
     <div class="grupo-botones" style="margin:10px 0;">
-      <button id="tr-nuevo-envio" class="btn btn-verde">📤 Enviar mercancía</button>
-      <button id="tr-nueva-solicitud" class="btn btn-azul">📥 Pedir mercancía</button>
+      <button id="tr-nuevo-envio" class="btn btn-verde">${ic('cloud-upload')} Enviar mercancía</button>
+      <button id="tr-nueva-solicitud" class="btn btn-azul">${ic('inbox')} Pedir mercancía</button>
     </div>
-    <button id="tr-faltantes" class="btn btn-gris" style="margin-bottom:10px;">⚠️ Faltantes por resolver <span id="tr-falt-n"></span></button>
+    <button id="tr-faltantes" class="btn btn-gris" style="margin-bottom:10px;">${ic('triangle-alert')} Faltantes por resolver <span id="tr-falt-n"></span></button>
     <div class="segmentado">
       <button id="tr-seg-pend" class="activo">Por atender</button>
       <button id="tr-seg-todos">Todos</button>
@@ -2767,7 +2918,7 @@ async function pantallaTraspasos() {
       } else {
         cont.innerHTML = lista.map(t => {
           const porMi = t.activo && t.codtiDestino === codti
-            ? (t.tipo === 1 && t.estado === 1 ? '📦 Por recibir' : (t.tipo === 2 && (t.estado === 1 || t.estado === 3) ? '📝 Por resolver' : ''))
+            ? (t.tipo === 1 && t.estado === 1 ? ic('package') + ' Por recibir' : (t.tipo === 2 && (t.estado === 1 || t.estado === 3) ? ic('clipboard-pen') + ' Por resolver' : ''))
             : '';
           return `
           <div class="orden-item" data-id="${t.idtraspaso}">
@@ -2820,7 +2971,7 @@ async function pantallaTraspasoDetalle(id) {
   const lineas = t.lineas || [];
 
   root.innerHTML = `
-    <h1>🚚 Traspaso #${t.idtraspaso}</h1>
+    <h1>${ic('truck')} Traspaso #${t.idtraspaso}</h1>
     <div class="tarjeta">
       <div class="orden-cab">${pastillaTraspaso(t)}<span class="ayuda">${escapar(t.tipoDisplay)}</span></div>
       <div class="ayuda" style="margin-top:6px;">${escapar(t.nombreTiendaOrigen)} → ${escapar(t.nombreTiendaDestino)}</div>
@@ -2830,13 +2981,13 @@ async function pantallaTraspasoDetalle(id) {
           <span class="k">${escapar(l.nombreProducto)}<br><span class="ayuda">${escapar(l.codpro)}${(l.imeis || []).length ? ' · ' + l.imeis.map(escapar).join(', ') : ''}</span></span>
           <span class="v">× ${Number(l.cantidad)}${esEnvio && t.estado === 2 && l.cantidadRecibida != null ? ' (llegó ' + Number(l.cantidadRecibida) + ')' : ''}</span>
         </div>
-        ${Number(l.faltantePendiente) > 0 ? `<div class="ayuda" style="color:#b91c1c;">⚠️ Faltan por resolver: ${Number(l.faltantePendiente)}</div>` : ''}`).join('')}
+        ${Number(l.faltantePendiente) > 0 ? `<div class="ayuda" style="color:#b91c1c;">${ic('triangle-alert')} Faltan por resolver: ${Number(l.faltantePendiente)}</div>` : ''}`).join('')}
       <div class="ayuda" style="margin-top:10px;">Lo creó ${escapar(t.nombreCrea || '')} · ${formatoFecha(t.fechaCreacion)}</div>
       ${t.nombreValida ? `<div class="ayuda">Lo resolvió ${escapar(t.nombreValida)} · ${formatoFecha(t.fechaActualizacion)}</div>` : ''}
       ${t.motivoRechazo ? `<div class="mensaje error" style="margin-top:8px;">Motivo del rechazo: ${escapar(t.motivoRechazo)}</div>` : ''}
       ${t.comentarioRecepcion ? `<div class="ayuda">Comentario de la recepción: ${escapar(t.comentarioRecepcion)}</div>` : ''}
       ${t.idtraspasoRef ? `<div class="ayuda">Ligado al traspaso <span class="enlace" onclick="navegar('#/traspaso/${t.idtraspasoRef}')">#${t.idtraspasoRef}</span></div>` : ''}
-      ${esEnvio && t.conFaltantes ? `<button class="btn btn-ambar btn-chico" onclick="navegar('#/faltantes')" style="margin-top:8px;">⚠️ Ver faltantes</button>` : ''}
+      ${esEnvio && t.conFaltantes ? `<button class="btn btn-ambar btn-chico" onclick="navegar('#/faltantes')" style="margin-top:8px;">${ic('triangle-alert')} Ver faltantes</button>` : ''}
     </div>
     <div id="tr-acciones"></div>
     <button class="btn btn-gris" onclick="navegar('#/traspasos')" style="margin-top:10px;">Volver</button>`;
@@ -2869,7 +3020,7 @@ async function pantallaTraspasoDetalle(id) {
           </div>`).join('')}
         <label>Comentario</label>
         <textarea id="tr-comentario" placeholder="Obligatorio si algo no llegó: qué pasó"></textarea>
-        <button id="tr-recibir" class="btn btn-verde">✔️ Confirmar recepción</button>
+        <button id="tr-recibir" class="btn btn-verde">${ic('check')} Confirmar recepción</button>
       </div>`);
     acciones.querySelectorAll('.tr-falta-chk').forEach(chk => chk.onchange = () =>
       acciones.querySelector(`.tr-falta-det[data-i="${chk.dataset.i}"]`).classList.toggle('oculto', !chk.checked));
@@ -2920,10 +3071,10 @@ async function pantallaTraspasoDetalle(id) {
               </label>`).join('')}
           </div>`;
         }).join('')}
-        <button id="tr-aceptar" class="btn btn-verde" style="margin-top:6px;">✔️ Aceptar y enviar</button>
+        <button id="tr-aceptar" class="btn btn-verde" style="margin-top:6px;">${ic('check')} Aceptar y enviar</button>
         <label style="margin-top:12px;">Motivo (solo si la rechazas)</label>
         <textarea id="tr-motivo" placeholder="Por qué no se puede surtir"></textarea>
-        <button id="tr-rechazar" class="btn btn-rojo">✖️ Rechazar</button>
+        <button id="tr-rechazar" class="btn btn-rojo">${ic('x')} Rechazar</button>
       </div>`);
     document.getElementById('tr-aceptar').onclick = async (e) => {
       const elegidos = [];
@@ -2955,7 +3106,7 @@ async function pantallaTraspasoDetalle(id) {
   if (abierto && soyOrigen) {
     acciones.insertAdjacentHTML('beforeend', `
       <div class="tarjeta">
-        <button id="tr-anular" class="btn btn-rojo">🚫 Anular ${esEnvio ? 'envío' : 'solicitud'}</button>
+        <button id="tr-anular" class="btn btn-rojo">${ic('ban')} Anular ${esEnvio ? 'envío' : 'solicitud'}</button>
         <div class="ayuda">${esEnvio ? 'La mercancía vuelve a tu inventario.' : 'La tienda ya no la verá como pendiente.'}</div>
       </div>`);
     document.getElementById('tr-anular').onclick = async (e) => {
@@ -2976,7 +3127,7 @@ async function pantallaTraspasoNuevo(tipo) {
   const esEnvio = tipo !== 'solicitud';
 
   root.innerHTML = `
-    <h1>${esEnvio ? '📤 Enviar mercancía' : '📥 Pedir mercancía'}</h1>
+    <h1>${esEnvio ? ic('cloud-upload') + ' Enviar mercancía' : ic('inbox') + ' Pedir mercancía'}</h1>
     <div id="tn-tienda"></div>
     <label class="obligatorio" style="margin-top:8px;">${esEnvio ? 'Enviar a' : 'Pedir a'}</label>
     <select id="tn-otra"><option>Cargando...</option></select>
@@ -2988,7 +3139,7 @@ async function pantallaTraspasoNuevo(tipo) {
     <div id="tn-resultados"></div>
     <h2>${esEnvio ? 'A enviar' : 'A pedir'}</h2>
     <div id="tn-lineas"><div class="vacio">Busca y toca un producto para agregarlo.</div></div>
-    <button id="tn-guardar" class="btn btn-verde" style="margin-top:10px;">${esEnvio ? '📤 Enviar' : '📥 Enviar solicitud'}</button>
+    <button id="tn-guardar" class="btn btn-verde" style="margin-top:10px;">${esEnvio ? ic('cloud-upload') + ' Enviar' : ic('inbox') + ' Enviar solicitud'}</button>
     <button class="btn btn-gris" onclick="navegar('#/traspasos')" style="margin-top:8px;">Cancelar</button>`;
 
   let tiendas = [];
@@ -3096,7 +3247,7 @@ async function pantallaTraspasoNuevo(tipo) {
     } catch (err) {
       mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: no se guardó.' : err.message, 'error');
       e.target.disabled = false;
-      e.target.textContent = esEnvio ? '📤 Enviar' : '📥 Enviar solicitud';
+      e.target.innerHTML = esEnvio ? ic('cloud-upload') + ' Enviar' : ic('inbox') + ' Enviar solicitud';
     }
   };
 }
@@ -3106,7 +3257,7 @@ async function pantallaFaltantes() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
   root.innerHTML = `
-    <h1>⚠️ Faltantes</h1>
+    <h1>${ic('triangle-alert')} Faltantes</h1>
     <div class="ayuda">Mercancía que salió de una tienda y no llegó completa a la otra. Cada faltante se resuelve: llegó tarde, regresó al origen o se da de baja.</div>
     <div id="fa-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>
     <button class="btn btn-gris" onclick="navegar('#/traspasos')" style="margin-top:10px;">Volver</button>`;
@@ -3122,7 +3273,7 @@ async function pantallaFaltantes() {
       cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
       return;
     }
-    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay faltantes por resolver. 🎉</div>'; return; }
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay faltantes por resolver.</div>'; return; }
     cont.innerHTML = lista.map(f => {
       const puedeTarde = superior || s.codti === f.codtiDestino;
       const puedeReintegro = superior || s.codti === f.codtiOrigen;
@@ -3141,9 +3292,9 @@ async function pantallaFaltantes() {
         <label>Nota</label>
         <input class="fa-nota" placeholder="Opcional (obligatoria para dar de baja)">
         <div class="grupo-botones" style="margin-top:8px;">
-          ${puedeTarde ? '<button class="btn btn-verde btn-chico fa-accion" data-accion="RECIBIDO_TARDE">📦 Llegó tarde</button>' : ''}
-          ${puedeReintegro ? '<button class="btn btn-azul btn-chico fa-accion" data-accion="REINTEGRADO_ORIGEN">↩️ Regresó al origen</button>' : ''}
-          ${superior ? '<button class="btn btn-rojo btn-chico fa-accion" data-accion="BAJA">🗑️ Dar de baja</button>' : ''}
+          ${puedeTarde ? '<button class="btn btn-verde btn-chico fa-accion" data-accion="RECIBIDO_TARDE">' + ic('package') + ' Llegó tarde</button>' : ''}
+          ${puedeReintegro ? '<button class="btn btn-azul btn-chico fa-accion" data-accion="REINTEGRADO_ORIGEN">' + ic('undo-2') + ' Regresó al origen</button>' : ''}
+          ${superior ? '<button class="btn btn-rojo btn-chico fa-accion" data-accion="BAJA">' + ic('trash-2') + ' Dar de baja</button>' : ''}
         </div>
       </div>`;
     }).join('');
@@ -3185,7 +3336,7 @@ setInterval(actualizarBadgeNotificaciones, 45000);
 
 async function pantallaNotificaciones() {
   root.innerHTML = `
-    <h1>🔔 Notificaciones</h1>
+    <h1>${ic('bell')} Notificaciones</h1>
     <div class="segmentado">
       <button id="nt-seg-pendientes" class="activo">Pendientes</button>
       <button id="nt-seg-todas">Todas</button>
@@ -3245,7 +3396,7 @@ async function pantallaNotificaciones() {
 
 function pantallaAjustes() {
   root.innerHTML = `
-    <h1>⚙️ Ajustes</h1>
+    <h1>${ic('settings')} Ajustes</h1>
     <div class="tarjeta">
       <h2 style="margin-top:0;">Cambiar mi contraseña</h2>
       <label class="obligatorio">Contraseña actual</label>
@@ -3287,9 +3438,9 @@ function pantallaAjustes() {
 
 async function pantallaCatalogos() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver catálogos.</div>'; return; }
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los catálogos solo los administra un administrador.</div>'; return; }
   root.innerHTML = `
-    <h1>🎨 Catálogos</h1>
+    <h1>${ic('tags')} Catálogos</h1>
     <div class="segmentado">
       <button id="ct-seg-colores" class="activo">Colores</button>
       <button id="ct-seg-secciones">Secciones</button>

@@ -74,7 +74,8 @@ class VentaServiceTest {
     void setUp() {
         tienda = Tienda.builder().codti(CODTI).nombre("Sucursal Centro").build();
         caja = Caja.builder().idCaja(ID_CAJA).tienda(tienda).nombreCaja("Caja 1").build();
-        vendedor = Usuario.builder().idusuario(ID_VENDEDOR).username("jdoe").nombreCompleto("Juan Pérez").build();
+        vendedor = Usuario.builder().idusuario(ID_VENDEDOR).username("jdoe").nombreCompleto("Juan Pérez")
+                .rol(com.skycel.backend.domain.enums.Rol.VENDEDOR).tienda(tienda).build();
 
         lenient().when(tiendaRepository.findById(CODTI)).thenReturn(Optional.of(tienda));
         lenient().when(cajaRepository.findById(ID_CAJA)).thenReturn(Optional.of(caja));
@@ -108,7 +109,7 @@ class VentaServiceTest {
     private Producto productoCelular(ProductoMaster master, BigDecimal stock) {
         return Producto.builder()
                 .idproducto(10).codpro("CEL-0001").tienda(tienda).productoMaster(master)
-                .stock(stock).preciopro(new BigDecimal("100")).preciopub(new BigDecimal("200"))
+                .stock(stock).preciopro(new BigDecimal("100")).preciopub(new BigDecimal("199"))
                 .build();
     }
 
@@ -801,6 +802,97 @@ class VentaServiceTest {
                     .hasMessageContaining("no pertenece a la tienda");
 
             verifyNoInteractions(productoMasterRepository);
+        }
+    }
+
+    // ── Precio del sistema y tienda del vendedor ─────────────────────────────
+
+    @Nested
+    @DisplayName("crear — el precio lo pone el sistema y se vende en la propia tienda")
+    class PrecioYTienda {
+
+        private void accesorioEnStock() {
+            ProductoMaster master = masterAccesorio();
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(master, BigDecimal.TEN)));
+        }
+
+        private VentaDetalleRequestDto conPrecio(String precio) {
+            VentaDetalleRequestDto d = lineaAccesorio((short) 1);
+            d.setPrecioUnitarioFinal(new BigDecimal(precio));
+            return d;
+        }
+
+        @Test
+        @DisplayName("un precio distinto al del sistema se rechaza (400), aunque lo mande un administrador")
+        void precioDistinto_seRechaza() {
+            accesorioEnStock();
+            vendedor.setRol(com.skycel.backend.domain.enums.Rol.ADMIN);
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(conPrecio("10"))), ID_VENDEDOR))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                        assertThat(e.getStatusCode().value()).isEqualTo(400);
+                        assertThat(e.getReason()).contains("Cable USB-C").contains("15.00").contains("10.00").contains("Inventario");
+                    });
+            verify(ventaRepository, never()).save(any(Venta.class));
+        }
+
+        @Test
+        @DisplayName("el mismo precio con otra escala decimal (15.0 = 15.00) sí se acepta")
+        void mismoPrecioOtraEscala_seAcepta() {
+            accesorioEnStock();
+
+            VentaResponseDto r = ventaService.crear(ventaBase(List.of(conPrecio("15.0"))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("15");
+        }
+
+        @Test
+        @DisplayName("sin conexión: el precio de antes se acepta (la venta ya ocurrió) y queda anotado en las observaciones")
+        void sinConexion_precioDistinto_seAceptaConAviso() {
+            accesorioEnStock();
+            VentaRequestDto request = ventaBase(List.of(conPrecio("12")));
+            request.setClaveOffline("clave-precio-1");
+            request.setSinConexion(true);
+
+            ventaService.crear(request, ID_VENDEDOR);
+
+            verify(ventaRepository, atLeastOnce()).save(ventaCaptor.capture());
+            assertThat(ventaCaptor.getAllValues().get(0).getObservaciones())
+                    .contains("PRECIO DISTINTO AL DEL SISTEMA").contains("Cable USB-C").contains("12.00");
+        }
+
+        @Test
+        @DisplayName("la venta que genera una orden de servicio arma sus propios precios: no se compara con el catálogo")
+        void desdeOrdenDeServicio_precioLibre() {
+            accesorioEnStock();
+
+            VentaResponseDto r = ventaService.crearDesdeOrdenServicio(ventaBase(List.of(conPrecio("99"))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("99");
+        }
+
+        @Test
+        @DisplayName("un vendedor no puede vender en otra tienda (403)")
+        void vendedorEnOtraTienda_seRechaza() {
+            vendedor.setTienda(Tienda.builder().codti(2).nombre("Otra").build());
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 1))), ID_VENDEDOR))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode().value()).isEqualTo(403));
+            verifyNoInteractions(productoMasterRepository);
+        }
+
+        @Test
+        @DisplayName("un administrador sí puede vender en cualquier tienda")
+        void administradorEnCualquierTienda() {
+            accesorioEnStock();
+            vendedor.setRol(com.skycel.backend.domain.enums.Rol.ADMIN);
+            vendedor.setTienda(Tienda.builder().codti(2).nombre("Otra").build());
+
+            VentaResponseDto r = ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 1))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("15");
         }
     }
 

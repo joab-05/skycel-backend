@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -137,6 +138,13 @@ public class VentaService {
         Usuario vendedor = usuarioRepository.findById(idUsuarioVendedor)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuario vendedor no encontrado"));
 
+        // Un vendedor o un encargado solo vende en SU tienda (un administrador, en cualquiera). Las ventas que genera una
+        // orden de servicio o una devolución son de la tienda dueña de la orden, no de quien las cierra.
+        if (!desdeOrden && vendedor.getRol() != Rol.ROOT && vendedor.getRol() != Rol.ADMIN
+                && (vendedor.getTienda() == null || !vendedor.getTienda().getCodti().equals(tienda.getCodti()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes vender en tu propia tienda.");
+        }
+
         Cliente cliente = null;
         if (dto.getIdcliente() != null) {
             cliente = clienteRepository.findById(dto.getIdcliente())
@@ -195,7 +203,7 @@ public class VentaService {
                 .estado(ESTADO_COMPLETADA)
                 .total(total)
                 .montoAbonado(montoAbonado)
-                .observaciones(dto.getObservaciones())
+                .observaciones(observacionesConAvisos(dto.getObservaciones(), lineas))
                 .fechaVenta(fechaOffline)
                 .claveOffline(conClave ? dto.getClaveOffline().trim() : null)
                 .folioLocal(!offline ? null : (dto.getFolioLocal() != null && !dto.getFolioLocal().isBlank()
@@ -328,6 +336,17 @@ public class VentaService {
         return toResponseDto(venta, ventaDetalleRepository.findByVenta_Idventa(idventa));
     }
 
+    /** Un administrador consulta cualquier venta; los demás, solo las de su tienda. */
+    @Transactional(readOnly = true)
+    public void validarAccesoAVenta(Integer codtiDeLaVenta, String username) {
+        Usuario u = usuarioRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario autenticado no encontrado"));
+        if (u.getRol() == Rol.ROOT || u.getRol() == Rol.ADMIN) return;
+        if (u.getTienda() == null || !u.getTienda().getCodti().equals(codtiDeLaVenta)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes consultar las ventas de tu tienda.");
+        }
+    }
+
     /** La venta hecha sin conexión con ese folio provisional del ticket. */
     @Transactional(readOnly = true)
     public VentaResponseDto obtenerPorFolioLocal(String folioLocal) {
@@ -442,6 +461,7 @@ public class VentaService {
         BigDecimal costoUnitarioCompra;
         BigDecimal precioUnitarioBase;
         BigDecimal precioUnitarioFinal;
+        String avisoPrecio;   // solo en ventas sin conexión: el precio cobrado no coincide con el del sistema
         BigDecimal subtotal;
         Boolean esRegalo;
     }
@@ -513,10 +533,34 @@ public class VentaService {
             linea.precioUnitarioBase = producto.getPreciopub();
         }
 
+        if (d.getPrecioUnitarioFinal() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta el precio de '" + master.getNombreBase() + "'.");
+        }
         linea.precioUnitarioFinal = d.getPrecioUnitarioFinal();
         validarRegalo(linea, vendedor, desdeOrden);
+        // El precio lo pone el sistema (el del producto en Inventario o el propio de la unidad): ni un vendedor ni un
+        // administrador lo cambian al vender; solo se cambia en Inventario. Excepciones: un regalo ($0, autorizado), las líneas
+        // que arma una orden de servicio o una devolución, y una venta hecha SIN CONEXIÓN, que puede traer el precio de antes
+        // de que cambiara: esa se acepta (ya ocurrió) y queda anotado el aviso en sus observaciones.
+        BigDecimal precioSistema = linea.precioUnitarioBase.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal precioCobrado = d.getPrecioUnitarioFinal().setScale(2, RoundingMode.HALF_UP);
+        if (!desdeOrden && !linea.esRegalo && precioSistema.compareTo(precioCobrado) != 0) {
+            if (!sinConexion) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El precio de '" + master.getNombreBase() + "' es $" + precioSistema
+                        + " y no se puede vender a $" + precioCobrado + ". Solo un administrador cambia los precios, en Inventario.");
+            }
+            linea.avisoPrecio = master.getNombreBase() + " (sistema $" + precioSistema + ", cobrado $" + precioCobrado + ")";
+        }
         linea.subtotal = linea.precioUnitarioFinal.multiply(BigDecimal.valueOf(linea.cantidadSolicitada));
         return linea;
+    }
+
+    /** Observaciones de la venta más, si las hay, los avisos de precio distinto al del sistema (ventas sin conexión). */
+    private String observacionesConAvisos(String observaciones, List<LineaResuelta> lineas) {
+        String avisos = lineas.stream().map(l -> l.avisoPrecio).filter(java.util.Objects::nonNull).collect(Collectors.joining("; "));
+        if (avisos.isEmpty()) return observaciones;
+        String texto = (observaciones == null || observaciones.isBlank() ? "" : observaciones.trim() + " · ") + "PRECIO DISTINTO AL DEL SISTEMA: " + avisos;
+        return texto.length() > 255 ? texto.substring(0, 252) + "..." : texto;
     }
 
     /**

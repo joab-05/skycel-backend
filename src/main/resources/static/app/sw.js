@@ -3,11 +3,12 @@
  * sin conexión; los datos (todo /api/...) siempre van a la red — nunca se sirven de la caché, para no mostrar
  * información vieja o mandar peticiones fuera de línea que parezcan haber funcionado.
  */
-const CACHE = 'skycel-app-v2';
+const CACHE = 'skycel-app-v3';
 const ARCHIVOS = [
   '/app', '/app/',
   '/app/index.html',
   '/app/css/app.css',
+  '/app/js/icons.js',
   '/app/js/db.js',
   '/app/js/api.js',
   '/app/js/net.js',

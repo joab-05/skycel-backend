@@ -1,5 +1,7 @@
 package com.skycel.backend.service;
 
+import com.skycel.backend.domain.dto.request.ProductoMasterUpdateDTO;
+import com.skycel.backend.domain.dto.request.ProductoUpdateDTO;
 import com.skycel.backend.domain.dto.request.StockAjusteDTO;
 import com.skycel.backend.domain.dto.response.ProductoResponseDTO;
 import com.skycel.backend.domain.entity.*;
@@ -161,6 +163,99 @@ class ProductoServiceTest {
 
         assertThat(zocalo.getStock()).isEqualByComparingTo("15");
         assertThat(bodega.getStock()).isEqualByComparingTo("10");
+    }
+
+    // ── Editar precios y datos del artículo ─────────────────────────────────
+
+    @Test
+    @DisplayName("actualizar: un precio de venta de $0 o negativo se rechaza (400)")
+    void actualizar_precioVentaNoPositivo_lanza400() {
+        ProductoUpdateDTO dto = new ProductoUpdateDTO();
+        dto.setPrecioVenta(BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> productoService.actualizar("X", 1, dto))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    @DisplayName("actualizar con aTodasLasSucursales: el precio se aplica también a las demás sucursales con ese código")
+    void actualizar_aTodasLasSucursales_aplicaElPrecioEnTodas() {
+        Producto base = accesorio(BigDecimal.TEN);
+        Producto zocalo = enSucursal(base, 2, 21);
+        Producto bodega = enSucursal(base, 1, 20);
+        zocalo.setPreciopub(new BigDecimal("15")); bodega.setPreciopub(new BigDecimal("15"));
+        when(productoRepository.findByCodproAndTienda_Codti(base.getCodpro(), 2)).thenReturn(Optional.of(zocalo));
+        when(productoRepository.findAllByCodpro(base.getCodpro())).thenReturn(List.of(bodega, zocalo));
+        ProductoUpdateDTO dto = new ProductoUpdateDTO();
+        dto.setPrecioVenta(new BigDecimal("25"));
+        dto.setStockMinimo(new BigDecimal("3"));
+
+        productoService.actualizar(base.getCodpro(), 2, true, dto);
+
+        assertThat(zocalo.getPreciopub()).isEqualByComparingTo("25");
+        assertThat(bodega.getPreciopub()).isEqualByComparingTo("25");
+        assertThat(zocalo.getStockMinimo()).isEqualByComparingTo("3");   // lo demás solo cambia en la sucursal indicada
+        assertThat(bodega.getStockMinimo()).isNull();
+    }
+
+    @Test
+    @DisplayName("actualizar sin aTodasLasSucursales: solo cambia la sucursal indicada")
+    void actualizar_soloUnaSucursal() {
+        Producto base = accesorio(BigDecimal.TEN);
+        Producto zocalo = enSucursal(base, 2, 21);
+        Producto bodega = enSucursal(base, 1, 20);
+        zocalo.setPreciopub(new BigDecimal("15")); bodega.setPreciopub(new BigDecimal("15"));
+        when(productoRepository.findByCodproAndTienda_Codti(base.getCodpro(), 2)).thenReturn(Optional.of(zocalo));
+        ProductoUpdateDTO dto = new ProductoUpdateDTO();
+        dto.setPrecioVenta(new BigDecimal("25"));
+
+        productoService.actualizar(base.getCodpro(), 2, false, dto);
+
+        assertThat(zocalo.getPreciopub()).isEqualByComparingTo("25");
+        assertThat(bodega.getPreciopub()).isEqualByComparingTo("15");
+    }
+
+    @Test
+    @DisplayName("actualizarMaster: renombrar a un nombre que ya usa otro artículo se rechaza (409)")
+    void actualizarMaster_nombreRepetido_lanza409() {
+        ProductoMaster mio = ProductoMaster.builder().idprodmaster(2).tipo(TipoProducto.ACCESORIO).nombreBase("Cable USB-C").build();
+        ProductoMaster otro = ProductoMaster.builder().idprodmaster(9).tipo(TipoProducto.ACCESORIO).nombreBase("Cable Tipo C").build();
+        when(productoMasterRepository.findById(2)).thenReturn(Optional.of(mio));
+        when(productoMasterRepository.findByNombreBaseIgnoreCaseAndActivoTrue("Cable Tipo C")).thenReturn(Optional.of(otro));
+        ProductoMasterUpdateDTO dto = new ProductoMasterUpdateDTO();
+        dto.setNombreBase("  Cable   Tipo C ");
+
+        assertThatThrownBy(() -> productoService.actualizarMaster(2, dto))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    @DisplayName("actualizarMaster: se puede renombrar con un nombre libre")
+    void actualizarMaster_renombrar() {
+        ProductoMaster mio = ProductoMaster.builder().idprodmaster(2).tipo(TipoProducto.ACCESORIO).nombreBase("Cable USB-C").build();
+        when(productoMasterRepository.findById(2)).thenReturn(Optional.of(mio));
+        when(productoMasterRepository.findByNombreBaseIgnoreCaseAndActivoTrue("Cable USB-C 60W")).thenReturn(Optional.empty());
+        when(productoMasterRepository.save(any(ProductoMaster.class))).thenAnswer(inv -> inv.getArgument(0));
+        ProductoMasterUpdateDTO dto = new ProductoMasterUpdateDTO();
+        dto.setNombreBase("Cable USB-C 60W");
+
+        productoService.actualizarMaster(2, dto);
+
+        assertThat(mio.getNombreBase()).isEqualTo("Cable USB-C 60W");
+    }
+
+    @Test
+    @DisplayName("actualizarMaster: una categoría de otro tipo de producto se rechaza (400)")
+    void actualizarMaster_categoriaDeOtroTipo_lanza400() {
+        ProductoMaster mio = ProductoMaster.builder().idprodmaster(2).tipo(TipoProducto.ACCESORIO).nombreBase("Cable USB-C").build();
+        Categoria deEquipos = Categoria.builder().idcat((short) 7).nombre("Celular").tipo(TipoProducto.CELULAR).build();
+        when(productoMasterRepository.findById(2)).thenReturn(Optional.of(mio));
+        when(categoriaRepository.findById((short) 7)).thenReturn(Optional.of(deEquipos));
+        ProductoMasterUpdateDTO dto = new ProductoMasterUpdateDTO();
+        dto.setIdCategoria((short) 7);
+
+        assertThatThrownBy(() -> productoService.actualizarMaster(2, dto))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
 
     // ── Producto no encontrado ──────────────────────────────────────────────

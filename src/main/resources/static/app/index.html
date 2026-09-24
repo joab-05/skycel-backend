@@ -20,16 +20,16 @@
 <div id="barra-conexion"></div>
 <header id="encabezado" class="encabezado oculto">
   <div class="encabezado-titulo">
-    <span class="logo">📱</span>
+    <span class="logo" data-ic="smartphone"></span>
     <div>
       <div class="marca">Skycel</div>
       <div class="subtitulo" id="usuario-actual"></div>
     </div>
   </div>
   <div class="encabezado-acciones">
-    <button id="btn-notificaciones" class="btn-icono" title="Notificaciones">🔔<span id="notif-badge" class="notif-badge oculto"></span></button>
-    <button id="btn-ajustes" class="btn-icono" title="Ajustes">⚙️</button>
-    <button id="btn-salir" class="btn-icono" title="Cerrar sesión">⎋</button>
+    <button id="btn-notificaciones" class="btn-icono" title="Notificaciones" aria-label="Notificaciones"><span data-ic="bell"></span><span id="notif-badge" class="notif-badge oculto"></span></button>
+    <button id="btn-ajustes" class="btn-icono" title="Ajustes" aria-label="Ajustes" data-ic="settings"></button>
+    <button id="btn-salir" class="btn-icono" title="Cerrar sesión" aria-label="Cerrar sesión" data-ic="log-out"></button>
   </div>
 </header>
 <div class="app-shell">
@@ -38,6 +38,7 @@
 </div>
 <nav id="nav-inferior" class="nav-inferior oculto"></nav>
 
+<script src="/app/js/icons.js"></script>
 <script src="/app/js/db.js"></script>
 <script src="/app/js/api.js"></script>
 <script src="/app/js/net.js"></script>

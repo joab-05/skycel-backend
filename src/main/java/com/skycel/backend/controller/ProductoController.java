@@ -24,6 +24,24 @@ public class ProductoController {
     private final ProductoService productoService;
     private final com.skycel.backend.service.MovimientoInventarioService movimientoInventarioService;
 
+    /** Quién puede ver cuánto costó la mercancía: administradores y encargados. Vendedores y técnicos, no. */
+    private static boolean veCostos(org.springframework.security.core.userdetails.UserDetails u) {
+        return u != null && u.getAuthorities().stream().anyMatch(a ->
+                a.getAuthority().equals("ROLE_ROOT") || a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_ENCARGADO_TIENDA"));
+    }
+    private static ProductoResponseDTO sinCostos(ProductoResponseDTO d, org.springframework.security.core.userdetails.UserDetails u) {
+        if (veCostos(u)) return d;
+        d.setPreciopro(null);
+        if (d.getImeisDisponibles() != null) {
+            d.getImeisDisponibles().forEach(i -> { i.setCostoUnitario(null); i.setTieneCostoPropio(null); });
+        }
+        return d;
+    }
+    private static List<ProductoResponseDTO> sinCostosSiAplica(List<ProductoResponseDTO> lista, org.springframework.security.core.userdetails.UserDetails u) {
+        if (!veCostos(u)) lista.forEach(d -> sinCostos(d, u));
+        return lista;
+    }
+
     // ── PRODUCTO MASTER ───────────────────────────────────────────────────────
 
     @Operation(summary = "Catálogo Maestro")
@@ -66,16 +84,18 @@ public class ProductoController {
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<ProductoResponseDTO>> getInventarioPorTienda(@PathVariable Integer codti) {
-        return ResponseEntity.ok(productoService.obtenerStockPorTienda(codti));
+    public ResponseEntity<List<ProductoResponseDTO>> getInventarioPorTienda(@PathVariable Integer codti,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostosSiAplica(productoService.obtenerStockPorTienda(codti), user));
     }
 
     @Operation(summary = "Stock disponible por tienda (stock > 0)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}/disponibles")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<ProductoResponseDTO>> getStockDisponible(@PathVariable Integer codti) {
-        return ResponseEntity.ok(productoService.obtenerStockDisponiblePorTienda(codti));
+    public ResponseEntity<List<ProductoResponseDTO>> getStockDisponible(@PathVariable Integer codti,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostosSiAplica(productoService.obtenerStockDisponiblePorTienda(codti), user));
     }
 
     @Operation(summary = "Historial de cambios de stock de una tienda",
@@ -97,8 +117,9 @@ public class ProductoController {
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}/bajo-stock")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<ProductoResponseDTO>> getBajoStock(@PathVariable Integer codti) {
-        return ResponseEntity.ok(productoService.obtenerBajoStock(codti));
+    public ResponseEntity<List<ProductoResponseDTO>> getBajoStock(@PathVariable Integer codti,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostosSiAplica(productoService.obtenerBajoStock(codti), user));
     }
 
     @Operation(summary = "Accesorios con stock compatibles con un modelo (incluye los Universal)",
@@ -107,22 +128,24 @@ public class ProductoController {
     @GetMapping("/tienda/{codti}/compatibles")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<ProductoResponseDTO>> getAccesoriosCompatibles(
-            @PathVariable Integer codti, @RequestParam String con) {
-        return ResponseEntity.ok(productoService.obtenerAccesoriosCompatibles(codti, con));
+            @PathVariable Integer codti, @RequestParam String con,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostosSiAplica(productoService.obtenerAccesoriosCompatibles(codti, con), user));
     }
 
     @Operation(summary = "Buscar producto por IMEI")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/imei/{imei}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ProductoResponseDTO> getProductoPorImei(@PathVariable String imei) {
-        return ResponseEntity.ok(productoService.obtenerProductoPorImei(imei));
+    public ResponseEntity<ProductoResponseDTO> getProductoPorImei(@PathVariable String imei,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostos(productoService.obtenerProductoPorImei(imei), user));
     }
 
     @Operation(summary = "Registrar producto en tienda")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
     public ResponseEntity<ProductoResponseDTO> crearProducto(
             @Valid @RequestBody ProductoRequestDTO request) {
         return ResponseEntity.ok(productoService.crearProducto(request));
@@ -131,13 +154,15 @@ public class ProductoController {
     @Operation(summary = "Actualizar precios y datos de un producto")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/{codpro}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
     public ResponseEntity<ProductoResponseDTO> actualizarProducto(
             @PathVariable String codpro,
             @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
             @RequestParam(required = false) Integer codti,
+            @Parameter(description = "Aplicar el nuevo precio de compra/venta a este código en TODAS las sucursales que lo tienen.")
+            @RequestParam(defaultValue = "false") boolean aTodasLasSucursales,
             @RequestBody ProductoUpdateDTO request) {
-        return ResponseEntity.ok(productoService.actualizar(codpro, codti, request));
+        return ResponseEntity.ok(productoService.actualizar(codpro, codti, aTodasLasSucursales, request));
     }
 
     @Operation(summary = "Ajustar stock — ENTRADA / SALIDA / AJUSTE")
@@ -155,7 +180,7 @@ public class ProductoController {
     @Operation(summary = "Fijar (o quitar) el precio propio de un IMEI específico, distinto al del modelo")
     @SecurityRequirement(name = "Bearer Authentication")
     @PatchMapping("/imei/{imei}/precio")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
     public ResponseEntity<com.skycel.backend.domain.dto.response.ImeiInfoDTO> actualizarPrecioImei(
             @PathVariable String imei,
             @RequestBody com.skycel.backend.domain.dto.request.ImeiPrecioUpdateDTO request) {
@@ -165,7 +190,7 @@ public class ProductoController {
     @Operation(summary = "Corregir la condición (NUEVO/USADO/REACONDICIONADO) o el costo de una unidad disponible")
     @SecurityRequirement(name = "Bearer Authentication")
     @PatchMapping("/imei/{imei}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
     public ResponseEntity<ImeiInfoDTO> actualizarImei(
             @PathVariable String imei, @Valid @RequestBody ImeiUpdateDTO request) {
         return ResponseEntity.ok(productoService.actualizarImei(imei, request));
