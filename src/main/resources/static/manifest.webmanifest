@@ -1,13 +1,13 @@
 {
-  "name": "Skycel · Taller",
+  "name": "Skycel · Punto de venta",
   "short_name": "Skycel",
-  "description": "Recepción de equipos y taller de Skycel",
+  "description": "Punto de venta, inventario y caja de Skycel",
   "start_url": "/app",
   "scope": "/app",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#0b3a4a",
+  "theme_color": "#0b3a4a",
   "icons": [
     { "src": "/app/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/app/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },

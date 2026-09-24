@@ -2,8 +2,8 @@
  * Skycel · Web para celular y tablet. Una sola página con ruteo por hash (#/...). Usa las mismas rutas de la
  * API que JSystem, con JWT en localStorage.
  *
- * Cubre recepción de equipos y taller (con cola sin conexión), consulta de órdenes, inventario, caja, empleados,
- * punto de venta, clientes, cuentas por cobrar, garantías, reportes, devoluciones y traspasos. Lo que necesita pago mixto,
+ * Sistema de punto de venta: vender, inventario, traspasos, caja, clientes, cuentas por cobrar, reportes y devoluciones,
+ * más el taller de reparaciones (recepción con cola sin conexión, órdenes y garantías) y empleados. Lo que necesita pago mixto,
  * venta a crédito o cambio de producto por otro sigue en JSystem.
  */
 
@@ -110,9 +110,17 @@ function dibujarNavInferior() {
   if (!s) return;
   const ruta = location.hash.split('/')[1] || 'menu';
   const items = [{ h: '#/menu', i: ic('house'), t: 'Inicio', clave: 'menu' }];
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir', clave: 'recepcion' });
-  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', clave: 'taller' });
-  items.push({ h: '#/consultar', i: ic('search'), t: 'Buscar', clave: 'consultar' });
+  if (PERSONAL.includes(s.rol)) {
+    items.push({ h: '#/pos', i: ic('shopping-cart'), t: 'Vender', clave: 'pos' });
+    items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', clave: 'inventario' });
+    items.push(GESTOR_ROLES.includes(s.rol)
+      ? { h: '#/caja', i: ic('receipt'), t: 'Caja', clave: 'caja' }
+      : { h: '#/clientes', i: ic('users'), t: 'Clientes', clave: 'clientes' });
+  } else {
+    items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', clave: 'taller' });
+    items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', clave: 'inventario' });
+    items.push({ h: '#/consultar', i: ic('search'), t: 'Buscar', clave: 'consultar' });
+  }
   navInferior.innerHTML = items.map(it =>
     `<button data-h="${it.h}" class="${ruta === it.clave ? 'activo' : ''}"><span class="icono">${it.i}</span>${it.t}</button>`
   ).join('');
@@ -137,18 +145,18 @@ async function obtenerBajoStock(codti) {
  */
 function itemsMenu(s, pend, err, bajoStock) {
   const items = [];
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir equipo', grupo: 'Taller' });
-  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', grupo: 'Taller' });
-  items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/pos', i: ic('shopping-cart'), t: 'Punto de venta', grupo: 'Ventas' });
-  items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Ventas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Ventas' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: ic('undo-2'), t: 'Devoluciones', grupo: 'Ventas' });
+  items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Inventario' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reporte de ventas', grupo: 'Finanzas' });
   items.push({ h: '#/clientes', i: ic('users'), t: 'Clientes', grupo: 'Clientes' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: ic('shield-check'), t: 'Garantías', grupo: 'Clientes' });
+  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir equipo', grupo: 'Taller' });
+  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', grupo: 'Taller' });
+  items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
   if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
   items.push({ h: '#/pendientes', i: ic('cloud-upload'), t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
   return items;
@@ -250,7 +258,7 @@ function pantallaLogin() {
       <div class="login-marca">
         <div class="login-logo">${ic('smartphone')}</div>
         <h1>Skycel</h1>
-        <div class="ayuda">Recepción de equipos y taller</div>
+        <div class="ayuda">Punto de venta e inventario</div>
       </div>
       <div class="tarjeta">
         <label class="obligatorio">Usuario</label>
@@ -289,7 +297,7 @@ function pantallaLogin() {
 
 /** Clase de color por área de trabajo (los iconos del menú y de la barra lateral se tiñen igual). */
 function claseGrupo(g) {
-  return ({ 'Taller': 'taller', 'Ventas': 'ventas', 'Finanzas': 'finanzas', 'Clientes': 'clientes', 'Administración': 'admin' })[g] || 'otro';
+  return ({ 'Ventas': 'ventas', 'Inventario': 'inventario', 'Finanzas': 'finanzas', 'Clientes': 'clientes', 'Taller': 'taller', 'Administración': 'admin' })[g] || 'otro';
 }
 /** Agrupa las tarjetas del menú por área conservando el orden; las sueltas (sin grupo) van al final sin título. */
 function gruposDeMenu(items) {
@@ -309,9 +317,49 @@ async function pantallaMenu() {
   const err = await Net.cantidadConError();
   const bajoStock = await obtenerBajoStock(s.codti);
   const tarjetas = itemsMenu(s, pend, err, bajoStock);
+  const gestor = GESTOR_ROLES.includes(s.rol);
+  const personal = PERSONAL.includes(s.rol);
+  const enTaller = TALLER_ROLES.includes(s.rol);
+  const fecha = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  const kpis = [];
+  if (gestor) kpis.push({ id: 'ventas', c: 'c1', i: 'trending-up', t: 'Ventas de hoy', h: '#/reportes' });
+  if (gestor) kpis.push({ id: 'tickets', c: 'c2', i: 'receipt', t: 'Tickets de hoy', h: '#/reportes' });
+  kpis.push({ id: 'bajo', c: 'c4', i: 'triangle-alert', t: 'Bajo stock', h: '#/inventario', v: bajoStock == null ? '—' : String(bajoStock) });
+  if (gestor) kpis.push({ id: 'traspasos', c: 'c3', i: 'truck', t: 'Traspasos por atender', h: '#/traspasos' });
+  if (enTaller) kpis.push({ id: 'taller', c: 'c5', i: 'wrench', t: 'Órdenes en taller', h: '#/taller' });
+  if (pend + err > 0) kpis.push({ id: 'pend', c: 'c6', i: 'cloud-upload', t: 'Por enviar', h: '#/pendientes', v: String(pend + err) });
 
   root.innerHTML = `
-    <h1 class="saludo">Hola, ${escapar((s.nombreCompleto || s.username).split(' ')[0])}</h1>
+    <div class="dash-cab">
+      <div>
+        <h1 class="saludo">Hola, ${escapar((s.nombreCompleto || s.username).split(' ')[0])}</h1>
+        <div class="ayuda">${escapar(fecha.charAt(0).toUpperCase() + fecha.slice(1))}</div>
+      </div>
+      ${personal ? `<button id="dh-vender" class="btn btn-azul btn-vender">${ic('shopping-cart')} Nueva venta</button>` : ''}
+    </div>
+    <div class="kp">
+      ${kpis.map(k => `
+        <div class="kpi" data-h="${k.h}">
+          <b class="${k.c}">${ic(k.i)}</b>
+          <small>${k.t}</small>
+          <strong id="dk-${k.id}">${k.v ?? '…'}</strong>
+        </div>`).join('')}
+    </div>
+    ${gestor ? `
+    <div class="dash-fila">
+      <div class="tarjeta">
+        <h2>Ventas de los últimos 7 días</h2>
+        <div id="dh-grafica"><div class="vacio">Cargando...</div></div>
+      </div>
+      <div class="tarjeta hero-caja" id="dh-caja">
+        <small>Saldo de caja</small>
+        <div class="hero-monto" id="dh-saldo">…</div>
+        <div class="hero-fila"><span>Entradas</span><span id="dh-entradas">…</span></div>
+        <div class="hero-fila"><span>Salidas</span><span id="dh-salidas">…</span></div>
+        <button class="btn btn-chico hero-boton" data-h="#/caja">Ver caja</button>
+      </div>
+    </div>` : ''}
     ${gruposDeMenu(tarjetas).map(g => `
       ${g.nombre ? `<h2 class="menu-grupo">${escapar(g.nombre)}</h2>` : ''}
       <div class="rejilla-menu">
@@ -325,7 +373,67 @@ async function pantallaMenu() {
     <div class="ayuda" style="text-align:center; margin-top:20px;">
       Para pagos mixtos, ventas a crédito y cambios de producto, usa JSystem en la tienda.
     </div>`;
-  root.querySelectorAll('.boton-menu').forEach(b => b.onclick = () => navegar(b.dataset.h));
+  root.querySelectorAll('[data-h]').forEach(b => b.onclick = () => navegar(b.dataset.h));
+  const vender = document.getElementById('dh-vender');
+  if (vender) vender.onclick = () => navegar('#/pos');
+
+  // Los números se piden aparte y sin bloquear: cada uno falla en silencio (queda "—") si no hay conexión.
+  const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const codti = s.codti;
+  if (gestor && codti != null) {
+    (async () => {
+      try {
+        const ahora = new Date();
+        const dias = [];
+        for (let i = 6; i >= 0; i--) { const d = new Date(ahora); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0); dias.push({ d, clave: fechaLocalISO(d).slice(0, 10), total: 0 }); }
+        const ventas = await api('GET', `/api/ventas/tienda/${codti}?desde=${encodeURIComponent(fechaLocalISO(dias[0].d))}&hasta=${encodeURIComponent(fechaLocalISO(ahora))}`);
+        let hoyTotal = 0, hoyN = 0;
+        ventas.filter(v => v.descripcionEstado !== 'Cancelada').forEach(v => {
+          const dia = dias.find(x => x.clave === fechaLocalISO(new Date(v.fechaVenta)).slice(0, 10));
+          if (!dia) return;
+          dia.total += Number(v.total || 0);
+          if (dia === dias[6]) { hoyTotal += Number(v.total || 0); hoyN++; }
+        });
+        poner('dk-ventas', formatoDinero(hoyTotal));
+        poner('dk-tickets', String(hoyN));
+        const g = document.getElementById('dh-grafica');
+        if (g) g.innerHTML = graficaVentas(dias);
+      } catch {
+        poner('dk-ventas', '—'); poner('dk-tickets', '—');
+        const g = document.getElementById('dh-grafica'); if (g) g.innerHTML = '<div class="vacio">Sin conexión.</div>';
+      }
+    })();
+    (async () => {
+      try {
+        const cajas = await api('GET', '/api/cajas/tienda/' + codti);
+        const idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0]?.idCaja;
+        if (idCaja == null) { poner('dh-saldo', 'Sin caja'); poner('dh-entradas', '—'); poner('dh-salidas', '—'); return; }
+        const saldo = await api('GET', `/api/cajas/${idCaja}/saldo`);
+        poner('dh-saldo', formatoDinero(saldo.saldo));
+        poner('dh-entradas', formatoDinero(saldo.totalEntradas));
+        poner('dh-salidas', formatoDinero(saldo.totalSalidas));
+      } catch { poner('dh-saldo', '—'); poner('dh-entradas', '—'); poner('dh-salidas', '—'); }
+    })();
+    api('GET', `/api/traspasos/tienda/${codti}/pendientes`).then(l => poner('dk-traspasos', String(l.length))).catch(() => poner('dk-traspasos', '—'));
+  }
+  if (enTaller) api('GET', '/api/ordenes-servicio/taller').then(l => poner('dk-taller', String(l.length))).catch(() => poner('dk-taller', '—'));
+}
+
+/** Gráfica de líneas de 7 días (SVG propio, sin librerías): total vendido por día, hoy al final. */
+function graficaVentas(dias) {
+  const max = Math.max(...dias.map(d => d.total), 1);
+  const suma = dias.reduce((a, d) => a + d.total, 0);
+  const pts = dias.map((d, i) => [i * (300 / 6), 96 - (d.total / max) * 78]);
+  const linea = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const nombres = dias.map(d => d.d.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', ''));
+  return `
+    <div class="graf-total">${formatoDinero(suma)} <small>en 7 días</small></div>
+    <svg viewBox="0 0 300 110" width="100%" role="img" aria-label="Ventas por día de los últimos 7 días" preserveAspectRatio="none" class="graf">
+      <path d="${linea} L300 110 L0 110Z" class="graf-area"/>
+      <path d="${linea}" class="graf-linea"/>
+      ${pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === 6 ? 4.5 : 2.5}" class="graf-punto"><title>${escapar(nombres[i])}: ${formatoDinero(dias[i].total)}</title></circle>`).join('')}
+    </svg>
+    <div class="graf-dias">${nombres.map(n => `<span>${escapar(n)}</span>`).join('')}</div>`;
 }
 
 // ── Recepción de equipo ──────────────────────────────────────────────────
@@ -2346,11 +2454,16 @@ async function pantallaPOS() {
 
   root.innerHTML = `
     <h1>${ic('shopping-cart')} Punto de venta</h1>
+    <div class="pos-grid">
+    <div class="pos-izq">
     <div class="buscador">
       <input id="pv-buscar" placeholder="Buscar producto...">
     </div>
+    <div id="pv-chips" class="chips"></div>
     <div id="pv-resultados"></div>
+    </div>
 
+    <div class="pos-der">
     <h2 style="margin-top:16px;">Carrito</h2>
     <div id="pv-carrito"><div class="vacio">Agrega productos arriba.</div></div>
     <div id="pv-total" class="barra-total"></div>
@@ -2380,6 +2493,8 @@ async function pantallaPOS() {
       <label>Observaciones</label>
       <input id="pv-obs" placeholder="Opcional">
       <button id="pv-cobrar" class="btn btn-verde btn-grande">${ic('banknote')} Cobrar</button>
+    </div>
+    </div>
     </div>`;
 
   // El catálogo y la caja se piden a la vez (y el catálogo se usa al instante si ya se tenía: ver cargarCatalogoPOS)
@@ -2404,11 +2519,29 @@ async function pantallaPOS() {
   if (cajas) idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0]?.idCaja ?? null;
 
   const contResultados = document.getElementById('pv-resultados');
-  inputBuscar.addEventListener('input', (e) => {
-    const q = e.target.value.trim();
-    if (q.length < 2) { contResultados.innerHTML = ''; return; }
-    dibujarResultadosPOS(contResultados, filtrarProductos(productos, q).slice(0, 20));
-  });
+  // Filtro por categoría: sin escribir nada muestra lo que hay de esa categoría (con existencia primero)
+  const contChips = document.getElementById('pv-chips');
+  let categoriaSel = null;
+  const hayExistencia = (p) => p.tipo === 'SERVICIO' || (p.tipo === 'CELULAR' || p.tipo === 'TABLET' ? (p.imeisDisponibles || []).length > 0 : Number(p.stock) > 0);
+  const dibujarChips = () => {
+    const cuenta = {};
+    productos.filter(hayExistencia).forEach(p => { if (p.nombreCategoria) cuenta[p.nombreCategoria] = (cuenta[p.nombreCategoria] || 0) + 1; });
+    const top = Object.entries(cuenta).sort((a, b) => b[1] - a[1]).slice(0, 12).map(x => x[0]);
+    contChips.innerHTML = top.length === 0 ? '' :
+      `<button class="chip ${categoriaSel === null ? 'activo' : ''}" data-cat="">Todo</button>` +
+      top.map(c => `<button class="chip ${categoriaSel === c ? 'activo' : ''}" data-cat="${escapar(c)}">${escapar(c)}</button>`).join('');
+    contChips.querySelectorAll('.chip').forEach(b => b.onclick = () => { categoriaSel = b.dataset.cat || null; dibujarChips(); mostrarResultados(); });
+  };
+  const mostrarResultados = () => {
+    const q = inputBuscar.value.trim();
+    if (q.length < 2 && !categoriaSel) { contResultados.innerHTML = ''; return; }
+    let lista = q.length >= 2 ? filtrarProductos(productos, q) : productos;
+    if (categoriaSel) lista = lista.filter(p => p.nombreCategoria === categoriaSel);
+    if (q.length < 2) lista = lista.filter(hayExistencia).sort((a, b) => a.nombreProductoMaster.localeCompare(b.nombreProductoMaster, 'es'));
+    dibujarResultadosPOS(contResultados, lista.slice(0, 30));
+  };
+  dibujarChips();
+  inputBuscar.addEventListener('input', mostrarResultados);
 
   // Cliente
   const chkCliente = document.getElementById('pv-con-cliente');
