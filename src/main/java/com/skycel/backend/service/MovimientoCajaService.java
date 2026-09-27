@@ -2,10 +2,12 @@ package com.skycel.backend.service;
 
 import com.skycel.backend.domain.entity.CatMotivo;
 import com.skycel.backend.domain.entity.Caja;
+import com.skycel.backend.domain.entity.Compra;
 import com.skycel.backend.domain.entity.CuentaPorCobrar;
 import com.skycel.backend.domain.entity.MovimientoCaja;
 import com.skycel.backend.domain.entity.OrdenServicio;
 import com.skycel.backend.domain.entity.OrdenServicioAnticipo;
+import com.skycel.backend.domain.entity.PagoCompra;
 import com.skycel.backend.domain.entity.PagoCuenta;
 import com.skycel.backend.domain.entity.Tienda;
 import com.skycel.backend.domain.entity.Usuario;
@@ -36,6 +38,7 @@ import static com.skycel.backend.service.MotivoCajaService.ANTICIPO_SERVICIO;
 import static com.skycel.backend.service.MotivoCajaService.CANCELACION_VENTA;
 import static com.skycel.backend.service.MotivoCajaService.DEVOLUCION_ANTICIPO;
 import static com.skycel.backend.service.MotivoCajaService.DEVOLUCION_VENTA;
+import static com.skycel.backend.service.MotivoCajaService.PAGO_PROVEEDOR;
 import static com.skycel.backend.service.MotivoCajaService.CAT_PERSONAL;
 import static com.skycel.backend.service.MotivoCajaService.ENTRADA;
 import static com.skycel.backend.service.MotivoCajaService.SALIDA;
@@ -144,6 +147,27 @@ public class MovimientoCajaService {
         validarAcceso(usuario, caja);
         guardar(caja, usuario, null, motivoSistema(ABONO_CUENTA), pago.getMonto(),
                 "Abono a cuenta " + cuenta.getNoFactura() + " (pago #" + pago.getIdpago() + ")", null, fecha);
+    }
+
+    /**
+     * Salida por un pago en efectivo a un proveedor, contra una compra. Se registra en la caja de la sucursal
+     * que recibió la mercancía (la de la compra), no en la del usuario que paga: ahí es donde sale el efectivo
+     * de verdad. Revienta si esa caja no alcanza, igual que cualquier salida manual.
+     */
+    @Transactional
+    public void registrarPagoCompra(Integer idCaja, Compra compra, PagoCompra pago, Usuario usuario) {
+        Caja caja = cajaParaTienda(idCaja, compra.getTienda());
+        validarAcceso(usuario, caja);
+        BigDecimal saldo = saldoDe(caja.getIdCaja());
+        if (pago.getMonto().compareTo(saldo) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Saldo insuficiente en la caja. Disponible: $" + saldo + ", solicitado: $" + pago.getMonto());
+        }
+        String proveedor = compra.getProveedor().getNombreCorto() != null
+                ? compra.getProveedor().getNombreCorto() : compra.getProveedor().getNombreFiscal();
+        guardar(caja, usuario, null, motivoSistema(PAGO_PROVEEDOR), pago.getMonto(),
+                "Pago a " + proveedor + " · compra #" + compra.getIdcompra() + " (pago #" + pago.getIdpago() + ")",
+                null);
     }
 
     /**

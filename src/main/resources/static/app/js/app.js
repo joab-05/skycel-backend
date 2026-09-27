@@ -151,6 +151,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/compras', i: ic('shopping-bag'), t: 'Compras y cuentas por pagar', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reporte de ventas', grupo: 'Finanzas' });
   items.push({ h: '#/clientes', i: ic('users'), t: 'Clientes', grupo: 'Clientes' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: ic('shield-check'), t: 'Garantías', grupo: 'Clientes' });
@@ -222,6 +223,9 @@ async function render() {
     if (ruta === 'cliente' && param) return pantallaClienteDetalle(param);
     if (ruta === 'cxc') return pantallaCxC();
     if (ruta === 'cuenta' && param) return pantallaCuentaDetalle(param);
+    if (ruta === 'compras') return pantallaCompras();
+    if (ruta === 'compra-nueva') return pantallaCompraNueva();
+    if (ruta === 'compra' && param) return pantallaCompraDetalle(param);
     if (ruta === 'garantias') return pantallaGarantias();
     if (ruta === 'garantia' && param) return pantallaGarantiaDetalle(param);
     if (ruta === 'reportes') return pantallaReportes();
@@ -327,6 +331,7 @@ async function pantallaMenu() {
   if (gestor) kpis.push({ id: 'tickets', c: 'c2', i: 'receipt', t: 'Tickets de hoy', h: '#/reportes' });
   kpis.push({ id: 'bajo', c: 'c4', i: 'triangle-alert', t: 'Bajo stock', h: '#/inventario', v: bajoStock == null ? '—' : String(bajoStock) });
   if (gestor) kpis.push({ id: 'traspasos', c: 'c3', i: 'truck', t: 'Traspasos por atender', h: '#/traspasos' });
+  if (gestor) kpis.push({ id: 'porpagar', c: 'c4', i: 'shopping-bag', t: 'Por pagar a proveedores', h: '#/compras' });
   if (enTaller) kpis.push({ id: 'taller', c: 'c5', i: 'wrench', t: 'Órdenes en taller', h: '#/taller' });
   if (pend + err > 0) kpis.push({ id: 'pend', c: 'c6', i: 'cloud-upload', t: 'Por enviar', h: '#/pendientes', v: String(pend + err) });
 
@@ -415,6 +420,9 @@ async function pantallaMenu() {
       } catch { poner('dh-saldo', '—'); poner('dh-entradas', '—'); poner('dh-salidas', '—'); }
     })();
     api('GET', `/api/traspasos/tienda/${codti}/pendientes`).then(l => poner('dk-traspasos', String(l.length))).catch(() => poner('dk-traspasos', '—'));
+    api('GET', `/api/compras?codti=${codti}&soloActivas=true`)
+      .then(l => poner('dk-porpagar', formatoDinero(l.reduce((sum, c) => sum + Number(c.saldoPendiente || 0), 0))))
+      .catch(() => poner('dk-porpagar', '—'));
   }
   if (enTaller) api('GET', '/api/ordenes-servicio/taller').then(l => poner('dk-taller', String(l.length))).catch(() => poner('dk-taller', '—'));
 }
@@ -1202,6 +1210,324 @@ async function cargarHistorialAbonos(id) {
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
   }
+}
+
+// ── Compras y cuentas por pagar ───────────────────────────────────────────
+
+async function pantallaCompras() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver compras.</div>'; return; }
+  root.innerHTML = `
+    <h1>${ic('shopping-bag')} Compras y cuentas por pagar</h1>
+    <div id="cp-resumen"></div>
+    <button id="cp-nueva" class="btn btn-verde" style="margin-bottom:14px;">${ic('plus')} Registrar compra</button>
+    <div id="cp-lista"><div class="vacio">Cargando...</div></div>`;
+
+  document.getElementById('cp-nueva').onclick = () => navegar('#/compra-nueva');
+
+  try {
+    const resumen = await api('GET', '/api/compras/resumen');
+    document.getElementById('cp-resumen').innerHTML = `
+      <div class="fila">
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Por pagar</div><div style="font-size:18px; font-weight:700;">${formatoDinero(resumen.totalPendiente)}</div></div>
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Vencido</div><div style="font-size:18px; font-weight:700; color:var(--rojo);">${formatoDinero(resumen.totalVencido)}</div></div>
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Compras</div><div style="font-size:18px; font-weight:700;">${resumen.comprasActivas}</div></div>
+      </div>`;
+  } catch { /* si falla el resumen, se sigue mostrando la lista */ }
+
+  const cont = document.getElementById('cp-lista');
+  try {
+    const compras = await api('GET', '/api/compras?soloActivas=true');
+    if (compras.length === 0) { cont.innerHTML = '<div class="vacio">No hay compras pendientes de pago.</div>'; return; }
+    compras.sort((a, b) => a.diasVencimiento - b.diasVencimiento);
+    cont.innerHTML = compras.map(c => `
+      <div class="orden-item" data-id="${c.idcompra}">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(c.nombreProveedor)}</span>
+          <span class="pastilla" style="background:${c.estadoColor}22; color:${c.estadoColor};">${escapar(c.estadoDisplay)}</span>
+        </div>
+        <div class="orden-cliente">${escapar(c.nombreTienda)}${c.folioProveedor ? ' · folio ' + escapar(c.folioProveedor) : ''}</div>
+        <div class="orden-meta">
+          <span class="orden-fecha">${c.diasVencimiento < 0 ? Math.abs(c.diasVencimiento) + ' días vencida' : 'vence en ' + c.diasVencimiento + ' días'}</span>
+          <span style="font-weight:700;">${formatoDinero(c.saldoPendiente)}</span>
+        </div>
+      </div>`).join('');
+    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/compra/' + el.dataset.id));
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+async function pantallaCompraDetalle(id) {
+  const s = Sesion.obtener();
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let compra;
+  try {
+    compra = await api('GET', '/api/compras/' + id);
+  } catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/compras')">Ir a compras</button></div>`;
+    return;
+  }
+
+  root.innerHTML = `
+    <h1>${escapar(compra.nombreProveedor)}</h1>
+    <div class="tarjeta">
+      <span class="pastilla" style="background:${compra.estadoColor}22; color:${compra.estadoColor};">${escapar(compra.estadoDisplay)}</span>
+      <div class="detalle-fila"><span class="k">Sucursal</span><span class="v">${escapar(compra.nombreTienda)}</span></div>
+      ${compra.folioProveedor ? `<div class="detalle-fila"><span class="k">Folio del proveedor</span><span class="v">${escapar(compra.folioProveedor)}</span></div>` : ''}
+      <div class="detalle-fila"><span class="k">Fecha</span><span class="v">${compra.fecha}</span></div>
+      <div class="detalle-fila"><span class="k">Vencimiento</span><span class="v">${compra.fechaVencimiento}</span></div>
+      <div class="detalle-fila"><span class="k">Total</span><span class="v">${formatoDinero(compra.montoTotal)}</span></div>
+      <div class="detalle-fila"><span class="k">Pagado</span><span class="v">${formatoDinero(compra.montoPagado)}</span></div>
+      <div class="detalle-fila"><span class="k">Saldo</span><span class="v">${formatoDinero(compra.saldoPendiente)}</span></div>
+      ${compra.registradoPor ? `<div class="detalle-fila"><span class="k">Registró</span><span class="v">${escapar(compra.registradoPor)}</span></div>` : ''}
+      ${compra.observaciones ? `<div class="detalle-fila"><span class="k">Notas</span><span class="v">${escapar(compra.observaciones)}</span></div>` : ''}
+    </div>
+    <div class="tarjeta">
+      <h2>Productos recibidos</h2>
+      ${(compra.lineas || []).map(l => `
+        <div class="detalle-fila"><span class="k">${escapar(l.nombreProducto)} · ${escapar(l.codpro)} · ${Number(l.cantidad)}</span><span class="v">${formatoDinero(l.subtotal)}</span></div>
+      `).join('')}
+    </div>
+    ${compra.saldoPendiente > 0 ? `
+    <div class="tarjeta">
+      <h2>Registrar pago</h2>
+      <label class="obligatorio">Monto</label>
+      <input id="pc-monto" type="number" inputmode="decimal" min="0" step="0.01" max="${compra.saldoPendiente}">
+      <label class="obligatorio">Método</label>
+      <select id="pc-metodo">
+        <option value="1">Efectivo</option>
+        <option value="2">Tarjeta</option>
+        <option value="3">Transferencia</option>
+        <option value="4">PayJoy</option>
+      </select>
+      <label>Notas</label>
+      <input id="pc-notas" placeholder="Opcional">
+      <button id="pc-btn" class="btn btn-verde">Registrar pago</button>
+    </div>` : ''}
+    <div class="tarjeta">
+      <h2>Historial de pagos</h2>
+      <div id="pc-historial"><div class="vacio">Cargando...</div></div>
+    </div>`;
+
+  cargarHistorialCompras(id);
+
+  if (compra.saldoPendiente > 0) {
+    document.getElementById('pc-btn').onclick = async (e) => {
+      const monto = Number(document.getElementById('pc-monto').value);
+      if (!monto || monto <= 0) { mostrarMensaje(root, 'Indica un monto válido.', 'error'); return; }
+      if (monto > compra.saldoPendiente) { mostrarMensaje(root, 'El monto no puede ser mayor al saldo pendiente.', 'error'); return; }
+      const metodoPago = Number(document.getElementById('pc-metodo').value);
+      const notas = document.getElementById('pc-notas').value.trim() || null;
+
+      e.target.disabled = true;
+      e.target.innerHTML = '<span class="spinner"></span> Enviando...';
+      const qs = new URLSearchParams({ monto: String(monto), metodoPago: String(metodoPago) });
+      if (notas) qs.set('notas', notas);
+      try {
+        await api('POST', `/api/compras/${id}/pago?${qs.toString()}`, undefined);
+        mostrarMensaje(root, 'Pago registrado.', 'ok');
+        setTimeout(() => pantallaCompraDetalle(id), 700);
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        e.target.disabled = false;
+        e.target.innerHTML = 'Registrar pago';
+      }
+    };
+  }
+}
+
+async function cargarHistorialCompras(id) {
+  const cont = document.getElementById('pc-historial');
+  try {
+    const pagos = await api('GET', `/api/compras/${id}/historial`);
+    cont.innerHTML = pagos.length === 0 ? '<div class="vacio">Sin pagos todavía.</div>' : pagos.map(p => `
+      <div class="historial-item">
+        <div class="historial-comentario">${formatoDinero(p.monto)} · ${escapar(p.metodoPago)}</div>
+        <div class="historial-meta">${escapar(p.usuario)} · ${formatoFecha(p.fechaPago)}${p.notas ? ' · ' + escapar(p.notas) : ''}</div>
+      </div>`).join('');
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+async function pantallaCompraNueva() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para registrar compras.</div>'; return; }
+  root.innerHTML = `
+    <button class="enlace" id="cn-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
+    <h1>${ic('shopping-bag')} Registrar compra</h1>
+    <div class="tarjeta">
+      <label class="obligatorio">Proveedor</label>
+      <select id="cn-proveedor"><option>Cargando...</option></select>
+      <div id="cn-tienda"></div>
+      <label>Folio o factura del proveedor</label>
+      <input id="cn-folio" placeholder="Opcional">
+      <label>Vencimiento</label>
+      <input id="cn-vencimiento" type="date">
+      <div class="ayuda">Si no lo indicas, se calcula con los días de crédito del proveedor.</div>
+      <label>Notas</label>
+      <input id="cn-notas" placeholder="Opcional">
+    </div>
+
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Agregar productos</h2>
+      <input id="cn-buscar" placeholder="Buscar producto por nombre o código...">
+      <div id="cn-resultados"></div>
+      <div id="cn-form-linea"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Productos de esta compra</h2>
+      <div id="cn-lineas"><div class="vacio">Todavía no agregas productos.</div></div>
+      <div class="orden-meta" style="margin-top:10px;"><span>Total</span><span id="cn-total" style="font-weight:800; font-size:16px;">$0.00</span></div>
+    </div>
+    <button id="cn-guardar" class="btn btn-verde" disabled>Registrar compra</button>`;
+
+  document.getElementById('cn-volver').onclick = () => navegar('#/compras');
+
+  let codti = s.codti;
+  let productosTienda = [];
+  const lineas = []; // { codpro, nombre, cantidad, costoUnitario, subtotal, unidades? }
+
+  const cargarProductosTienda = async () => {
+    if (codti == null) return;
+    try { productosTienda = await api('GET', `/api/productos/tienda/${codti}`); }
+    catch { productosTienda = []; }
+  };
+
+  const contTienda = document.getElementById('cn-tienda');
+  codti = await dibujarSelectorSucursal(contTienda, s, async (nuevo) => {
+    codti = nuevo;
+    await cargarProductosTienda();
+    if (lineas.length > 0) { lineas.length = 0; dibujarLineas(); mostrarMensaje(root, 'Cambiaste de sucursal: se vaciaron los productos ya agregados.', 'info'); }
+  });
+  await cargarProductosTienda();
+
+  const selProveedor = document.getElementById('cn-proveedor');
+  let proveedores = [];
+  try {
+    proveedores = await api('GET', '/api/catalogos/proveedores');
+    selProveedor.innerHTML = proveedores.length
+      ? proveedores.map(p => `<option value="${p.id}">${escapar(p.nombreCorto || p.nombreFiscal)}</option>`).join('')
+      : '<option value="">Sin proveedores activos</option>';
+  } catch {
+    selProveedor.innerHTML = '<option value="">No se pudo cargar (sin conexión)</option>';
+  }
+
+  const contResultados = document.getElementById('cn-resultados');
+  const contFormLinea = document.getElementById('cn-form-linea');
+  document.getElementById('cn-buscar').addEventListener('input', (e) => {
+    const q = e.target.value.trim();
+    contFormLinea.innerHTML = '';
+    if (q.length < 2) { contResultados.innerHTML = ''; return; }
+    const candidatos = filtrarProductos(productosTienda.filter(p => p.tipo !== 'SERVICIO'), q).slice(0, 15);
+    contResultados.innerHTML = candidatos.length === 0 ? '<div class="vacio">Sin resultados.</div>' : candidatos.map(p => `
+      <div class="orden-item" data-codpro="${escapar(p.codpro)}">
+        <div class="orden-cab">
+          <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
+          <span class="ayuda">Stock: ${Number(p.stock)}</span>
+        </div>
+        <div class="orden-cliente">${escapar(p.codpro)}</div>
+      </div>`).join('');
+    contResultados.querySelectorAll('.orden-item').forEach(el => {
+      el.onclick = () => {
+        const p = candidatos.find(x => x.codpro === el.dataset.codpro);
+        dibujarFormularioLinea(p);
+      };
+    });
+  });
+
+  function dibujarFormularioLinea(p) {
+    const esEquipo = p.tipo === 'CELULAR' || p.tipo === 'TABLET';
+    contFormLinea.innerHTML = `
+      <div class="tarjeta" style="background:var(--gris-claro); box-shadow:none;">
+        <h2 style="margin-top:0;">${escapar(p.nombreProductoMaster)}</h2>
+        ${esEquipo ? `
+          <label class="obligatorio">IMEIs recibidos (uno por línea)</label>
+          <textarea id="ln-imeis" placeholder="Un IMEI o serie por línea"></textarea>
+          <label class="obligatorio">Costo por unidad</label>
+          <input id="ln-costo" type="number" inputmode="decimal" min="0.01" step="0.01">
+        ` : `
+          <label class="obligatorio">Cantidad</label>
+          <input id="ln-cantidad" type="number" inputmode="decimal" min="0.01" step="1" value="1">
+          <label class="obligatorio">Costo unitario</label>
+          <input id="ln-costo" type="number" inputmode="decimal" min="0.01" step="0.01" value="${p.preciopro ?? ''}">
+        `}
+        <button id="ln-agregar" class="btn btn-azul">${ic('plus')} Agregar a la compra</button>
+      </div>`;
+
+    document.getElementById('ln-agregar').onclick = () => {
+      const costo = Number(document.getElementById('ln-costo').value);
+      if (!costo || costo <= 0) { mostrarMensaje(root, 'Indica un costo válido.', 'error'); return; }
+      if (esEquipo) {
+        const imeis = document.getElementById('ln-imeis').value.split('\n').map(x => x.trim()).filter(Boolean);
+        if (imeis.length === 0) { mostrarMensaje(root, 'Indica al menos un IMEI.', 'error'); return; }
+        lineas.push({
+          codpro: p.codpro, nombre: p.nombreProductoMaster, cantidad: imeis.length,
+          costoUnitario: costo, subtotal: costo * imeis.length,
+          unidades: imeis.map(imei => ({ imei, costoUnitario: costo })),
+        });
+      } else {
+        const cantidad = Number(document.getElementById('ln-cantidad').value);
+        if (!cantidad || cantidad <= 0) { mostrarMensaje(root, 'Indica una cantidad válida.', 'error'); return; }
+        lineas.push({ codpro: p.codpro, nombre: p.nombreProductoMaster, cantidad, costoUnitario: costo, subtotal: costo * cantidad });
+      }
+      contFormLinea.innerHTML = '';
+      document.getElementById('cn-buscar').value = '';
+      contResultados.innerHTML = '';
+      dibujarLineas();
+    };
+  }
+
+  function dibujarLineas() {
+    const cont = document.getElementById('cn-lineas');
+    cont.innerHTML = lineas.length === 0 ? '<div class="vacio">Todavía no agregas productos.</div>' : lineas.map((l, idx) => `
+      <div class="orden-item">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(l.nombre)}</span>
+          <button class="btn btn-rojo btn-chico cn-quitar" data-idx="${idx}">Quitar</button>
+        </div>
+        <div class="orden-meta"><span class="ayuda">${l.cantidad} × ${formatoDinero(l.costoUnitario)}</span><span style="font-weight:700;">${formatoDinero(l.subtotal)}</span></div>
+      </div>`).join('');
+    cont.querySelectorAll('.cn-quitar').forEach(b => b.onclick = () => { lineas.splice(Number(b.dataset.idx), 1); dibujarLineas(); });
+    const total = lineas.reduce((sum, l) => sum + l.subtotal, 0);
+    document.getElementById('cn-total').textContent = formatoDinero(total);
+    document.getElementById('cn-guardar').disabled = lineas.length === 0;
+  }
+
+  document.getElementById('cn-guardar').onclick = async (e) => {
+    if (lineas.length === 0) return;
+    if (!selProveedor.value) { mostrarMensaje(root, 'Elige un proveedor.', 'error'); return; }
+    if (codti == null) { mostrarMensaje(root, 'Elige una sucursal.', 'error'); return; }
+
+    const payload = {
+      idProveedor: Number(selProveedor.value),
+      codti,
+      folioProveedor: document.getElementById('cn-folio').value.trim() || null,
+      fechaVencimiento: document.getElementById('cn-vencimiento').value || null,
+      observaciones: document.getElementById('cn-notas').value.trim() || null,
+      lineas: lineas.map(l => ({
+        codpro: l.codpro,
+        cantidad: l.unidades ? null : l.cantidad,
+        costoUnitario: l.unidades ? null : l.costoUnitario,
+        unidades: l.unidades || null,
+      })),
+    };
+
+    e.target.disabled = true;
+    e.target.innerHTML = '<span class="spinner"></span> Guardando...';
+    try {
+      const compra = await api('POST', '/api/compras', payload);
+      mostrarMensaje(root, 'Compra registrada.', 'ok');
+      setTimeout(() => navegar('#/compra/' + compra.idcompra), 700);
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+      e.target.textContent = 'Registrar compra';
+    }
+  };
 }
 
 // ── Garantías ────────────────────────────────────────────────────────────
