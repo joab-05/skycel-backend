@@ -3,8 +3,11 @@ package com.skycel.backend.domain.entity;
 import com.skycel.backend.domain.enums.TipoProducto;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.envers.Audited;
+import org.hibernate.envers.RelationTargetAuditMode;
 
 @Entity
+@Audited
 @Table(name = "producto_master")
 @Getter
 @Setter
@@ -29,6 +32,7 @@ public class ProductoMaster {
     @Column(name = "modelo", length = 120)
     private String modelo;
 
+    @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "idcat", nullable = false)
     private Categoria categoria;

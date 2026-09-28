@@ -226,6 +226,7 @@ async function render() {
     if (ruta === 'compras') return pantallaCompras();
     if (ruta === 'compra-nueva') return pantallaCompraNueva();
     if (ruta === 'compra' && param) return pantallaCompraDetalle(param);
+    if (ruta === 'auditoria' && param) return pantallaAuditoria(param);
     if (ruta === 'garantias') return pantallaGarantias();
     if (ruta === 'garantia' && param) return pantallaGarantiaDetalle(param);
     if (ruta === 'reportes') return pantallaReportes();
@@ -2368,7 +2369,11 @@ async function pantallaProductoEditar(param) {
   root.innerHTML = `
     <button class="enlace" id="pe-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver al producto</button>
     <h1>${ic('pencil')} Editar producto</h1>
-    <div class="ayuda" style="margin:-8px 0 14px 0;">${escapar(p.nombreProductoMaster)} · código <strong>${escapar(p.codpro)}</strong> (el código no cambia)</div>
+    <div class="ayuda" style="margin:-8px 0 10px 0;">${escapar(p.nombreProductoMaster)} · código <strong>${escapar(p.codpro)}</strong> (el código no cambia)</div>
+    <div class="grupo-botones" style="margin-bottom:14px;">
+      <button class="btn btn-gris btn-chico" onclick="navegar('#/auditoria/producto-master~${p.idProductoMaster}')">${ic('history')} Historial del artículo</button>
+      <button class="btn btn-gris btn-chico" onclick="navegar('#/auditoria/producto~${p.idproducto}')">${ic('history')} Historial de esta sucursal</button>
+    </div>
 
     <div class="tarjeta">
       <h2>Datos del artículo</h2>
@@ -2712,6 +2717,60 @@ async function pantallaCaja() {
   };
 }
 
+// ── Auditoría (historial de cambios) ──────────────────────────────────────
+
+const AUDITORIA_ENTIDAD_NOMBRE = { producto: 'Producto (esta sucursal)', 'producto-master': 'Artículo', usuario: 'Usuario', tienda: 'Sucursal' };
+const AUDITORIA_CAMPO_NOMBRE = {
+  preciopro: 'Precio de compra', preciopub: 'Precio de venta', stock: 'Stock', stockMinimo: 'Stock mínimo',
+  activo: 'Activo', rezagado: 'Rezagado', publico: 'Público', codpro: 'Código',
+  nombreBase: 'Nombre', marca: 'Marca', modelo: 'Modelo', especificaciones: 'Especificaciones',
+  notaAdicional: 'Nota adicional', compatibilidad: 'Compatibilidad', tiempoEstimadoMin: 'Tiempo estimado (min)',
+  diasGarantia: 'Días de garantía', tipo: 'Tipo', username: 'Usuario', nombreCompleto: 'Nombre completo',
+  rol: 'Rol', telefono: 'Teléfono', email: 'Correo', tecnicoEncargado: 'Técnico encargado',
+  sueldoBase: 'Sueldo base', nombre: 'Nombre', ubicacion: 'Ubicación', esAlmacen: 'Es almacén',
+};
+function auditoriaNombreCampo(c) { return AUDITORIA_CAMPO_NOMBRE[c] || c; }
+function auditoriaValorCampo(campo, v) {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'boolean') return v ? 'Sí' : 'No';
+  if (typeof v === 'number' && /preci|costo|monto|sueldo/i.test(campo)) return formatoDinero(v);
+  return String(v);
+}
+
+async function pantallaAuditoria(param) {
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador puede ver el historial de cambios.</div>'; return; }
+  const [entidad, id] = param.split('~');
+  root.innerHTML = `
+    <button class="enlace" id="au-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
+    <h1>${ic('history')} Historial de cambios</h1>
+    <div class="ayuda" style="margin:-8px 0 14px 0;">${escapar(AUDITORIA_ENTIDAD_NOMBRE[entidad] || entidad)} · #${escapar(id)}</div>
+    <div id="au-lista"><div class="vacio">Cargando...</div></div>`;
+  document.getElementById('au-volver').onclick = () => history.back();
+
+  const cont = document.getElementById('au-lista');
+  try {
+    const historial = await api('GET', `/api/auditoria/${encodeURIComponent(entidad)}/${encodeURIComponent(id)}`);
+    if (historial.length === 0) { cont.innerHTML = '<div class="vacio">Sin historial.</div>'; return; }
+    const claseTipo = { Creado: 'lista', Eliminado: 'cancelada', Modificado: 'reparacion' };
+    cont.innerHTML = historial.slice().reverse().map(h => `
+      <div class="orden-item">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(h.tipo)}</span>
+          <span class="pastilla ${claseTipo[h.tipo] || 'reparacion'}">Rev. ${h.revision}</span>
+        </div>
+        <div class="orden-cliente">${escapar(h.usuario)} · ${formatoFecha(h.fecha)}</div>
+        ${h.cambios.length ? h.cambios.map(c => `
+          <div class="detalle-fila"><span class="k">${escapar(auditoriaNombreCampo(c.campo))}</span><span class="v">${escapar(auditoriaValorCampo(c.campo, c.antes))} → ${escapar(auditoriaValorCampo(c.campo, c.despues))}</span></div>
+        `).join('') : (h.sinAntecedente
+            ? '<div class="ayuda">El registro ya existía cuando se activó este historial: se detectó un cambio, pero no hay una versión anterior con la que compararlo.</div>'
+            : (h.tipo === 'Modificado' ? '<div class="ayuda">Sin cambios visibles en los campos que se muestran aquí.</div>' : ''))}
+      </div>`).join('');
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
 // ── Empleados ────────────────────────────────────────────────────────────
 
 const ROLES_STAFF = ['ROOT', 'ADMIN', 'ENCARGADO_TIENDA', 'VENDEDOR', 'TECNICO'];
@@ -2871,6 +2930,7 @@ async function pantallaEmpleadoDetalle(id) {
     <div class="grupo-botones">
       <button id="ed-editar" class="btn btn-azul">${ic('pencil')} Editar</button>
       <button id="ed-desactivar" class="btn btn-rojo">${ic('trash-2')} Desactivar</button>
+      <button class="btn btn-gris" onclick="navegar('#/auditoria/usuario~${id}')">${ic('history')} Historial</button>
     </div>`;
 
   document.getElementById('ed-editar').onclick = () => dibujarFormularioEmpleado(document.getElementById('ed-form'), u, () => pantallaEmpleadoDetalle(id));
