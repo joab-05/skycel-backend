@@ -152,6 +152,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/compras', i: ic('shopping-bag'), t: 'Compras y cuentas por pagar', grupo: 'Finanzas' });
+  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/descuentos', i: ic('tags'), t: 'Descuentos', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reportes', grupo: 'Finanzas' });
   items.push({ h: '#/clientes', i: ic('users'), t: 'Clientes', grupo: 'Clientes' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: ic('shield-check'), t: 'Garantías', grupo: 'Clientes' });
@@ -227,6 +228,7 @@ async function render() {
     if (ruta === 'compra-nueva') return pantallaCompraNueva();
     if (ruta === 'compra' && param) return pantallaCompraDetalle(param);
     if (ruta === 'auditoria' && param) return pantallaAuditoria(param);
+    if (ruta === 'descuentos') return pantallaDescuentos();
     if (ruta === 'garantias') return pantallaGarantias();
     if (ruta === 'garantia' && param) return pantallaGarantiaDetalle(param);
     if (ruta === 'reportes') return pantallaReportes();
@@ -2717,9 +2719,190 @@ async function pantallaCaja() {
   };
 }
 
+// ── Descuentos automáticos ────────────────────────────────────────────────
+// El sistema los aplica solo al vender (ver backend VentaService/DescuentoService); nunca los captura un
+// vendedor ni un administrador a mano en el punto de venta — por eso solo se administran aquí.
+
+const DESCUENTO_TIPO_NOMBRE = { CELULAR: 'Celulares', TABLET: 'Tablets', ACCESORIO: 'Accesorios', SERVICIO: 'Servicios' };
+const DESCUENTO_DIA_NOMBRE = { LUN: 'Lunes', MAR: 'Martes', MIE: 'Miércoles', JUE: 'Jueves', VIE: 'Viernes', SAB: 'Sábado', DOM: 'Domingo' };
+
+function descripcionDescuento(r) {
+  const partes = [];
+  partes.push(r.tipoProducto ? DESCUENTO_TIPO_NOMBRE[r.tipoProducto] || r.tipoProducto : 'Todos los artículos');
+  if (r.codti) partes.push('en esta sucursal');
+  if (Number(r.montoMinimo) > 0) partes.push(`desde ${formatoDinero(r.montoMinimo)}`);
+  const cuando = r.aplicacion === 'DIAS_SEMANA' ? (r.diasSemana || []).map(d => DESCUENTO_DIA_NOMBRE[d] || d).join(', ')
+    : r.aplicacion === 'RANGO_FECHA' ? `del ${r.fechaInicio} al ${r.fechaFin}` : 'siempre';
+  return partes.join(' · ') + ' · ' + cuando;
+}
+
+async function pantallaDescuentos() {
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador puede ver los descuentos.</div>'; return; }
+  root.innerHTML = `
+    <h1>${ic('tags')} Descuentos</h1>
+    <div class="ayuda" style="margin:-8px 0 14px 0;">El sistema los aplica solo al cobrar; nadie los captura a mano en el punto de venta.</div>
+    <button id="ds-nueva" class="btn btn-verde" style="margin-bottom:14px;">${ic('plus')} Nueva regla</button>
+    <div id="ds-form" class="oculto"></div>
+    <div id="ds-lista"><div class="vacio">Cargando...</div></div>`;
+
+  let tiendas = [];
+  try { tiendas = await api('GET', '/api/tiendas'); } catch { tiendas = []; }
+
+  const cont = document.getElementById('ds-lista');
+  const contForm = document.getElementById('ds-form');
+  const cargar = async () => {
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const reglas = await api('GET', '/api/descuentos');
+      cont.innerHTML = reglas.length === 0 ? '<div class="vacio">No hay reglas de descuento.</div>' : reglas.map(r => `
+        <div class="orden-item" data-id="${r.iddescuento}">
+          <div class="orden-cab">
+            <span class="orden-folio">${escapar(r.nombre)}</span>
+            <span class="pastilla ${r.activo ? 'lista' : 'cancelada'}">${r.activo ? 'Activo' : 'Inactivo'}</span>
+          </div>
+          <div class="orden-equipo">${r.descuentoFijo != null ? formatoDinero(r.descuentoFijo) + ' de descuento' : Number(r.descuentoPorcentaje) + '% de descuento'}</div>
+          <div class="orden-cliente">${escapar(descripcionDescuento(r))}</div>
+          <div class="grupo-botones" style="margin-top:8px;">
+            <button class="btn btn-gris btn-chico ds-editar" data-id="${r.iddescuento}">${ic('pencil')} Editar</button>
+            <button class="btn ${r.activo ? 'btn-rojo' : 'btn-verde'} btn-chico ds-toggle" data-id="${r.iddescuento}" data-activo="${r.activo}">${r.activo ? 'Desactivar' : 'Activar'}</button>
+            <button class="btn btn-gris btn-chico" onclick="navegar('#/auditoria/descuento~${r.iddescuento}')">${ic('history')} Historial</button>
+          </div>
+        </div>`).join('');
+
+      cont.querySelectorAll('.ds-editar').forEach(b => b.onclick = () => {
+        const r = reglas.find(x => x.iddescuento === Number(b.dataset.id));
+        dibujarFormularioDescuento(contForm, tiendas, r, cargar);
+      });
+      cont.querySelectorAll('.ds-toggle').forEach(b => b.onclick = async () => {
+        try {
+          await api('PATCH', `/api/descuentos/${b.dataset.id}/activo?activo=${b.dataset.activo !== 'true'}`, undefined);
+          cargar();
+        } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+      });
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  };
+
+  document.getElementById('ds-nueva').onclick = () => dibujarFormularioDescuento(contForm, tiendas, null, cargar);
+  cargar();
+}
+
+function dibujarFormularioDescuento(cont, tiendas, regla, alGuardar) {
+  cont.classList.remove('oculto');
+  const editando = !!regla;
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">${editando ? 'Editar regla' : 'Nueva regla'}</h2>
+      <label class="obligatorio">Nombre</label>
+      <input id="df-nombre" maxlength="100" placeholder="Ej. Descuento de fin de semana" value="${editando ? escapar(regla.nombre) : ''}">
+
+      <label>Aplica a</label>
+      <select id="df-tipo">
+        <option value="">Todos los artículos</option>
+        ${Object.entries(DESCUENTO_TIPO_NOMBRE).map(([v, n]) => `<option value="${v}" ${editando && regla.tipoProducto === v ? 'selected' : ''}>${n}</option>`).join('')}
+      </select>
+
+      <label>Sucursal</label>
+      <select id="df-tienda">
+        <option value="">Todas las sucursales</option>
+        ${tiendas.filter(t => !t.esAlmacen).map(t => `<option value="${t.codti}" ${editando && regla.codti === t.codti ? 'selected' : ''}>${escapar(t.nombre)}</option>`).join('')}
+      </select>
+
+      <label>Monto mínimo de la venta</label>
+      <input id="df-minimo" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Opcional" value="${editando && regla.montoMinimo != null ? regla.montoMinimo : ''}">
+
+      <label class="obligatorio">Descuento</label>
+      <div class="segmentado">
+        <button type="button" id="df-seg-fijo" class="${!editando || regla.descuentoFijo != null ? 'activo' : ''}">Monto fijo $</button>
+        <button type="button" id="df-seg-porciento" class="${editando && regla.descuentoPorcentaje != null ? 'activo' : ''}">Porcentaje %</button>
+      </div>
+      <input id="df-valor" type="number" inputmode="decimal" min="0" step="0.01"
+        value="${editando ? (regla.descuentoFijo ?? regla.descuentoPorcentaje ?? '') : ''}">
+
+      <label class="obligatorio">Cuándo aplica</label>
+      <div class="segmentado">
+        <button type="button" id="df-seg-siempre" class="${!editando || regla.aplicacion === 'SIEMPRE' ? 'activo' : ''}">Siempre</button>
+        <button type="button" id="df-seg-dias" class="${editando && regla.aplicacion === 'DIAS_SEMANA' ? 'activo' : ''}">Días de la semana</button>
+        <button type="button" id="df-seg-rango" class="${editando && regla.aplicacion === 'RANGO_FECHA' ? 'activo' : ''}">Rango de fechas</button>
+      </div>
+      <div id="df-dias" class="oculto">
+        <div class="chips">
+          ${Object.entries(DESCUENTO_DIA_NOMBRE).map(([v, n]) => `<button type="button" class="chip df-dia ${editando && (regla.diasSemana || []).includes(v) ? 'activo' : ''}" data-dia="${v}">${n}</button>`).join('')}
+        </div>
+      </div>
+      <div id="df-rango" class="oculto fila">
+        <div><label>Del</label><input id="df-fecha-inicio" type="date" value="${editando ? (regla.fechaInicio || '') : ''}"></div>
+        <div><label>Al</label><input id="df-fecha-fin" type="date" value="${editando ? (regla.fechaFin || '') : ''}"></div>
+      </div>
+
+      <div class="grupo-botones" style="margin-top:14px;">
+        <button id="df-guardar" class="btn btn-verde">Guardar</button>
+        <button id="df-cancelar" class="btn btn-gris">Cancelar</button>
+      </div>
+    </div>`;
+
+  let tipoDescuento = editando && regla.descuentoPorcentaje != null ? 'porciento' : 'fijo';
+  let aplicacion = editando ? regla.aplicacion : 'SIEMPRE';
+  const segFijo = document.getElementById('df-seg-fijo'), segPorciento = document.getElementById('df-seg-porciento');
+  segFijo.onclick = () => { tipoDescuento = 'fijo'; segFijo.classList.add('activo'); segPorciento.classList.remove('activo'); };
+  segPorciento.onclick = () => { tipoDescuento = 'porciento'; segPorciento.classList.add('activo'); segFijo.classList.remove('activo'); };
+
+  const segSiempre = document.getElementById('df-seg-siempre'), segDias = document.getElementById('df-seg-dias'), segRango = document.getElementById('df-seg-rango');
+  const divDias = document.getElementById('df-dias'), divRango = document.getElementById('df-rango');
+  const mostrarAplicacion = () => {
+    [segSiempre, segDias, segRango].forEach(b => b.classList.remove('activo'));
+    ({ SIEMPRE: segSiempre, DIAS_SEMANA: segDias, RANGO_FECHA: segRango })[aplicacion].classList.add('activo');
+    divDias.classList.toggle('oculto', aplicacion !== 'DIAS_SEMANA');
+    divRango.classList.toggle('oculto', aplicacion !== 'RANGO_FECHA');
+  };
+  segSiempre.onclick = () => { aplicacion = 'SIEMPRE'; mostrarAplicacion(); };
+  segDias.onclick = () => { aplicacion = 'DIAS_SEMANA'; mostrarAplicacion(); };
+  segRango.onclick = () => { aplicacion = 'RANGO_FECHA'; mostrarAplicacion(); };
+  mostrarAplicacion();
+  cont.querySelectorAll('.df-dia').forEach(b => b.onclick = () => b.classList.toggle('activo'));
+
+  document.getElementById('df-cancelar').onclick = () => { cont.classList.add('oculto'); cont.innerHTML = ''; };
+  document.getElementById('df-guardar').onclick = async (e) => {
+    const nombre = document.getElementById('df-nombre').value.trim();
+    const valor = Number(document.getElementById('df-valor').value);
+    if (!nombre) { mostrarMensaje(root, 'Indica un nombre para la regla.', 'error'); return; }
+    if (!valor || valor <= 0) { mostrarMensaje(root, 'Indica un descuento mayor a 0.', 'error'); return; }
+
+    const payload = {
+      nombre,
+      tipoProducto: document.getElementById('df-tipo').value || null,
+      codti: document.getElementById('df-tienda').value ? Number(document.getElementById('df-tienda').value) : null,
+      montoMinimo: document.getElementById('df-minimo').value ? Number(document.getElementById('df-minimo').value) : null,
+      descuentoFijo: tipoDescuento === 'fijo' ? valor : null,
+      descuentoPorcentaje: tipoDescuento === 'porciento' ? valor : null,
+      aplicacion,
+      diasSemana: aplicacion === 'DIAS_SEMANA' ? [...cont.querySelectorAll('.df-dia.activo')].map(b => b.dataset.dia) : null,
+      fechaInicio: aplicacion === 'RANGO_FECHA' ? document.getElementById('df-fecha-inicio').value || null : null,
+      fechaFin: aplicacion === 'RANGO_FECHA' ? document.getElementById('df-fecha-fin').value || null : null,
+      activo: true,
+    };
+    if (aplicacion === 'DIAS_SEMANA' && payload.diasSemana.length === 0) { mostrarMensaje(root, 'Elige al menos un día.', 'error'); return; }
+    if (aplicacion === 'RANGO_FECHA' && (!payload.fechaInicio || !payload.fechaFin)) { mostrarMensaje(root, 'Indica ambas fechas.', 'error'); return; }
+
+    e.target.disabled = true;
+    try {
+      if (editando) await api('PUT', `/api/descuentos/${regla.iddescuento}`, payload);
+      else await api('POST', '/api/descuentos', payload);
+      mostrarMensaje(root, 'Guardado.', 'ok');
+      cont.classList.add('oculto'); cont.innerHTML = '';
+      alGuardar();
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+    }
+  };
+}
+
 // ── Auditoría (historial de cambios) ──────────────────────────────────────
 
-const AUDITORIA_ENTIDAD_NOMBRE = { producto: 'Producto (esta sucursal)', 'producto-master': 'Artículo', usuario: 'Usuario', tienda: 'Sucursal' };
+const AUDITORIA_ENTIDAD_NOMBRE = { producto: 'Producto (esta sucursal)', 'producto-master': 'Artículo', usuario: 'Usuario', tienda: 'Sucursal', descuento: 'Regla de descuento' };
 const AUDITORIA_CAMPO_NOMBRE = {
   preciopro: 'Precio de compra', preciopub: 'Precio de venta', stock: 'Stock', stockMinimo: 'Stock mínimo',
   activo: 'Activo', rezagado: 'Rezagado', publico: 'Público', codpro: 'Código',
@@ -2728,6 +2911,9 @@ const AUDITORIA_CAMPO_NOMBRE = {
   diasGarantia: 'Días de garantía', tipo: 'Tipo', username: 'Usuario', nombreCompleto: 'Nombre completo',
   rol: 'Rol', telefono: 'Teléfono', email: 'Correo', tecnicoEncargado: 'Técnico encargado',
   sueldoBase: 'Sueldo base', nombre: 'Nombre', ubicacion: 'Ubicación', esAlmacen: 'Es almacén',
+  tipoProducto: 'Aplica a', idProductoMaster: 'Artículo específico', codti: 'Sucursal',
+  montoMinimo: 'Monto mínimo', descuentoPorcentaje: 'Descuento (%)', descuentoFijo: 'Descuento ($)',
+  aplicacion: 'Cuándo aplica', diasSemana: 'Días', fechaInicio: 'Desde', fechaFin: 'Hasta',
 };
 function auditoriaNombreCampo(c) { return AUDITORIA_CAMPO_NOMBRE[c] || c; }
 function auditoriaValorCampo(campo, v) {
@@ -3145,18 +3331,24 @@ async function pantallaPOS() {
 
 function dibujarResultadosPOS(cont, productos) {
   if (productos.length === 0) { cont.innerHTML = '<div class="vacio">Sin resultados.</div>'; return; }
-  cont.innerHTML = productos.map(p => `
+  cont.innerHTML = productos.map(p => {
+    const conDescuento = p.precioFinal != null && Number(p.descuentoAplicado) > 0;
+    return `
     <div class="orden-item" data-codpro="${escapar(p.codpro)}">
       <div class="orden-cab">
         <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
-        <span style="font-weight:700; white-space:nowrap;">${formatoDinero(p.preciopub)}${p.tipo !== 'CELULAR' ? ' <span class="pv-mas">' + ic('plus') + '</span>' : ''}</span>
+        <span style="font-weight:700; white-space:nowrap; text-align:right;">
+          ${conDescuento ? `<span class="ayuda" style="text-decoration:line-through; display:block; font-weight:400;">${formatoDinero(p.preciopub)}</span>` : ''}
+          <span style="color:${conDescuento ? 'var(--verde)' : 'inherit'};">${formatoDinero(conDescuento ? p.precioFinal : p.preciopub)}</span>${p.tipo !== 'CELULAR' ? ' <span class="pv-mas">' + ic('plus') + '</span>' : ''}
+        </span>
       </div>
-      <div class="orden-cliente">${escapar(p.codpro)}${p.tipo !== 'SERVICIO' ? ' · Stock: ' + Number(p.stock) : ''}</div>
+      <div class="orden-cliente">${escapar(p.codpro)}${p.tipo !== 'SERVICIO' ? ' · Stock: ' + Number(p.stock) : ''}${conDescuento ? ' · ' + ic('tags') + ' con descuento' : ''}</div>
       ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
         <div class="grupo-botones" style="margin-top:8px;">
           ${p.imeisDisponibles.map(u => `<button class="btn btn-azul btn-chico pv-agregar-imei" data-imei="${escapar(u.imei)}">${escapar(u.imei)} · ${formatoDinero(u.precioVenta)}</button>`).join('')}
         </div>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   cont.querySelectorAll('.orden-item').forEach(el => {
     const p = productos.find(x => x.codpro === el.dataset.codpro);
@@ -3167,7 +3359,7 @@ function dibujarResultadosPOS(cont, productos) {
         agregarAlCarritoPOS(p, 1, unidad.precioVenta, unidad.imei);
       });
     } else {
-      el.onclick = () => agregarAlCarritoPOS(p, 1, p.preciopub, null);
+      el.onclick = () => agregarAlCarritoPOS(p, 1, p.precioFinal ?? p.preciopub, null);
     }
   });
 }

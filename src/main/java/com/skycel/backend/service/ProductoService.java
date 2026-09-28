@@ -34,6 +34,7 @@ public class ProductoService {
     private final SeccionRepository        seccionRepository;
     private final ProductoImeiRepository   productoImeiRepository;
     private final CategoriaFolioRepository categoriaFolioRepository;
+    private final DescuentoService         descuentoService;
     private final ProductoMapper           productoMapper;
     private final MovimientoInventarioService movimientoInventarioService;
 
@@ -654,6 +655,15 @@ public class ProductoService {
             dto.setImeisDisponibles(availableImeis);
         }
         dto.setActivo(p.getActivo());
+
+        // Descuento automático vigente ahora mismo (ver DescuentoService): nunca lo aplica un vendedor a mano,
+        // el sistema decide si corresponde y cuánto. Solo sobre el precio de lista, no sobre el de un IMEI con
+        // precio propio (ese ya es una excepción manual del admin, no se le encima un descuento más).
+        if (dto.getPreciopub() != null) {
+            BigDecimal descuento = descuentoService.calcularDescuento(p, dto.getPreciopub(), java.time.LocalDateTime.now());
+            dto.setDescuentoAplicado(descuento);
+            dto.setPrecioFinal(dto.getPreciopub().subtract(descuento));
+        }
         return dto;
     }
 

@@ -13,7 +13,9 @@ public class ProductoResponseDTO {
     private BigDecimal stockMinimo;       // umbral de reposición (0 = sin alerta)
     private Boolean bajoStock;            // true si stock <= stockMinimo (no aplica a servicios)
     private BigDecimal preciopro;         // precio compra
-    private BigDecimal preciopub;         // precio venta
+    private BigDecimal preciopub;         // precio venta (de lista, sin descuento)
+    private BigDecimal descuentoAplicado; // descuento automático vigente ahora mismo (0 si ninguno aplica)
+    private BigDecimal precioFinal;       // lo que de verdad se cobra: preciopub - descuentoAplicado
     private CatalogoSimpleResponseDTO color;
     private MagnitudResponseDTO magnitud;
     private ProveedorResponseDTO proveedor;

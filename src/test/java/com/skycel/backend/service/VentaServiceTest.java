@@ -25,6 +25,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -54,6 +55,7 @@ class VentaServiceTest {
     @Mock private MovimientoInventarioService movimientoInventarioService;
     @Mock private com.skycel.backend.repository.DevolucionRepository devolucionRepository;
     @Mock private ClienteService clienteService;
+    @Mock private DescuentoService descuentoService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -80,6 +82,8 @@ class VentaServiceTest {
         lenient().when(tiendaRepository.findById(CODTI)).thenReturn(Optional.of(tienda));
         lenient().when(cajaRepository.findById(ID_CAJA)).thenReturn(Optional.of(caja));
         lenient().when(usuarioRepository.findById(ID_VENDEDOR)).thenReturn(Optional.of(vendedor));
+        // Sin reglas de descuento salvo que una prueba diga lo contrario: el precio de sistema es el de lista.
+        lenient().when(descuentoService.calcularDescuento(any(), any(), any())).thenReturn(BigDecimal.ZERO);
 
         // save(...) devuelve la misma entidad recibida, como haría JPA con un save simple.
         lenient().when(ventaRepository.save(any(Venta.class))).thenAnswer(inv -> {
@@ -893,6 +897,30 @@ class VentaServiceTest {
             VentaResponseDto r = ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 1))), ID_VENDEDOR);
 
             assertThat(r.getTotal()).isEqualByComparingTo("15");
+        }
+
+        @Test
+        @DisplayName("con un descuento automático activo, el precio del sistema ya lo trae restado")
+        void conDescuentoActivo_precioSistemaYaDescontado() {
+            accesorioEnStock();
+            when(descuentoService.calcularDescuento(any(Producto.class), eq(new BigDecimal("15")), any()))
+                    .thenReturn(new BigDecimal("3"));
+
+            VentaResponseDto r = ventaService.crear(ventaBase(List.of(conPrecio("12"))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("12");
+        }
+
+        @Test
+        @DisplayName("con un descuento automático activo, ya no se acepta cobrar el precio de lista sin descontar")
+        void conDescuentoActivo_precioDeListaSeRechaza() {
+            accesorioEnStock();
+            when(descuentoService.calcularDescuento(any(Producto.class), eq(new BigDecimal("15")), any()))
+                    .thenReturn(new BigDecimal("3"));
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(conPrecio("15"))), ID_VENDEDOR))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            e -> assertThat(e.getReason()).contains("12.00").contains("15.00"));
         }
     }
 

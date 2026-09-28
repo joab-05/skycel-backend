@@ -71,6 +71,7 @@ public class VentaService {
     private final MovimientoInventarioService movimientoInventarioService;
     private final DevolucionRepository devolucionRepository;
     private final com.skycel.backend.service.ClienteService clienteService;
+    private final DescuentoService descuentoService;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
@@ -511,9 +512,13 @@ public class VentaService {
                     ? pi.getCostoUnitario() : producto.getPreciopro();
             // El precio de referencia es el de ESTA unidad (override si tiene uno propio),
             // no el genérico del modelo — es justo lo que resuelve poder liquidar un
-            // equipo específico sin tocar el precio de los demás del mismo modelo.
+            // equipo específico sin tocar el precio de los demás del mismo modelo. Un descuento
+            // automático solo se resta al precio de lista: una unidad con precio propio ya es una
+            // excepción manual del admin, no se le encima un descuento más.
             linea.precioUnitarioBase = pi.getPrecioVentaOverride() != null
-                    ? pi.getPrecioVentaOverride() : producto.getPreciopub();
+                    ? pi.getPrecioVentaOverride()
+                    : producto.getPreciopub().subtract(
+                            descuentoService.calcularDescuento(producto, producto.getPreciopub(), LocalDateTime.now()));
 
         } else {
             Producto producto = resolverProductoNoSerial(d, master, tienda);
@@ -530,7 +535,10 @@ public class VentaService {
 
             linea.producto = producto;
             linea.costoUnitarioCompra = producto.getPreciopro();
-            linea.precioUnitarioBase = producto.getPreciopub();
+            // Igual que arriba: el descuento automático (si alguna regla aplica ahora) se resta del
+            // precio de lista; ni un vendedor ni un administrador lo capturan a mano al vender.
+            linea.precioUnitarioBase = producto.getPreciopub().subtract(
+                    descuentoService.calcularDescuento(producto, producto.getPreciopub(), LocalDateTime.now()));
         }
 
         if (d.getPrecioUnitarioFinal() == null) {
