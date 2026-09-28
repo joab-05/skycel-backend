@@ -1703,11 +1703,14 @@ function mostrarFormularioAvance(id, hacia) {
 async function pantallaReportes() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
+  const veCaja = SUPERIOR.includes(s.rol);
   root.innerHTML = `
     <h1>${ic('chart-column')} Reportes</h1>
     <div class="segmentado">
       <button id="rp-tab-ventas" class="activo">Ventas</button>
       <button id="rp-tab-gerencial">Gerencial</button>
+      <button id="rp-tab-rezagados">Rezagados</button>
+      ${veCaja ? '<button id="rp-tab-caja">Caja</button>' : ''}
     </div>
     <div id="rp-panel-ventas">
       <div id="rp-tienda"></div>
@@ -1719,22 +1722,24 @@ async function pantallaReportes() {
       <div id="rp-resumen"></div>
       <div id="rp-lista" style="margin-top:10px;"></div>
     </div>
-    <div id="rp-panel-gerencial" class="oculto"></div>`;
+    <div id="rp-panel-gerencial" class="oculto"></div>
+    <div id="rp-panel-rezagados" class="oculto"></div>
+    ${veCaja ? '<div id="rp-panel-caja" class="oculto"></div>' : ''}`;
 
-  const tabVentas = document.getElementById('rp-tab-ventas');
-  const tabGerencial = document.getElementById('rp-tab-gerencial');
-  const panelVentas = document.getElementById('rp-panel-ventas');
-  const panelGerencial = document.getElementById('rp-panel-gerencial');
-  let gerencialListo = false;
-  tabVentas.onclick = () => {
-    tabVentas.classList.add('activo'); tabGerencial.classList.remove('activo');
-    panelVentas.classList.remove('oculto'); panelGerencial.classList.add('oculto');
+  const paneles = {
+    ventas: { tab: document.getElementById('rp-tab-ventas'), panel: document.getElementById('rp-panel-ventas') },
+    gerencial: { tab: document.getElementById('rp-tab-gerencial'), panel: document.getElementById('rp-panel-gerencial'), iniciar: () => iniciarReporteGerencial(paneles.gerencial.panel, s) },
+    rezagados: { tab: document.getElementById('rp-tab-rezagados'), panel: document.getElementById('rp-panel-rezagados'), iniciar: () => iniciarReporteRezagados(paneles.rezagados.panel, s) },
   };
-  tabGerencial.onclick = () => {
-    tabGerencial.classList.add('activo'); tabVentas.classList.remove('activo');
-    panelGerencial.classList.remove('oculto'); panelVentas.classList.add('oculto');
-    if (!gerencialListo) { gerencialListo = true; iniciarReporteGerencial(panelGerencial, s); }
-  };
+  if (veCaja) paneles.caja = { tab: document.getElementById('rp-tab-caja'), panel: document.getElementById('rp-panel-caja'), iniciar: () => iniciarCajaConsolidada(paneles.caja.panel) };
+
+  Object.entries(paneles).forEach(([clave, p]) => {
+    p.tab.onclick = () => {
+      Object.values(paneles).forEach(o => { o.tab.classList.remove('activo'); o.panel.classList.add('oculto'); });
+      p.tab.classList.add('activo'); p.panel.classList.remove('oculto');
+      if (p.iniciar && !p.listo) { p.listo = true; p.iniciar(); }
+    };
+  });
 
   let codti = s.codti;
   const contTienda = document.getElementById('rp-tienda');
@@ -1936,6 +1941,121 @@ async function iniciarReporteGerencial(cont, s) {
   botonesPeriodo.hoy.onclick = () => { periodo = 'hoy'; cargar(); };
   botonesPeriodo['7dias'].onclick = () => { periodo = '7dias'; cargar(); };
   botonesPeriodo.mes.onclick = () => { periodo = 'mes'; cargar(); };
+  cargar();
+}
+
+/** Pestaña "Rezagados" de Reportes: equipos disponibles que llevan mucho sin venderse, o marcados a mano. */
+async function iniciarReporteRezagados(cont, s) {
+  cont.innerHTML = `
+    <div id="rz-tienda"></div>
+    <div class="fila" style="align-items:flex-end;">
+      <div style="flex:1;">
+        <label>Días sin venderse</label>
+        <input id="rz-dias" type="number" min="1" value="60">
+      </div>
+      <button id="rz-buscar" class="btn btn-azul btn-chico">${ic('search')} Buscar</button>
+    </div>
+    <div id="rz-resumen"></div>
+    <div id="rz-lista" style="margin-top:10px;"></div>`;
+
+  let codti = SUPERIOR.includes(s.rol) ? null : s.codti;
+  const contTienda = document.getElementById('rz-tienda');
+  if (SUPERIOR.includes(s.rol)) {
+    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="rz-codti"><option value="">Todas</option></select>`;
+    try {
+      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const sel = document.getElementById('rz-codti');
+      sel.innerHTML += tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      sel.onchange = () => { codti = sel.value ? Number(sel.value) : null; };
+    } catch {
+      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    }
+  } else {
+    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
+  }
+
+  async function cargar() {
+    const resumenEl = document.getElementById('rz-resumen');
+    const listaEl = document.getElementById('rz-lista');
+    resumenEl.innerHTML = '<div class="vacio">Cargando...</div>';
+    listaEl.innerHTML = '';
+    try {
+      const dias = Math.max(1, Number(document.getElementById('rz-dias').value) || 60);
+      const qs = new URLSearchParams({ dias: String(dias) });
+      if (codti != null) qs.set('codti', String(codti));
+      const r = await api('GET', `/api/reportes/equipos-rezagados?${qs.toString()}`);
+      resumenEl.innerHTML = `
+        <div class="fila">
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Equipos</div><div style="font-size:18px; font-weight:700;">${r.totalEquipos}</div></div>
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Valor a costo</div><div style="font-size:18px; font-weight:700;">${formatoDinero(r.valorCostoTotal)}</div></div>
+        </div>`;
+      if (r.equipos.length === 0) { listaEl.innerHTML = '<div class="vacio">Ningún equipo rezagado con estos criterios.</div>'; return; }
+      listaEl.innerHTML = r.equipos.map(eq => `
+        <div class="orden-item">
+          <div class="orden-cab">
+            <span class="orden-folio">${escapar(eq.nombreArticulo)}</span>
+            ${eq.marcadoManual ? '<span class="pastilla por-tomar">Marcado a mano</span>' : ''}
+          </div>
+          <div class="orden-equipo">${escapar(eq.nombreTienda)} · IMEI ${escapar(eq.imei)} · ${escapar(eq.condicion)}</div>
+          <div class="orden-meta">
+            <span class="orden-fecha">${ic('hourglass')} ${eq.diasEnExistencia} días en existencia</span>
+            <span style="font-weight:700;">${formatoDinero(eq.costo)} costo</span>
+          </div>
+          <div style="margin-top:8px;">
+            <button class="btn btn-gris btn-chico rz-toggle" data-codpro="${escapar(eq.codpro)}" data-codti="${eq.codti}" data-marcado="${eq.marcadoManual}">
+              ${eq.marcadoManual ? 'Quitar marca manual' : 'Marcar como rezagado'}
+            </button>
+          </div>
+        </div>`).join('');
+      listaEl.querySelectorAll('.rz-toggle').forEach(btn => {
+        btn.onclick = async () => {
+          const codpro = btn.dataset.codpro, codtiBtn = btn.dataset.codti, marcado = btn.dataset.marcado === 'true';
+          btn.disabled = true;
+          try {
+            await api('PATCH', `/api/productos/${encodeURIComponent(codpro)}/rezagado?codti=${codtiBtn}&rezagado=${!marcado}`, undefined);
+            cargar();
+          } catch (err) {
+            alert(err.message || 'No se pudo actualizar.');
+            btn.disabled = false;
+          }
+        };
+      });
+    } catch (err) {
+      resumenEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+  document.getElementById('rz-buscar').onclick = cargar;
+  cargar();
+}
+
+/** Pestaña "Caja" de Reportes: saldo y movimientos de hoy de todas las sucursales en una sola vista (ROOT/ADMIN). */
+async function iniciarCajaConsolidada(cont) {
+  cont.innerHTML = `
+    <div id="cc-resumen"></div>
+    <div id="cc-lista" style="margin-top:10px;"></div>`;
+
+  async function cargar() {
+    const resumenEl = document.getElementById('cc-resumen');
+    const listaEl = document.getElementById('cc-lista');
+    resumenEl.innerHTML = '<div class="vacio">Cargando...</div>';
+    listaEl.innerHTML = '';
+    try {
+      const r = await api('GET', '/api/reportes/caja-consolidada');
+      resumenEl.innerHTML = `
+        <div class="kp" style="margin-bottom:14px;">
+          <div class="kpi"><b class="c1">${ic('banknote')}</b><small>Saldo general</small><strong>${formatoDinero(r.saldoGeneral)}</strong></div>
+          <div class="kpi"><b class="c2">${ic('trending-up')}</b><small>Entradas hoy</small><strong>${formatoDinero(r.entradasHoyTotal)}</strong></div>
+          <div class="kpi"><b class="c4">${ic('circle-dollar-sign')}</b><small>Salidas hoy</small><strong>${formatoDinero(r.salidasHoyTotal)}</strong></div>
+        </div>`;
+      listaEl.innerHTML = r.porTienda.length === 0 ? '<div class="vacio">No hay sucursales para mostrar.</div>' : r.porTienda.map(t => `
+        <div class="detalle-fila">
+          <span class="k">${escapar(t.nombreTienda)} · ${t.numCajas} ${Number(t.numCajas) === 1 ? 'caja' : 'cajas'}</span>
+          <span class="v">${formatoDinero(t.saldo)} <span class="ayuda" style="font-weight:400;">(hoy: ${formatoDinero(t.saldoHoy)})</span></span>
+        </div>`).join('');
+    } catch (err) {
+      resumenEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
   cargar();
 }
 

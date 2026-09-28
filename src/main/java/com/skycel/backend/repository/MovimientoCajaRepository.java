@@ -1,6 +1,7 @@
 package com.skycel.backend.repository;
 
 import com.skycel.backend.domain.entity.MovimientoCaja;
+import com.skycel.backend.dto.reporte.CajaTiendaRow;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,4 +33,18 @@ public interface MovimientoCajaRepository extends JpaRepository<MovimientoCaja, 
     @Query("SELECT COALESCE(SUM(m.monto), 0) FROM MovimientoCaja m " +
            "WHERE m.caja.idCaja = :idCaja AND m.tipo = :tipo")
     BigDecimal totalPorTipo(@Param("idCaja") Integer idCaja, @Param("tipo") Byte tipo);
+
+    /** Totales de entradas/salidas (histórico y de hoy) de TODAS las cajas de cada sucursal, en una sola consulta. */
+    @Query("""
+            SELECT new com.skycel.backend.dto.reporte.CajaTiendaRow(
+                c.tienda.codti, c.tienda.nombre, COUNT(DISTINCT c.idCaja),
+                COALESCE(SUM(CASE WHEN m.tipo = 1 THEN m.monto ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN m.tipo = 2 THEN m.monto ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN m.tipo = 1 AND m.fechaMov >= :hoyInicio THEN m.monto ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN m.tipo = 2 AND m.fechaMov >= :hoyInicio THEN m.monto ELSE 0 END), 0))
+            FROM Caja c LEFT JOIN MovimientoCaja m ON m.caja = c
+            WHERE c.tienda.codti IN :codtis
+            GROUP BY c.tienda.codti, c.tienda.nombre
+            """)
+    List<CajaTiendaRow> consolidadoPorTienda(@Param("codtis") List<Integer> codtis, @Param("hoyInicio") LocalDateTime hoyInicio);
 }

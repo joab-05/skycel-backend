@@ -3,9 +3,13 @@ package com.skycel.backend.service;
 import com.skycel.backend.domain.entity.Tienda;
 import com.skycel.backend.domain.entity.Usuario;
 import com.skycel.backend.domain.enums.Rol;
+import com.skycel.backend.dto.reporte.CajaTiendaRow;
+import com.skycel.backend.dto.reporte.EquipoRezagadoRow;
 import com.skycel.backend.dto.reporte.ResumenTiendaRow;
 import com.skycel.backend.dto.reporte.TopProductoRow;
 import com.skycel.backend.dto.reporte.ValorInventarioRow;
+import com.skycel.backend.repository.MovimientoCajaRepository;
+import com.skycel.backend.repository.ProductoImeiRepository;
 import com.skycel.backend.repository.ProductoRepository;
 import com.skycel.backend.repository.TiendaRepository;
 import com.skycel.backend.repository.UsuarioRepository;
@@ -22,6 +26,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -37,13 +42,19 @@ public class ReporteService {
 
     private static final int TOP_LIMITE = 8;
 
-    private final VentaDetalleRepository ventaDetalleRepository;
-    private final ProductoRepository     productoRepository;
-    private final TiendaRepository       tiendaRepository;
-    private final UsuarioRepository      usuarioRepository;
+    private static final int DIAS_REZAGADO_DEFAULT = 60;
 
-    @Transactional(readOnly = true)
-    public Map<String, Object> gerencial(LocalDate desde, LocalDate hasta, Integer codti, String username) {
+    private final VentaDetalleRepository  ventaDetalleRepository;
+    private final ProductoRepository      productoRepository;
+    private final TiendaRepository        tiendaRepository;
+    private final UsuarioRepository       usuarioRepository;
+    private final ProductoImeiRepository  productoImeiRepository;
+    private final MovimientoCajaRepository movimientoCajaRepository;
+
+    /** A quiénes puede reportar este usuario: su propia sucursal (encargado) o la(s) que pida (ROOT/ADMIN). */
+    private record Alcance(List<Tienda> tiendas, List<Integer> codtis, Map<Integer, String> nombrePorCodti) {}
+
+    private Alcance alcance(Integer codti, String username) {
         Usuario usuario = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario autenticado no encontrado"));
         boolean admin = usuario.getRol() == Rol.ROOT || usuario.getRol() == Rol.ADMIN;
@@ -53,25 +64,33 @@ public class ReporteService {
                 .sorted(Comparator.comparing(Tienda::getNombre))
                 .collect(Collectors.toList());
 
-        List<Tienda> alcance;
+        List<Tienda> tiendas;
         if (!admin) {
             if (usuario.getTienda() == null)
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tu usuario no tiene una sucursal fija.");
             if (codti != null && !codti.equals(usuario.getTienda().getCodti()))
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes ver el reporte de tu tienda.");
-            alcance = tiendasDeNegocio.stream().filter(t -> t.getCodti().equals(usuario.getTienda().getCodti())).collect(Collectors.toList());
-            if (alcance.isEmpty()) alcance = List.of(usuario.getTienda());
+            tiendas = tiendasDeNegocio.stream().filter(t -> t.getCodti().equals(usuario.getTienda().getCodti())).collect(Collectors.toList());
+            if (tiendas.isEmpty()) tiendas = List.of(usuario.getTienda());
         } else if (codti != null) {
             Tienda t = tiendaRepository.findById(codti)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sucursal no encontrada."));
-            alcance = List.of(t);
+            tiendas = List.of(t);
         } else {
-            alcance = tiendasDeNegocio;
+            tiendas = tiendasDeNegocio;
         }
-        if (alcance.isEmpty())
+        if (tiendas.isEmpty())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No hay sucursales para reportar.");
-        List<Integer> codtis = alcance.stream().map(Tienda::getCodti).collect(Collectors.toList());
-        Map<Integer, String> nombrePorCodti = alcance.stream().collect(Collectors.toMap(Tienda::getCodti, Tienda::getNombre));
+        List<Integer> codtis = tiendas.stream().map(Tienda::getCodti).collect(Collectors.toList());
+        Map<Integer, String> nombrePorCodti = tiendas.stream().collect(Collectors.toMap(Tienda::getCodti, Tienda::getNombre));
+        return new Alcance(tiendas, codtis, nombrePorCodti);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> gerencial(LocalDate desde, LocalDate hasta, Integer codti, String username) {
+        Alcance alc = alcance(codti, username);
+        List<Integer> codtis = alc.codtis();
+        Map<Integer, String> nombrePorCodti = alc.nombrePorCodti();
 
         LocalDate hoy = LocalDate.now();
         LocalDate fDesde = desde != null ? desde : hoy;
@@ -136,6 +155,101 @@ public class ReporteService {
         resultado.put("inventarioValorCosto", inventarioCosto);
         resultado.put("inventarioValorVenta", inventarioVenta);
         return resultado;
+    }
+
+    /** Equipos (celulares/tablets) disponibles que llevan {@code dias} (60 por defecto) sin venderse, o que
+     *  alguien marcó a mano como rezagados ({@code producto.rezagado}) aunque sean recientes. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> equiposRezagados(Integer dias, Integer codti, String username) {
+        if (dias != null && dias < 1)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los días deben ser al menos 1.");
+        int diasEfectivo = dias != null ? dias : DIAS_REZAGADO_DEFAULT;
+        Alcance alc = alcance(codti, username);
+        LocalDateTime limite = LocalDateTime.now().minusDays(diasEfectivo);
+
+        List<Map<String, Object>> equipos = productoImeiRepository.rezagados(limite, alc.codtis()).stream()
+                .map(r -> filaEquipo(r, diasEfectivo))
+                .collect(Collectors.toList());
+
+        Map<Integer, Long> conteoPorTienda = equipos.stream()
+                .collect(Collectors.groupingBy(m -> (Integer) m.get("codti"), Collectors.counting()));
+        List<Map<String, Object>> porTienda = alc.codtis().stream().map(id -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("codti", id);
+            m.put("nombreTienda", alc.nombrePorCodti().get(id));
+            m.put("numEquipos", conteoPorTienda.getOrDefault(id, 0L));
+            return m;
+        }).sorted((a, b) -> ((Long) b.get("numEquipos")).compareTo((Long) a.get("numEquipos")))
+          .collect(Collectors.toList());
+
+        BigDecimal valorCostoTotal = equipos.stream().map(m -> (BigDecimal) m.get("costo")).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Object> resultado = new LinkedHashMap<>();
+        resultado.put("dias", diasEfectivo);
+        resultado.put("totalEquipos", equipos.size());
+        resultado.put("valorCostoTotal", valorCostoTotal);
+        resultado.put("porTienda", porTienda);
+        resultado.put("equipos", equipos);
+        return resultado;
+    }
+
+    private Map<String, Object> filaEquipo(EquipoRezagadoRow r, int diasUmbral) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("idProductoImei", r.getIdProductoImei());
+        m.put("imei", r.getImei());
+        m.put("codti", r.getCodti());
+        m.put("nombreTienda", r.getNombreTienda());
+        m.put("codpro", r.getCodpro());
+        m.put("nombreArticulo", r.getNombreArticulo());
+        m.put("condicion", r.getCondicion());
+        m.put("fechaRegistro", r.getFechaRegistro());
+        m.put("diasEnExistencia", ChronoUnit.DAYS.between(r.getFechaRegistro(), LocalDateTime.now()));
+        m.put("precio", r.getPrecio());
+        m.put("costo", r.getCosto());
+        m.put("marcadoManual", r.isMarcadoManual());
+        m.put("detectadoPorAntiguedad", !r.getFechaRegistro().isAfter(LocalDateTime.now().minusDays(diasUmbral)));
+        return m;
+    }
+
+    /** Saldo y movimientos de hoy de TODAS las cajas de cada sucursal, en una sola vista. Solo ROOT/ADMIN
+     *  (ver el controller); un encargado ya tiene el saldo de su propia caja en la pantalla de Caja. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> cajaConsolidada(String username) {
+        Alcance alc = alcance(null, username);
+        LocalDateTime hoyInicio = LocalDate.now().atStartOfDay();
+        Map<Integer, CajaTiendaRow> porCodti = movimientoCajaRepository.consolidadoPorTienda(alc.codtis(), hoyInicio).stream()
+                .collect(Collectors.toMap(CajaTiendaRow::getCodti, r -> r));
+
+        List<Map<String, Object>> porTienda = alc.codtis().stream().map(id -> {
+            CajaTiendaRow r = porCodti.getOrDefault(id, new CajaTiendaRow(id, alc.nombrePorCodti().get(id), 0L,
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+            return filaCaja(r);
+        }).sorted((a, b) -> ((BigDecimal) b.get("saldo")).compareTo((BigDecimal) a.get("saldo")))
+          .collect(Collectors.toList());
+
+        BigDecimal saldoGeneral = porTienda.stream().map(m -> (BigDecimal) m.get("saldo")).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal entradasHoyTotal = porTienda.stream().map(m -> (BigDecimal) m.get("entradasHoy")).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal salidasHoyTotal = porTienda.stream().map(m -> (BigDecimal) m.get("salidasHoy")).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Object> resultado = new LinkedHashMap<>();
+        resultado.put("saldoGeneral", saldoGeneral);
+        resultado.put("entradasHoyTotal", entradasHoyTotal);
+        resultado.put("salidasHoyTotal", salidasHoyTotal);
+        resultado.put("saldoHoyTotal", entradasHoyTotal.subtract(salidasHoyTotal));
+        resultado.put("porTienda", porTienda);
+        return resultado;
+    }
+
+    private Map<String, Object> filaCaja(CajaTiendaRow r) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("codti", r.getCodti());
+        m.put("nombreTienda", r.getNombreTienda());
+        m.put("numCajas", r.getNumCajas());
+        m.put("saldo", r.getSaldo());
+        m.put("entradasHoy", r.getEntradasHoy());
+        m.put("salidasHoy", r.getSalidasHoy());
+        m.put("saldoHoy", r.getSaldoHoy());
+        return m;
     }
 
     private Map<String, Object> filaTienda(ResumenTiendaRow r) {

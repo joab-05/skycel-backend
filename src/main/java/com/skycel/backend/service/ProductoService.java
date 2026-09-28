@@ -546,6 +546,15 @@ public class ProductoService {
         return toDto(productoRepository.save(p));
     }
 
+    // ── Rezagado (marcado manual; ver también la detección automática por antigüedad en ReporteService) ──
+
+    @Transactional
+    public ProductoResponseDTO marcarRezagado(String codpro, Integer codti, boolean rezagado) {
+        Producto p = porCodigo(codpro, codti);
+        p.setRezagado(rezagado);
+        return toDto(productoRepository.save(p));
+    }
+
     // ── Desactivar ────────────────────────────────────────────────────────────
 
     @Transactional

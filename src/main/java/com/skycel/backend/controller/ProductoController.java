@@ -177,6 +177,18 @@ public class ProductoController {
         return ResponseEntity.ok(productoService.ajustarStock(codpro, codti, request));
     }
 
+    @Operation(summary = "Marcar (o desmarcar) un artículo como rezagado a mano")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PatchMapping("/{codpro}/rezagado")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    public ResponseEntity<ProductoResponseDTO> marcarRezagado(
+            @PathVariable String codpro,
+            @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
+            @RequestParam(required = false) Integer codti,
+            @RequestParam boolean rezagado) {
+        return ResponseEntity.ok(productoService.marcarRezagado(codpro, codti, rezagado));
+    }
+
     @Operation(summary = "Fijar (o quitar) el precio propio de un IMEI específico, distinto al del modelo")
     @SecurityRequirement(name = "Bearer Authentication")
     @PatchMapping("/imei/{imei}/precio")

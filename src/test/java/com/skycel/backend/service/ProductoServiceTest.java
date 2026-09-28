@@ -275,6 +275,33 @@ class ProductoServiceTest {
         verifyNoInteractions(productoImeiRepository);
     }
 
+    // ── Marcado manual de rezagado ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("marcarRezagado: pone la bandera y guarda el producto")
+    void marcarRezagado_ponBandera() {
+        Producto p = celular(BigDecimal.ONE);
+        when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
+
+        productoService.marcarRezagado(CODPRO, null, true);
+
+        verify(productoRepository).save(productoCaptor.capture());
+        assertThat(productoCaptor.getValue().getRezagado()).isTrue();
+    }
+
+    @Test
+    @DisplayName("marcarRezagado: false la quita")
+    void marcarRezagado_quitaBandera() {
+        Producto p = celular(BigDecimal.ONE);
+        p.setRezagado(true);
+        when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
+
+        productoService.marcarRezagado(CODPRO, null, false);
+
+        verify(productoRepository).save(productoCaptor.capture());
+        assertThat(productoCaptor.getValue().getRezagado()).isFalse();
+    }
+
     // ── SERVICIO ─────────────────────────────────────────────────────────────
 
     @Test

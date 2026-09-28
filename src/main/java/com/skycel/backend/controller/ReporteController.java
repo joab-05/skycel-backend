@@ -41,4 +41,22 @@ public class ReporteController {
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(reporteService.gerencial(desde, hasta, codti, userDetails.getUsername()), "reporte");
     }
+
+    @GetMapping("/equipos-rezagados")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> equiposRezagados(
+            @RequestParam(required = false) Integer dias,
+            @RequestParam(required = false) Integer codti,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(reporteService.equiposRezagados(dias, codti, userDetails.getUsername()), "reporte");
+    }
+
+    @GetMapping("/caja-consolidada")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> cajaConsolidada(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(reporteService.cajaConsolidada(userDetails.getUsername()), "reporte");
+    }
 }
