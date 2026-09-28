@@ -152,7 +152,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/compras', i: ic('shopping-bag'), t: 'Compras y cuentas por pagar', grupo: 'Finanzas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reporte de ventas', grupo: 'Finanzas' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reportes', grupo: 'Finanzas' });
   items.push({ h: '#/clientes', i: ic('users'), t: 'Clientes', grupo: 'Clientes' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: ic('shield-check'), t: 'Garantías', grupo: 'Clientes' });
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir equipo', grupo: 'Taller' });
@@ -1701,15 +1701,37 @@ async function pantallaReportes() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('chart-column')} Reporte de ventas</h1>
-    <div id="rp-tienda"></div>
+    <h1>${ic('chart-column')} Reportes</h1>
     <div class="segmentado">
-      <button id="rp-hoy" class="activo">Hoy</button>
-      <button id="rp-7dias">7 días</button>
-      <button id="rp-mes">Este mes</button>
+      <button id="rp-tab-ventas" class="activo">Ventas</button>
+      <button id="rp-tab-gerencial">Gerencial</button>
     </div>
-    <div id="rp-resumen"></div>
-    <div id="rp-lista" style="margin-top:10px;"></div>`;
+    <div id="rp-panel-ventas">
+      <div id="rp-tienda"></div>
+      <div class="segmentado">
+        <button id="rp-hoy" class="activo">Hoy</button>
+        <button id="rp-7dias">7 días</button>
+        <button id="rp-mes">Este mes</button>
+      </div>
+      <div id="rp-resumen"></div>
+      <div id="rp-lista" style="margin-top:10px;"></div>
+    </div>
+    <div id="rp-panel-gerencial" class="oculto"></div>`;
+
+  const tabVentas = document.getElementById('rp-tab-ventas');
+  const tabGerencial = document.getElementById('rp-tab-gerencial');
+  const panelVentas = document.getElementById('rp-panel-ventas');
+  const panelGerencial = document.getElementById('rp-panel-gerencial');
+  let gerencialListo = false;
+  tabVentas.onclick = () => {
+    tabVentas.classList.add('activo'); tabGerencial.classList.remove('activo');
+    panelVentas.classList.remove('oculto'); panelGerencial.classList.add('oculto');
+  };
+  tabGerencial.onclick = () => {
+    tabGerencial.classList.add('activo'); tabVentas.classList.remove('activo');
+    panelGerencial.classList.remove('oculto'); panelVentas.classList.add('oculto');
+    if (!gerencialListo) { gerencialListo = true; iniciarReporteGerencial(panelGerencial, s); }
+  };
 
   let codti = s.codti;
   const contTienda = document.getElementById('rp-tienda');
@@ -1773,6 +1795,137 @@ async function pantallaReportes() {
             <span style="font-weight:700;">${formatoDinero(v.total)}</span>
           </div>
         </div>`).join('');
+    } catch (err) {
+      resumenEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+  botonesPeriodo.hoy.onclick = () => { periodo = 'hoy'; cargar(); };
+  botonesPeriodo['7dias'].onclick = () => { periodo = '7dias'; cargar(); };
+  botonesPeriodo.mes.onclick = () => { periodo = 'mes'; cargar(); };
+  cargar();
+}
+
+/** Fecha local (sin hora) en formato YYYY-MM-DD, como la espera el reporte gerencial. */
+function fechaISOCorta(d) { const pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+
+/** Pestaña "Gerencial" de Reportes: comparativo entre sucursales, utilidad, más vendidos y valor del inventario. */
+async function iniciarReporteGerencial(cont, s) {
+  cont.innerHTML = `
+    <div id="rg-tienda"></div>
+    <div class="segmentado">
+      <button id="rg-hoy" class="activo">Hoy</button>
+      <button id="rg-7dias">7 días</button>
+      <button id="rg-mes">Este mes</button>
+    </div>
+    <div id="rg-resumen"></div>
+    <div id="rg-comparativo"></div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Más vendidos</h2>
+      <div class="segmentado">
+        <button id="rg-seg-cantidad" class="activo">Por piezas</button>
+        <button id="rg-seg-monto">Por monto</button>
+      </div>
+      <div id="rg-top"></div>
+    </div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Valor del inventario</h2>
+      <div class="ayuda">A costo y a precio de venta, con lo que hay hoy (no depende del periodo de arriba).</div>
+      <div id="rg-inventario"></div>
+    </div>`;
+
+  let codti = SUPERIOR.includes(s.rol) ? null : s.codti;
+  const contTienda = document.getElementById('rg-tienda');
+  if (SUPERIOR.includes(s.rol)) {
+    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="rg-codti"><option value="">Todas (comparativo)</option></select>`;
+    try {
+      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const sel = document.getElementById('rg-codti');
+      sel.innerHTML += tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      sel.onchange = () => { codti = sel.value ? Number(sel.value) : null; cargar(); };
+    } catch {
+      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    }
+  } else {
+    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
+  }
+
+  const botonesPeriodo = { hoy: document.getElementById('rg-hoy'), '7dias': document.getElementById('rg-7dias'), mes: document.getElementById('rg-mes') };
+  let periodo = 'hoy';
+  function rangoDe(periodo) {
+    const hoy = new Date();
+    const hasta = fechaISOCorta(hoy);
+    let d = new Date(hoy);
+    if (periodo === '7dias') d.setDate(d.getDate() - 6);
+    else if (periodo === 'mes') d = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    return { desde: fechaISOCorta(d), hasta };
+  }
+
+  let ultimoReporte = null;
+  let ordenTop = 'cantidad';
+
+  function dibujarTop() {
+    const lista = ultimoReporte ? (ordenTop === 'cantidad' ? ultimoReporte.topPorCantidad : ultimoReporte.topPorMonto) : [];
+    const cont = document.getElementById('rg-top');
+    cont.innerHTML = lista.length === 0 ? '<div class="vacio">Sin ventas en este periodo.</div>' : lista.map((p, i) => `
+      <div class="detalle-fila">
+        <span class="k">${i + 1}. ${escapar(p.nombreProducto)}</span>
+        <span class="v">${Number(p.unidades)} pza · ${formatoDinero(p.montoVenta)}</span>
+      </div>`).join('');
+  }
+  document.getElementById('rg-seg-cantidad').onclick = (e) => {
+    ordenTop = 'cantidad'; e.target.classList.add('activo'); document.getElementById('rg-seg-monto').classList.remove('activo'); dibujarTop();
+  };
+  document.getElementById('rg-seg-monto').onclick = (e) => {
+    ordenTop = 'monto'; e.target.classList.add('activo'); document.getElementById('rg-seg-cantidad').classList.remove('activo'); dibujarTop();
+  };
+
+  async function cargar() {
+    Object.values(botonesPeriodo).forEach(b => b.classList.remove('activo'));
+    botonesPeriodo[periodo].classList.add('activo');
+    const resumenEl = document.getElementById('rg-resumen');
+    const compEl = document.getElementById('rg-comparativo');
+    const invEl = document.getElementById('rg-inventario');
+    resumenEl.innerHTML = '<div class="vacio">Cargando...</div>';
+    compEl.innerHTML = ''; invEl.innerHTML = ''; document.getElementById('rg-top').innerHTML = '';
+    try {
+      const { desde, hasta } = rangoDe(periodo);
+      const qs = new URLSearchParams({ desde, hasta });
+      if (codti != null) qs.set('codti', String(codti));
+      const r = await api('GET', `/api/reportes/gerencial?${qs.toString()}`);
+      ultimoReporte = r;
+
+      resumenEl.innerHTML = `
+        <div class="kp" style="margin-bottom:14px;">
+          <div class="kpi"><b class="c1">${ic('receipt')}</b><small>Ventas</small><strong>${r.totalVentas}</strong></div>
+          <div class="kpi"><b class="c2">${ic('shopping-cart')}</b><small>Vendido</small><strong>${formatoDinero(r.totalVenta)}</strong></div>
+          <div class="kpi"><b class="c3">${ic('trending-up')}</b><small>Utilidad</small><strong>${formatoDinero(r.totalUtilidad)}</strong></div>
+          <div class="kpi"><b class="c4">${ic('chart-column')}</b><small>Margen</small><strong>${Number(r.margenPorciento)}%</strong></div>
+        </div>`;
+
+      if (r.comparativo) {
+        compEl.innerHTML = `
+          <div class="tarjeta">
+            <h2 style="margin-top:0;">Comparativo por sucursal</h2>
+            ${r.porTienda.map(t => `
+              <div class="detalle-fila">
+                <span class="k">${escapar(t.nombreTienda)} · ${t.numVentas} ${t.numVentas === 1 ? 'venta' : 'ventas'}</span>
+                <span class="v">${formatoDinero(t.totalVenta)} <span class="ayuda" style="font-weight:400;">(${Number(t.margenPorciento)}% margen)</span></span>
+              </div>`).join('')}
+          </div>`;
+      }
+
+      invEl.innerHTML = `
+        ${r.inventario.length > 1 ? r.inventario.map(t => `
+          <div class="detalle-fila">
+            <span class="k">${escapar(t.nombreTienda)} · ${t.numProductos} artículos</span>
+            <span class="v">${formatoDinero(t.valorCosto)} costo</span>
+          </div>`).join('') : ''}
+        <div class="fila" style="margin-top:8px;">
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Valor a costo</div><div style="font-size:16px; font-weight:700;">${formatoDinero(r.inventarioValorCosto)}</div></div>
+          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Valor a venta</div><div style="font-size:16px; font-weight:700;">${formatoDinero(r.inventarioValorVenta)}</div></div>
+        </div>`;
+
+      dibujarTop();
     } catch (err) {
       resumenEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }

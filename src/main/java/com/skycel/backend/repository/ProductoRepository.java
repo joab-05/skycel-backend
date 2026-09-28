@@ -1,8 +1,10 @@
 package com.skycel.backend.repository;
 
 import com.skycel.backend.domain.entity.Producto;
+import com.skycel.backend.dto.reporte.ValorInventarioRow;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -56,4 +58,19 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
            "     OR LOWER(p.productoMaster.compatibilidad) LIKE '%universal%') " +
            "ORDER BY p.productoMaster.nombreBase ASC")
     List<Producto> findAccesoriosCompatibles(Integer codti, String modelo);
+
+    /**
+     * Valor del inventario activo (sin servicios, que no manejan stock) por sucursal: a costo y a precio de
+     * venta. Una sucursal sin productos activos simplemente no aparece.
+     */
+    @Query("""
+            SELECT new com.skycel.backend.dto.reporte.ValorInventarioRow(
+                p.tienda.codti, p.tienda.nombre,
+                COALESCE(SUM(p.stock * p.preciopro), 0), COALESCE(SUM(p.stock * p.preciopub), 0), COUNT(p))
+            FROM Producto p
+            WHERE p.activo = true AND p.tienda.codti IN :codtis
+              AND p.productoMaster.tipo <> com.skycel.backend.domain.enums.TipoProducto.SERVICIO
+            GROUP BY p.tienda.codti, p.tienda.nombre
+            """)
+    List<ValorInventarioRow> valorInventarioPorTienda(@Param("codtis") List<Integer> codtis);
 }
