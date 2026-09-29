@@ -15,4 +15,7 @@ public interface EmpleadoDescansoRepository extends JpaRepository<EmpleadoDescan
     List<EmpleadoDescanso> findByEmpleado_Usuario_Tienda_CodtiAndFechaBetweenOrderByFechaDesc(Integer codti, LocalDate desde, LocalDate hasta);
 
     boolean existsByEmpleado_IdempleadoAndFecha(Integer idempleado, LocalDate fecha);
+
+    /** Cuántos descansos ha tomado desde una fecha (para calcular su saldo disponible). */
+    long countByEmpleado_IdempleadoAndFechaGreaterThanEqual(Integer idempleado, LocalDate desde);
 }

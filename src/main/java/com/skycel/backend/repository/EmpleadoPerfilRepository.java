@@ -13,4 +13,6 @@ public interface EmpleadoPerfilRepository extends JpaRepository<EmpleadoPerfil, 
     Optional<EmpleadoPerfil> findByUsuarioIdusuario(Integer idusuario);
 
     List<EmpleadoPerfil> findByActivoTrue();
+
+    List<EmpleadoPerfil> findByActivoTrueAndUsuario_Tienda_Codti(Integer codti);
 }

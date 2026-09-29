@@ -3747,7 +3747,8 @@ async function pantallaEmpleadoDetalle(id) {
     </div>
     <div class="tarjeta">
       <h2 style="margin-top:0;">${ic('calendar')} Descansos</h2>
-      <div id="ed-descansos"><div class="vacio">Cargando...</div></div>
+      <div id="ed-saldo"><div class="vacio">Cargando...</div></div>
+      <div id="ed-descansos" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>
       <button id="ed-nuevo-descanso" class="btn btn-gris btn-chico" style="margin-top:8px;">+ Registrar descanso</button>
     </div>` : ''}`;
 
@@ -3760,6 +3761,7 @@ async function pantallaEmpleadoDetalle(id) {
 
   if (u.idempleado != null) {
     cargarPrestamoEmpleado(u.idempleado);
+    cargarSaldoEmpleado(u.idempleado);
     cargarDescansosEmpleado(u.idempleado);
     document.getElementById('ed-nuevo-descanso').onclick = async () => {
       const fecha = prompt('Fecha del descanso (AAAA-MM-DD):', fechaISOCorta(new Date()));
@@ -3820,6 +3822,83 @@ async function cargarPrestamoEmpleado(idempleado) {
   }
 }
 
+/** Saldo semi-automático de descansos: categoría, saldo actual y (si se puede) controles para fijarlo/ajustarlo. */
+async function cargarSaldoEmpleado(idempleado) {
+  const s = Sesion.obtener();
+  const esAdmin = SUPERIOR.includes(s.rol);
+  const cont = document.getElementById('ed-saldo');
+  try {
+    const saldo = await api('GET', `/api/descansos-empleado/${idempleado}/saldo`);
+    cont.innerHTML = `
+      <div class="detalle-fila"><span class="k">Categoría</span><span class="v">${escapar(saldo.categoriaDisplay)}</span></div>
+      <div class="detalle-fila">
+        <span class="k">Saldo acumulado</span>
+        <span class="v">${saldo.saldoActual} día(s) de máx. ${saldo.maximo}
+          ${saldo.excedeMaximo ? ' <span class="pastilla error">' + ic('triangle-alert') + ' Excede el máximo</span>' : ''}</span>
+      </div>
+      ${saldo.configurado ? `<div class="ayuda">Desde ${saldo.fechaCorte}: ${saldo.saldoInicial} inicial + ${saldo.diasGanados} ganados − ${saldo.diasTomados} tomados${saldo.ajustesTotal !== 0 ? (saldo.ajustesTotal > 0 ? ' + ' : ' − ') + Math.abs(saldo.ajustesTotal) + ' de ajustes' : ''}.</div>`
+        : '<div class="ayuda">Sin saldo inicial configurado (se toma como 0 desde su ingreso).</div>'}
+      <div id="ed-saldo-ajustes" style="margin-top:6px;"></div>
+      ${esAdmin ? `
+      <div class="grupo-botones" style="margin-top:8px;">
+        <button id="ed-fijar-saldo" class="btn btn-gris btn-chico">${saldo.configurado ? 'Corregir saldo inicial' : 'Fijar saldo inicial'}</button>
+        <button id="ed-registrar-ajuste" class="btn btn-gris btn-chico">+ Ajuste (vacaciones, salud...)</button>
+        <button id="ed-ver-ajustes" class="btn btn-gris btn-chico">Ver ajustes</button>
+      </div>
+      <div id="ed-saldo-form" style="margin-top:8px;"></div>` : ''}`;
+
+    if (esAdmin) {
+      document.getElementById('ed-fijar-saldo').onclick = () => {
+        const formEl = document.getElementById('ed-saldo-form');
+        formEl.innerHTML = `
+          <div class="fila">
+            <div><label>Días acumulados actualmente</label><input id="es-saldo" type="number" step="1" value="${saldo.saldoInicial}"></div>
+            <div><label>A partir de qué fecha</label><input id="es-corte" type="date" value="${saldo.fechaCorte}"></div>
+          </div>
+          <button id="es-guardar" class="btn btn-verde btn-chico" style="margin-top:6px;">Guardar</button>`;
+        document.getElementById('es-guardar').onclick = async () => {
+          const si = document.getElementById('es-saldo').value;
+          const corte = document.getElementById('es-corte').value;
+          if (si === '' || !corte) return alert('Indica los días acumulados y la fecha.');
+          try {
+            await api('POST', `/api/descansos-empleado/${idempleado}/saldo-inicial?saldoInicial=${si}&fechaCorte=${corte}`, undefined);
+            cargarSaldoEmpleado(idempleado);
+          } catch (err) { alert(err.message || 'No se pudo guardar.'); }
+        };
+      };
+      document.getElementById('ed-registrar-ajuste').onclick = () => {
+        const formEl = document.getElementById('ed-saldo-form');
+        formEl.innerHTML = `
+          <div class="fila">
+            <div><label>Días (negativo para restar)</label><input id="ea-dias" type="number" step="1"></div>
+            <div><label>Motivo</label><input id="ea-motivo" placeholder="Vacaciones por 1 año, salud, corrección..."></div>
+          </div>
+          <button id="ea-guardar" class="btn btn-verde btn-chico" style="margin-top:6px;">Guardar</button>`;
+        document.getElementById('ea-guardar').onclick = async () => {
+          const dias = document.getElementById('ea-dias').value;
+          const motivo = document.getElementById('ea-motivo').value.trim();
+          if (!dias || !motivo) return alert('Indica los días y el motivo.');
+          try {
+            await api('POST', `/api/descansos-empleado/${idempleado}/ajustes?dias=${dias}&motivo=${encodeURIComponent(motivo)}`, undefined);
+            cargarSaldoEmpleado(idempleado);
+          } catch (err) { alert(err.message || 'No se pudo registrar.'); }
+        };
+      };
+      document.getElementById('ed-ver-ajustes').onclick = async () => {
+        const histCont = document.getElementById('ed-saldo-ajustes');
+        histCont.innerHTML = '<div class="vacio">Cargando...</div>';
+        try {
+          const ajustes = await api('GET', `/api/descansos-empleado/${idempleado}/ajustes`);
+          histCont.innerHTML = ajustes.length === 0 ? '<div class="vacio">Sin ajustes registrados.</div>' : ajustes.map(a => `
+            <div class="ayuda" style="margin-top:4px;">${a.fecha}: ${a.dias > 0 ? '+' : ''}${a.dias} día(s) — ${escapar(a.motivo)}${a.registradoPor ? ' (' + escapar(a.registradoPor) + ')' : ''}</div>`).join('');
+        } catch (err) { histCont.innerHTML = `<div class="mensaje error">${escapar(err.message || 'No se pudo cargar.')}</div>`; }
+      };
+    }
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
 async function cargarDescansosEmpleado(idempleado) {
   const cont = document.getElementById('ed-descansos');
   try {
@@ -3855,6 +3934,10 @@ async function pantallaDescansos() {
   root.innerHTML = `
     <h1>${ic('calendar')} Descansos</h1>
     <div id="ds-tienda"></div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Saldo por empleado</h2>
+      <div id="ds-saldos"><div class="vacio">Cargando...</div></div>
+    </div>
     <div class="fila">
       <div><label>Desde</label><input type="date" id="ds-desde"></div>
       <div><label>Hasta</label><input type="date" id="ds-hasta"></div>
@@ -3868,9 +3951,26 @@ async function pantallaDescansos() {
   document.getElementById('ds-desde').value = fechaISOCorta(inicioMes);
   document.getElementById('ds-hasta').value = fechaISOCorta(finMes);
 
-  let codti = await dibujarSelectorSucursal(document.getElementById('ds-tienda'), s, (c) => { codti = c; cargarDescansosTienda(codti); });
+  let codti = await dibujarSelectorSucursal(document.getElementById('ds-tienda'), s, (c) => { codti = c; cargarDescansosTienda(codti); cargarReporteSaldos(codti); });
   document.getElementById('ds-buscar').onclick = () => cargarDescansosTienda(codti);
-  if (codti != null) cargarDescansosTienda(codti);
+  if (codti != null) { cargarDescansosTienda(codti); cargarReporteSaldos(codti); }
+}
+
+async function cargarReporteSaldos(codti) {
+  const cont = document.getElementById('ds-saldos');
+  cont.innerHTML = '<div class="vacio">Cargando...</div>';
+  try {
+    const lista = await api('GET', `/api/descansos-empleado/reporte?codti=${codti}`);
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">Sin empleados activos en esta sucursal.</div>'; return; }
+    cont.innerHTML = lista.map(r => `
+      <div class="detalle-fila">
+        <span class="k">${escapar(r.nombreEmpleado)} <span class="ayuda">(${escapar(r.categoriaDisplay)})</span></span>
+        <span class="v">${r.saldoActual} de máx. ${r.maximo}
+          ${r.excedeMaximo ? ' <span class="pastilla error">' + ic('triangle-alert') + ' Excede</span>' : ''}</span>
+      </div>`).join('');
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
 }
 
 async function cargarDescansosTienda(codti) {

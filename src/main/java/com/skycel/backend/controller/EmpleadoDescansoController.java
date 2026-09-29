@@ -58,4 +58,42 @@ public class EmpleadoDescansoController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
         return ResponseEntityBuilder.ok(service.porTienda(codti, desde, hasta), "descansos");
     }
+
+    // ── Saldo (semi-automático) ──────────────────────────────────────────────
+
+    @PostMapping("/{idempleado}/saldo-inicial")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> establecerSaldoInicial(
+            @PathVariable Integer idempleado,
+            @RequestParam Integer saldoInicial,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaCorte,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.establecerSaldoInicial(idempleado, saldoInicial, fechaCorte, userDetails.getUsername()), "saldo");
+    }
+
+    @PostMapping("/{idempleado}/ajustes")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> registrarAjuste(
+            @PathVariable Integer idempleado,
+            @RequestParam Integer dias,
+            @RequestParam String motivo,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.registrarAjuste(idempleado, dias, motivo, userDetails.getUsername()), "saldo");
+    }
+
+    @GetMapping("/{idempleado}/ajustes")
+    public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> ajustesDe(
+            @PathVariable Integer idempleado, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.ajustesDe(idempleado, userDetails.getUsername()), "ajustes");
+    }
+
+    @GetMapping("/{idempleado}/saldo")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> saldoDe(
+            @PathVariable Integer idempleado, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.saldoDe(idempleado, userDetails.getUsername()), "saldo");
+    }
+
+    @GetMapping("/reporte")
+    public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> reporte(
+            @RequestParam(required = false) Integer codti, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.reporte(codti, userDetails.getUsername()), "reporte");
+    }
 }
