@@ -149,6 +149,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: ic('undo-2'), t: 'Devoluciones', grupo: 'Ventas' });
   items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Inventario' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/inventario-fisico', i: ic('scan-barcode'), t: 'Inventario físico', grupo: 'Inventario' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/compras', i: ic('shopping-bag'), t: 'Compras y cuentas por pagar', grupo: 'Finanzas' });
@@ -240,6 +241,7 @@ async function render() {
     if (ruta === 'empleado' && param) return pantallaEmpleadoDetalle(param);
     if (ruta === 'pos') return pantallaPOS();
     if (ruta === 'traspasos') return pantallaTraspasos();
+    if (ruta === 'inventario-fisico') return pantallaInventarioFisico(param);
     if (ruta === 'traspaso' && param) return pantallaTraspasoDetalle(param);
     if (ruta === 'traspaso-nuevo') return pantallaTraspasoNuevo(param);
     if (ruta === 'faltantes') return pantallaFaltantes();
@@ -2055,6 +2057,220 @@ async function iniciarCajaConsolidada(cont) {
     } catch (err) {
       resumenEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }
+  }
+  cargar();
+}
+
+// ── Inventario físico por secciones ─────────────────────────────────────
+
+/** Inventario físico: Aperturar → Inventariar (escanear) → Catalogar diferencias → Finalizar. */
+async function pantallaInventarioFisico(param) {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para esta sección.</div>'; return; }
+  if (param === 'historial') return pantallaInventarioFisicoHistorial(s);
+
+  root.innerHTML = `
+    <h1>${ic('scan-barcode')} Inventario físico</h1>
+    <div id="if-tienda"></div>
+    <div id="if-cuerpo"><div class="vacio">Cargando...</div></div>`;
+
+  let codti = s.codti;
+  const contTienda = document.getElementById('if-tienda');
+  if (SUPERIOR.includes(s.rol)) {
+    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="if-codti"><option>Cargando...</option></select>`;
+    try {
+      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const sel = document.getElementById('if-codti');
+      sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
+      if (codti != null) sel.value = codti;
+      sel.onchange = () => { codti = Number(sel.value); cargarInventarioFisico(codti); };
+    } catch {
+      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    }
+  } else {
+    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
+  }
+  if (codti != null) cargarInventarioFisico(codti);
+}
+
+async function cargarInventarioFisico(codti) {
+  const cont = document.getElementById('if-cuerpo');
+  cont.innerHTML = '<div class="vacio">Cargando...</div>';
+  try {
+    const a = await api('GET', `/api/inventario-fisico/tienda/${codti}/activa`);
+    if (!a.activa) {
+      cont.innerHTML = `
+        <div class="tarjeta" style="text-align:center;">
+          <p class="ayuda">No hay ninguna auditoría de inventario en curso para esta sucursal.</p>
+          <button id="if-aperturar" class="btn btn-verde">${ic('plus')} Aperturar inventario</button>
+          <button id="if-ver-historial" class="btn btn-gris" style="margin-top:8px;">${ic('history')} Ver historial</button>
+        </div>`;
+      document.getElementById('if-aperturar').onclick = async () => {
+        try {
+          await api('POST', `/api/inventario-fisico/aperturar?codti=${codti}`, undefined);
+          cargarInventarioFisico(codti);
+        } catch (err) { alert(err.message || 'No se pudo aperturar.'); }
+      };
+      document.getElementById('if-ver-historial').onclick = () => { location.hash = '#/inventario-fisico/historial'; };
+      return;
+    }
+    if (a.estado === 0) dibujarInventarioAbierto(cont, a, codti);
+    else dibujarInventarioCatalogando(cont, a, codti);
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+function dibujarInventarioAbierto(cont, a, codti) {
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <div class="ayuda">Auditoría #${a.idinventario} · Auditor: ${escapar(a.nombreAuditor)}</div>
+      <p><span class="pastilla pendiente">Inventariando</span></p>
+      <div class="buscador">
+        <input id="if-codpro" placeholder="Código del artículo (o escanear)">
+      </div>
+      <button id="if-escanear" class="btn btn-azul">${ic('scan-barcode')} Agregar</button>
+      <div class="ayuda" style="margin-top:6px;">${a.totalArticulos} artículo(s) contado(s) hasta ahora.</div>
+      <button id="if-cerrar-conteo" class="btn btn-ambar" style="margin-top:10px;">${ic('circle-check')} Cerrar conteo y pasar a catalogar</button>
+    </div>
+    <div id="if-lista-conteo" style="margin-top:10px;"></div>`;
+
+  const input = document.getElementById('if-codpro');
+  input.focus();
+  const escanear = async () => {
+    const codpro = input.value.trim();
+    if (!codpro) return;
+    try {
+      await api('POST', `/api/inventario-fisico/${a.idinventario}/escanear?codpro=${encodeURIComponent(codpro)}`, undefined);
+      input.value = '';
+      cargarInventarioFisico(codti);
+    } catch (err) { alert(err.message || 'No se pudo registrar.'); }
+  };
+  document.getElementById('if-escanear').onclick = escanear;
+  input.onkeydown = (e) => { if (e.key === 'Enter') escanear(); };
+  document.getElementById('if-cerrar-conteo').onclick = async () => {
+    if (!confirm('¿Cerrar el conteo? Ya no se podrán agregar más artículos y pasará a catalogar diferencias.')) return;
+    try {
+      await api('POST', `/api/inventario-fisico/${a.idinventario}/cerrar-conteo`, undefined);
+      cargarInventarioFisico(codti);
+    } catch (err) { alert(err.message || 'No se pudo cerrar el conteo.'); }
+  };
+
+  api('GET', `/api/inventario-fisico/${a.idinventario}`).then(det => {
+    const listaEl = document.getElementById('if-lista-conteo');
+    listaEl.innerHTML = det.items.length === 0 ? '<div class="vacio">Aún no hay artículos contados.</div>' : det.items.slice().reverse().map(it => `
+      <div class="detalle-fila">
+        <span class="k">${escapar(it.nombreArticulo || it.codpro)} <span class="ayuda">(${escapar(it.codpro)})</span></span>
+        <span class="v">${it.conteo} pza</span>
+      </div>`).join('');
+  }).catch(() => {});
+}
+
+function dibujarInventarioCatalogando(cont, a, codti) {
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <div class="ayuda">Auditoría #${a.idinventario} · Auditor: ${escapar(a.nombreAuditor)}</div>
+      <p><span class="pastilla por-tomar">Catalogando diferencias</span></p>
+      <div class="ayuda">${a.totalConDiferencia} diferencia(s) encontradas, ${a.totalPendientes} sin catalogar.</div>
+      <button id="if-finalizar" class="btn btn-verde" style="margin-top:10px;" ${Number(a.totalPendientes) > 0 ? 'disabled' : ''}>${ic('circle-check')} Finalizar auditoría</button>
+    </div>
+    <div id="if-lista-dif" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
+
+  document.getElementById('if-finalizar').onclick = async () => {
+    if (!confirm('¿Finalizar la auditoría? Ya no se podrá modificar.')) return;
+    try {
+      await api('POST', `/api/inventario-fisico/${a.idinventario}/finalizar`, undefined);
+      alert('Auditoría finalizada.');
+      cargarInventarioFisico(codti);
+    } catch (err) { alert(err.message || 'No se pudo finalizar.'); }
+  };
+
+  const listaEl = document.getElementById('if-lista-dif');
+  api('GET', `/api/inventario-fisico/${a.idinventario}?soloDiferencias=true`).then(det => {
+    if (det.items.length === 0) { listaEl.innerHTML = '<div class="vacio">Sin diferencias.</div>'; return; }
+    listaEl.innerHTML = det.items.map(it => `
+      <div class="orden-item">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(it.nombreArticulo || it.codpro)}</span>
+          ${it.estado === 1 ? '<span class="pastilla lista">Ajustado</span>' : it.estado === 2 ? '<span class="pastilla entregada">Justificado</span>' : '<span class="pastilla pendiente">Pendiente</span>'}
+        </div>
+        <div class="orden-equipo">${escapar(it.codpro)} · Contado: ${it.conteo} · Sistema: ${it.stockSistema}</div>
+        <div class="orden-meta">
+          <span class="orden-fecha">${it.diferencia > 0 ? '+' : ''}${it.diferencia} de diferencia</span>
+        </div>
+        ${it.estado === 0 ? `
+        <div class="grupo-botones" style="margin-top:8px;">
+          <button class="btn btn-verde btn-chico if-ajustar" data-id="${it.iddetalleInv}">Ajustar stock</button>
+          <button class="btn btn-gris btn-chico if-justificar" data-id="${it.iddetalleInv}">Justificar</button>
+        </div>` : ''}
+      </div>`).join('');
+    listaEl.querySelectorAll('.if-ajustar').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('¿Ajustar el stock del sistema al conteo físico?')) return;
+        try {
+          await api('POST', `/api/inventario-fisico/${a.idinventario}/detalle/${btn.dataset.id}/resolver?accion=AJUSTAR`, undefined);
+          cargarInventarioFisico(codti);
+        } catch (err) { alert(err.message || 'No se pudo ajustar.'); }
+      };
+    });
+    listaEl.querySelectorAll('.if-justificar').forEach(btn => {
+      btn.onclick = async () => {
+        const motivo = prompt('Motivo de la diferencia (no se tocará el stock):');
+        if (!motivo) return;
+        try {
+          await api('POST', `/api/inventario-fisico/${a.idinventario}/detalle/${btn.dataset.id}/resolver?accion=JUSTIFICAR&motivo=${encodeURIComponent(motivo)}`, undefined);
+          cargarInventarioFisico(codti);
+        } catch (err) { alert(err.message || 'No se pudo justificar.'); }
+      };
+    });
+  }).catch(err => {
+    listaEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  });
+}
+
+async function pantallaInventarioFisicoHistorial(s) {
+  root.innerHTML = `
+    <h1>${ic('history')} Historial de inventario físico</h1>
+    <div id="ifh-tienda"></div>
+    <div id="ifh-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
+
+  let codti = s.codti;
+  const contTienda = document.getElementById('ifh-tienda');
+  const cargar = async () => {
+    if (codti == null) return;
+    const listaEl = document.getElementById('ifh-lista');
+    listaEl.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const lista = await api('GET', `/api/inventario-fisico/tienda/${codti}/historial`);
+      listaEl.innerHTML = lista.length === 0 ? '<div class="vacio">Sin auditorías registradas.</div>' : lista.map(a => `
+        <div class="orden-item">
+          <div class="orden-cab">
+            <span class="orden-folio">Auditoría #${a.idinventario}</span>
+            <span class="pastilla ${a.estado === 2 ? 'lista' : a.estado === 1 ? 'por-tomar' : 'pendiente'}">${escapar(a.estadoDisplay)}</span>
+          </div>
+          <div class="orden-equipo">Auditor: ${escapar(a.nombreAuditor)}</div>
+          <div class="orden-fecha">${formatoFecha(a.fechaInicio)}${a.fechaFin ? ' — ' + formatoFecha(a.fechaFin) : ''}</div>
+          <div class="ayuda" style="margin-top:4px;">${a.totalFaltantes} faltante(s) · ${a.totalSobrantes} sobrante(s)</div>
+        </div>`).join('');
+    } catch (err) {
+      listaEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  };
+  if (SUPERIOR.includes(s.rol)) {
+    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="ifh-codti"><option>Cargando...</option></select>`;
+    try {
+      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const sel = document.getElementById('ifh-codti');
+      sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
+      if (codti != null) sel.value = codti;
+      sel.onchange = () => { codti = Number(sel.value); cargar(); };
+    } catch {
+      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    }
+  } else {
+    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
   }
   cargar();
 }

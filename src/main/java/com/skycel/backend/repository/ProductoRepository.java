@@ -18,6 +18,9 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     Optional<Producto> findByCodproAndTienda_Codti(String codpro, Integer codti);
 
+    /** Varios códigos de una tienda a la vez (para resolver nombres en lote, sin una consulta por código). */
+    List<Producto> findByCodproInAndTienda_Codti(java.util.Collection<String> codpros, Integer codti);
+
     /** Todas las filas (una por sucursal) de un artículo maestro. */
     List<Producto> findByProductoMaster_IdprodmasterOrderByIdproductoAsc(Integer idprodmaster);
 
