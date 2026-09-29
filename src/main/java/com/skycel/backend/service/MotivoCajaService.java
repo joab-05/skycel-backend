@@ -42,9 +42,12 @@ public class MotivoCajaService {
     public static final String DEVOLUCION_ANTICIPO = "Devolución de anticipo";
     public static final String DEVOLUCION_VENTA = "Devolución de venta";
     public static final String PAGO_PROVEEDOR    = "Pago a proveedor";
+    public static final String PAGO_NOMINA       = "Pago de nómina";
+    public static final String PRESTAMO_EMPLEADO = "Préstamo a empleado";
 
     private static final Set<String> DEL_SISTEMA =
-            Set.of(VENTA, CANCELACION_VENTA, ABONO_CUENTA, ANTICIPO_SERVICIO, DEVOLUCION_ANTICIPO, DEVOLUCION_VENTA, PAGO_PROVEEDOR);
+            Set.of(VENTA, CANCELACION_VENTA, ABONO_CUENTA, ANTICIPO_SERVICIO, DEVOLUCION_ANTICIPO, DEVOLUCION_VENTA,
+                    PAGO_PROVEEDOR, PAGO_NOMINA, PRESTAMO_EMPLEADO);
 
     private record MotivoBase(String nombre, byte tipoMov, byte catSat) {}
 
@@ -59,7 +62,8 @@ public class MotivoCajaService {
             new MotivoBase("Fondo inicial",     ENTRADA, CAT_OPERATIVO),
             new MotivoBase("Otro ingreso",       ENTRADA, CAT_OPERATIVO),
             new MotivoBase("Gasto operativo",    SALIDA,  CAT_OPERATIVO),
-            new MotivoBase("Pago de nómina",     SALIDA,  CAT_NOMINA),
+            new MotivoBase(PAGO_NOMINA,          SALIDA,  CAT_NOMINA),
+            new MotivoBase(PRESTAMO_EMPLEADO,    SALIDA,  CAT_NOMINA),
             new MotivoBase("Traslado a bodega",  SALIDA,  CAT_TRASLADO),
             new MotivoBase("Retiro de dueño",    SALIDA,  CAT_PERSONAL)
     );

@@ -4,7 +4,9 @@ import com.skycel.backend.domain.entity.CatMotivo;
 import com.skycel.backend.domain.entity.Caja;
 import com.skycel.backend.domain.entity.Compra;
 import com.skycel.backend.domain.entity.CuentaPorCobrar;
+import com.skycel.backend.domain.entity.EmpleadoPrestamo;
 import com.skycel.backend.domain.entity.MovimientoCaja;
+import com.skycel.backend.domain.entity.NominaDetalle;
 import com.skycel.backend.domain.entity.OrdenServicio;
 import com.skycel.backend.domain.entity.OrdenServicioAnticipo;
 import com.skycel.backend.domain.entity.PagoCompra;
@@ -39,6 +41,8 @@ import static com.skycel.backend.service.MotivoCajaService.CANCELACION_VENTA;
 import static com.skycel.backend.service.MotivoCajaService.DEVOLUCION_ANTICIPO;
 import static com.skycel.backend.service.MotivoCajaService.DEVOLUCION_VENTA;
 import static com.skycel.backend.service.MotivoCajaService.PAGO_PROVEEDOR;
+import static com.skycel.backend.service.MotivoCajaService.PAGO_NOMINA;
+import static com.skycel.backend.service.MotivoCajaService.PRESTAMO_EMPLEADO;
 import static com.skycel.backend.service.MotivoCajaService.CAT_PERSONAL;
 import static com.skycel.backend.service.MotivoCajaService.ENTRADA;
 import static com.skycel.backend.service.MotivoCajaService.SALIDA;
@@ -167,6 +171,36 @@ public class MovimientoCajaService {
                 ? compra.getProveedor().getNombreCorto() : compra.getProveedor().getNombreFiscal();
         guardar(caja, usuario, null, motivoSistema(PAGO_PROVEEDOR), pago.getMonto(),
                 "Pago a " + proveedor + " · compra #" + compra.getIdcompra() + " (pago #" + pago.getIdpago() + ")",
+                null);
+    }
+
+    /** Salida por el pago neto de una línea de nómina ya calculada. La caja la elige quien paga (normalmente Bodega). */
+    @Transactional
+    public void registrarPagoNomina(Integer idCaja, NominaDetalle detalle, Usuario usuario) {
+        Caja caja = buscarCaja(idCaja);
+        validarAcceso(usuario, caja);
+        BigDecimal saldo = saldoDe(caja.getIdCaja());
+        if (detalle.getTotalNeto().compareTo(saldo) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Saldo insuficiente en la caja. Disponible: $" + saldo + ", solicitado: $" + detalle.getTotalNeto());
+        }
+        guardar(caja, usuario, null, motivoSistema(PAGO_NOMINA), detalle.getTotalNeto(),
+                "Nómina de " + detalle.getEmpleado().getUsuario().getNombreCompleto() + " · periodo #" + detalle.getPeriodo().getIdperiodo(),
+                null);
+    }
+
+    /** Salida por un préstamo/adelanto entregado a un empleado. La caja la elige quien lo otorga. */
+    @Transactional
+    public void registrarPrestamoEmpleado(Integer idCaja, EmpleadoPrestamo prestamo, Usuario usuario) {
+        Caja caja = buscarCaja(idCaja);
+        validarAcceso(usuario, caja);
+        BigDecimal saldo = saldoDe(caja.getIdCaja());
+        if (prestamo.getMontoOriginal().compareTo(saldo) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Saldo insuficiente en la caja. Disponible: $" + saldo + ", solicitado: $" + prestamo.getMontoOriginal());
+        }
+        guardar(caja, usuario, null, motivoSistema(PRESTAMO_EMPLEADO), prestamo.getMontoOriginal(),
+                "Préstamo a " + prestamo.getEmpleado().getUsuario().getNombreCompleto() + " (préstamo #" + prestamo.getIdprestamo() + ")",
                 null);
     }
 

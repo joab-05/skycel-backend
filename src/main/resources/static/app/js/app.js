@@ -161,6 +161,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', grupo: 'Taller' });
   items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
   if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
+  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
   items.push({ h: '#/pendientes', i: ic('cloud-upload'), t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
   return items;
 }
@@ -242,6 +243,9 @@ async function render() {
     if (ruta === 'pos') return pantallaPOS();
     if (ruta === 'traspasos') return pantallaTraspasos();
     if (ruta === 'inventario-fisico') return pantallaInventarioFisico(param);
+    if (ruta === 'nomina') return pantallaNomina();
+    if (ruta === 'nomina-detalle' && param) return pantallaNominaDetalle(param);
+    if (ruta === 'nomina-historial') return pantallaNominaHistorial();
     if (ruta === 'traspaso' && param) return pantallaTraspasoDetalle(param);
     if (ruta === 'traspaso-nuevo') return pantallaTraspasoNuevo(param);
     if (ruta === 'faltantes') return pantallaFaltantes();
@@ -2275,6 +2279,259 @@ async function pantallaInventarioFisicoHistorial(s) {
   cargar();
 }
 
+// ── Nómina ───────────────────────────────────────────────────────────────
+
+/** Sugiere el período quincenal según la fecha de hoy: 1–15 (paga el 16) o 16–fin de mes (paga el 1). */
+function sugerirPeriodoNomina() {
+  const hoy = new Date();
+  let inicio, fin, pago;
+  if (hoy.getDate() <= 15) {
+    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    fin = new Date(hoy.getFullYear(), hoy.getMonth(), 15);
+    pago = new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+  } else {
+    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+    fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    pago = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+  }
+  return { inicio: fechaISOCorta(inicio), fin: fechaISOCorta(fin), pago: fechaISOCorta(pago) };
+}
+
+async function pantallaNomina() {
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
+  root.innerHTML = `<h1>${ic('banknote')} Nómina</h1><div id="nm-cuerpo"><div class="vacio">Cargando...</div></div>`;
+  cargarNomina();
+}
+
+async function cargarNomina() {
+  const cont = document.getElementById('nm-cuerpo');
+  cont.innerHTML = '<div class="vacio">Cargando...</div>';
+  try {
+    const p = await api('GET', '/api/nomina/periodos/activo');
+    if (!p.activo) {
+      cont.innerHTML = `
+        <div class="tarjeta" style="text-align:center;">
+          <p class="ayuda">No hay ningún período de nómina abierto.</p>
+          <div id="nm-fechas" style="text-align:left;"></div>
+          <button id="nm-abrir" class="btn btn-verde" style="margin-top:10px;">${ic('plus')} Abrir período</button>
+          <button id="nm-historial" class="btn btn-gris" style="margin-top:8px;">${ic('history')} Ver períodos anteriores</button>
+        </div>`;
+      const { inicio, fin, pago } = sugerirPeriodoNomina();
+      document.getElementById('nm-fechas').innerHTML = `
+        <label>Desde</label><input type="date" id="nm-desde" value="${inicio}">
+        <label>Hasta</label><input type="date" id="nm-hasta" value="${fin}">
+        <label>Fecha de pago</label><input type="date" id="nm-pago" value="${pago}">`;
+      document.getElementById('nm-abrir').onclick = async () => {
+        const fechaInicio = document.getElementById('nm-desde').value;
+        const fechaFin = document.getElementById('nm-hasta').value;
+        const fechaPago = document.getElementById('nm-pago').value;
+        if (!fechaInicio || !fechaFin || !fechaPago) return alert('Completa las tres fechas.');
+        try {
+          await api('POST', `/api/nomina/periodos?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&fechaPago=${fechaPago}`, undefined);
+          cargarNomina();
+        } catch (err) { alert(err.message || 'No se pudo abrir el período.'); }
+      };
+      document.getElementById('nm-historial').onclick = () => { location.hash = '#/nomina-historial'; };
+      return;
+    }
+    dibujarPeriodoActivo(cont, p);
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+async function dibujarPeriodoActivo(cont, p) {
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <div class="ayuda">Período #${p.idperiodo} · ${p.fechaInicio} al ${p.fechaFin} · paga el ${p.fechaPago}</div>
+      <div class="fila" style="margin-top:8px;">
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Empleados</div><div style="font-size:18px; font-weight:700;">${p.totalEmpleados}</div></div>
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Pendientes</div><div style="font-size:18px; font-weight:700;">${p.totalPendientes}</div></div>
+        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Total neto</div><div style="font-size:18px; font-weight:700;">${formatoDinero(p.totalNeto)}</div></div>
+      </div>
+      <button id="nm-cerrar" class="btn btn-ambar" style="margin-top:10px;" ${Number(p.totalPendientes) > 0 ? 'disabled' : ''}>${ic('circle-check')} Cerrar período</button>
+      <button class="btn btn-gris" style="margin-top:8px;" onclick="navegar('#/nomina-historial')">${ic('history')} Ver períodos anteriores</button>
+    </div>
+    <div id="nm-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
+
+  document.getElementById('nm-cerrar').onclick = async () => {
+    if (!confirm('¿Cerrar este período de nómina? Ya no se podrá modificar.')) return;
+    try { await api('POST', `/api/nomina/periodos/${p.idperiodo}/cerrar`, undefined); cargarNomina(); }
+    catch (err) { alert(err.message || 'No se pudo cerrar.'); }
+  };
+
+  const listaEl = document.getElementById('nm-lista');
+  try {
+    const r = await api('GET', `/api/nomina/periodos/${p.idperiodo}/detalles`);
+    listaEl.innerHTML = r.detalles.map(d => `
+      <div class="orden-item nm-fila" style="cursor:pointer;" data-id="${d.iddetalle}">
+        <div class="orden-cab">
+          <span class="orden-folio">${escapar(d.nombreEmpleado)}</span>
+          <span class="pastilla ${d.estado === 1 ? 'lista' : 'pendiente'}">${escapar(d.estadoDisplay)}</span>
+        </div>
+        <div class="orden-equipo">${escapar(d.nombreTienda || '—')}</div>
+        <div class="orden-meta">
+          <span class="orden-fecha">Percepciones ${formatoDinero(d.totalPercepciones)} · Deducciones ${formatoDinero(d.totalDeducciones)}</span>
+          <span style="font-weight:700;">${formatoDinero(d.totalNeto)}</span>
+        </div>
+      </div>`).join('');
+    listaEl.querySelectorAll('.nm-fila').forEach(el => {
+      el.onclick = () => { location.hash = '#/nomina-detalle/' + el.dataset.id; };
+    });
+  } catch (err) {
+    listaEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+async function pantallaNominaHistorial() {
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
+  root.innerHTML = `<h1>${ic('history')} Historial de nómina</h1><div id="nmh-lista"><div class="vacio">Cargando...</div></div>`;
+  const listaEl = document.getElementById('nmh-lista');
+  try {
+    const lista = await api('GET', '/api/nomina/periodos');
+    listaEl.innerHTML = lista.length === 0 ? '<div class="vacio">Sin períodos registrados.</div>' : lista.map(p => `
+      <div class="orden-item">
+        <div class="orden-cab">
+          <span class="orden-folio">Período #${p.idperiodo}</span>
+          <span class="pastilla ${p.estado === 1 ? 'lista' : 'pendiente'}">${escapar(p.estadoDisplay)}</span>
+        </div>
+        <div class="orden-equipo">${p.fechaInicio} al ${p.fechaFin} · paga ${p.fechaPago}</div>
+        <div class="orden-meta">
+          <span class="orden-fecha">${p.totalEmpleados} empleado(s)</span>
+          <span style="font-weight:700;">${formatoDinero(p.totalNeto)}</span>
+        </div>
+      </div>`).join('');
+  } catch (err) {
+    listaEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+async function pantallaNominaDetalle(iddetalle) {
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
+  root.innerHTML = `<h1>${ic('banknote')} Línea de nómina</h1><div id="nmd-cuerpo"><div class="vacio">Cargando...</div></div>`;
+  cargarNominaDetalle(iddetalle, s);
+}
+
+async function cargarNominaDetalle(iddetalle, s) {
+  const cont = document.getElementById('nmd-cuerpo');
+  cont.innerHTML = '<div class="vacio">Cargando...</div>';
+  try {
+    const d = await api('GET', `/api/nomina/detalles/${iddetalle}`);
+    const editable = d.estado === 0;
+    cont.innerHTML = `
+      <div class="tarjeta">
+        <h2 style="margin-top:0;">${escapar(d.nombreEmpleado)}</h2>
+        <div class="ayuda">${escapar(d.nombreTienda || '—')}</div>
+        <span class="pastilla ${editable ? 'pendiente' : 'lista'}">${escapar(d.estadoDisplay)}</span>
+      </div>
+      <div class="tarjeta">
+        <h2 style="margin-top:0;">Percepciones</h2>
+        <div id="nmd-percepciones"></div>
+        ${editable ? `
+        <div class="fila" style="margin-top:8px;">
+          <input id="nmd-p-concepto" placeholder="Concepto (ej. Bono)">
+          <input id="nmd-p-monto" type="number" step="0.01" placeholder="Monto">
+        </div>
+        <button id="nmd-p-agregar" class="btn btn-verde btn-chico" style="margin-top:6px;">+ Agregar percepción</button>` : ''}
+      </div>
+      <div class="tarjeta">
+        <h2 style="margin-top:0;">Deducciones</h2>
+        <div id="nmd-deducciones"></div>
+        ${editable ? `
+        <div class="fila" style="margin-top:8px;">
+          <input id="nmd-d-concepto" placeholder="Concepto (ej. Falta)">
+          <input id="nmd-d-monto" type="number" step="0.01" placeholder="Monto">
+        </div>
+        <button id="nmd-d-agregar" class="btn btn-gris btn-chico" style="margin-top:6px;">+ Agregar deducción</button>` : ''}
+      </div>
+      <div class="tarjeta" style="text-align:center;">
+        <div class="ayuda">Neto a pagar</div>
+        <div style="font-size:22px; font-weight:700;">${formatoDinero(d.totalNeto)}</div>
+        ${editable ? '<div id="nmd-pagar-form" style="margin-top:10px; text-align:left;"></div>'
+          : `<div class="ayuda" style="margin-top:6px;">Pagado desde ${escapar(d.nombreCaja || '—')} · ${formatoFecha(d.fechaPago)}</div>`}
+      </div>`;
+
+    const dibujarLineas = (contId, items, tipo) => {
+      const el = document.getElementById(contId);
+      el.innerHTML = items.length === 0 ? '<div class="vacio">Sin líneas.</div>' : items.map(it => `
+        <div class="detalle-fila">
+          <span class="k">${escapar(it.concepto)}${it.idprestamo ? ' <span class="ayuda">(abono a préstamo)</span>' : ''}</span>
+          <span class="v">${formatoDinero(it.monto)}${editable ? ` <button class="btn-icono nmd-del" data-tipo="${tipo}" data-id="${tipo === 'percepcion' ? it.idpercepcion : it.iddeduccion}">${ic('x')}</button>` : ''}</span>
+        </div>`).join('');
+    };
+    dibujarLineas('nmd-percepciones', d.percepciones, 'percepcion');
+    dibujarLineas('nmd-deducciones', d.deducciones, 'deduccion');
+
+    document.querySelectorAll('.nmd-del').forEach(btn => {
+      btn.onclick = async () => {
+        try {
+          if (btn.dataset.tipo === 'percepcion') await api('DELETE', `/api/nomina/percepciones/${btn.dataset.id}`, undefined);
+          else await api('DELETE', `/api/nomina/deducciones/${btn.dataset.id}`, undefined);
+          cargarNominaDetalle(iddetalle, s);
+        } catch (err) { alert(err.message || 'No se pudo quitar.'); }
+      };
+    });
+
+    if (!editable) return;
+
+    document.getElementById('nmd-p-agregar').onclick = async () => {
+      const concepto = document.getElementById('nmd-p-concepto').value.trim();
+      const monto = document.getElementById('nmd-p-monto').value;
+      if (!concepto || !monto) return;
+      try {
+        await api('POST', `/api/nomina/detalles/${iddetalle}/percepciones?concepto=${encodeURIComponent(concepto)}&monto=${monto}`, undefined);
+        cargarNominaDetalle(iddetalle, s);
+      } catch (err) { alert(err.message || 'No se pudo agregar.'); }
+    };
+    document.getElementById('nmd-d-agregar').onclick = async () => {
+      const concepto = document.getElementById('nmd-d-concepto').value.trim();
+      const monto = document.getElementById('nmd-d-monto').value;
+      if (!concepto || !monto) return;
+      try {
+        await api('POST', `/api/nomina/detalles/${iddetalle}/deducciones?concepto=${encodeURIComponent(concepto)}&monto=${monto}`, undefined);
+        cargarNominaDetalle(iddetalle, s);
+      } catch (err) { alert(err.message || 'No se pudo agregar.'); }
+    };
+
+    const cajaForm = document.getElementById('nmd-pagar-form');
+    cajaForm.innerHTML = `<div id="nmd-tienda"></div><div id="nmd-caja" style="margin-top:6px;"></div><button id="nmd-pagar" class="btn btn-verde" style="margin-top:8px;">${ic('banknote')} Pagar</button>`;
+    let idCajaElegida = null;
+    const cargarCajas = async (codti) => {
+      const cajas = await api('GET', `/api/cajas/tienda/${codti}`);
+      const cajaSel = document.getElementById('nmd-caja');
+      if (cajas.length === 0) { cajaSel.innerHTML = '<div class="mensaje info">Esta sucursal no tiene caja.</div>'; idCajaElegida = null; return; }
+      cajaSel.innerHTML = `<select id="nmd-idcaja">${cajas.map(c => `<option value="${c.idCaja}">${escapar(c.nombreCaja)}</option>`).join('')}</select>`;
+      idCajaElegida = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0].idCaja;
+      document.getElementById('nmd-idcaja').value = idCajaElegida;
+      document.getElementById('nmd-idcaja').onchange = (e) => { idCajaElegida = Number(e.target.value); };
+    };
+    const codtiInicial = await dibujarSelectorSucursal(document.getElementById('nmd-tienda'), s, (c) => cargarCajas(c));
+    // Por defecto, Bodega/Matriz si aparece en la lista — normalmente de ahí sale el pago de nómina.
+    const selTienda = document.getElementById('nmd-tienda').querySelector('select');
+    if (selTienda) {
+      const bodega = Array.from(selTienda.options).find(o => /bodega|matriz/i.test(o.textContent));
+      if (bodega) { selTienda.value = bodega.value; await cargarCajas(Number(bodega.value)); }
+      else if (codtiInicial != null) await cargarCajas(codtiInicial);
+    } else if (codtiInicial != null) {
+      await cargarCajas(codtiInicial);
+    }
+
+    document.getElementById('nmd-pagar').onclick = async () => {
+      if (idCajaElegida == null) return alert('Selecciona una caja.');
+      if (!confirm(`¿Pagar ${formatoDinero(d.totalNeto)} a ${d.nombreEmpleado}?`)) return;
+      try {
+        await api('POST', `/api/nomina/detalles/${iddetalle}/pagar?idCaja=${idCajaElegida}`, undefined);
+        cargarNominaDetalle(iddetalle, s);
+      } catch (err) { alert(err.message || 'No se pudo pagar.'); }
+    };
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
 // ── Inventario ───────────────────────────────────────────────────────────
 
 const TIPO_ICONO = { CELULAR: ic('smartphone'), TABLET: ic('smartphone'), ACCESORIO: ic('headphones'), SERVICIO: ic('wrench') };
@@ -3453,7 +3710,17 @@ async function pantallaEmpleadoDetalle(id) {
       <button id="ed-editar" class="btn btn-azul">${ic('pencil')} Editar</button>
       <button id="ed-desactivar" class="btn btn-rojo">${ic('trash-2')} Desactivar</button>
       <button class="btn btn-gris" onclick="navegar('#/auditoria/usuario~${id}')">${ic('history')} Historial</button>
-    </div>`;
+    </div>
+    ${u.idempleado != null ? `
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">${ic('banknote')} Préstamo</h2>
+      <div id="ed-prestamo"><div class="vacio">Cargando...</div></div>
+    </div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">${ic('calendar')} Descansos</h2>
+      <div id="ed-descansos"><div class="vacio">Cargando...</div></div>
+      <button id="ed-nuevo-descanso" class="btn btn-gris btn-chico" style="margin-top:8px;">+ Registrar descanso</button>
+    </div>` : ''}`;
 
   document.getElementById('ed-editar').onclick = () => dibujarFormularioEmpleado(document.getElementById('ed-form'), u, () => pantallaEmpleadoDetalle(id));
   document.getElementById('ed-desactivar').onclick = async () => {
@@ -3461,6 +3728,89 @@ async function pantallaEmpleadoDetalle(id) {
     try { await api('DELETE', '/api/usuarios/' + id); navegar('#/empleados'); }
     catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
   };
+
+  if (u.idempleado != null) {
+    cargarPrestamoEmpleado(u.idempleado);
+    cargarDescansosEmpleado(u.idempleado);
+    document.getElementById('ed-nuevo-descanso').onclick = async () => {
+      const fecha = prompt('Fecha del descanso (AAAA-MM-DD):', fechaLocalISO(new Date()));
+      if (!fecha) return;
+      try {
+        await api('POST', `/api/descansos-empleado?idempleado=${u.idempleado}&fecha=${fecha}`, undefined);
+        cargarDescansosEmpleado(u.idempleado);
+      } catch (err) { alert(err.message || 'No se pudo registrar.'); }
+    };
+  }
+}
+
+async function cargarPrestamoEmpleado(idempleado) {
+  const cont = document.getElementById('ed-prestamo');
+  try {
+    const lista = await api('GET', `/api/prestamos-empleado/empleado/${idempleado}`);
+    const activo = lista.find(p => p.estado === 0);
+    cont.innerHTML = `
+      ${activo ? `
+        <div class="detalle-fila"><span class="k">Saldo pendiente</span><span class="v">${formatoDinero(activo.saldoPendiente)} de ${formatoDinero(activo.montoOriginal)}</span></div>
+        ${activo.observaciones ? `<div class="ayuda">${escapar(activo.observaciones)}</div>` : ''}`
+        : '<div class="vacio">Sin préstamo activo.</div>'}
+      <div id="ed-prestamo-form" style="margin-top:8px;"></div>
+      ${!activo ? `<button id="ed-otorgar-prestamo" class="btn btn-gris btn-chico">+ Otorgar préstamo</button>` : ''}`;
+    if (!activo) {
+      document.getElementById('ed-otorgar-prestamo').onclick = () => {
+        const s = Sesion.obtener();
+        const formEl = document.getElementById('ed-prestamo-form');
+        formEl.innerHTML = `
+          <input id="ep-monto" type="number" step="0.01" placeholder="Monto">
+          <input id="ep-obs" placeholder="Motivo (opcional)">
+          <div id="ep-tienda" style="margin-top:6px;"></div>
+          <div id="ep-caja" style="margin-top:6px;"></div>
+          <button id="ep-guardar" class="btn btn-verde btn-chico" style="margin-top:6px;">Guardar</button>`;
+        let idCajaElegida = null;
+        const cargarCajas = async (codti) => {
+          const cajas = await api('GET', `/api/cajas/tienda/${codti}`);
+          const cajaSel = document.getElementById('ep-caja');
+          if (cajas.length === 0) { cajaSel.innerHTML = '<div class="mensaje info">Esta sucursal no tiene caja.</div>'; idCajaElegida = null; return; }
+          cajaSel.innerHTML = `<select id="ep-idcaja">${cajas.map(c => `<option value="${c.idCaja}">${escapar(c.nombreCaja)}</option>`).join('')}</select>`;
+          idCajaElegida = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0].idCaja;
+          document.getElementById('ep-idcaja').onchange = (e) => { idCajaElegida = Number(e.target.value); };
+        };
+        dibujarSelectorSucursal(document.getElementById('ep-tienda'), s, cargarCajas).then(c => { if (c != null) cargarCajas(c); });
+        document.getElementById('ep-guardar').onclick = async () => {
+          const monto = document.getElementById('ep-monto').value;
+          if (!monto || idCajaElegida == null) return alert('Indica el monto y la caja.');
+          try {
+            const obs = document.getElementById('ep-obs').value.trim();
+            await api('POST', `/api/prestamos-empleado?idempleado=${idempleado}&monto=${monto}&idCaja=${idCajaElegida}${obs ? '&observaciones=' + encodeURIComponent(obs) : ''}`, undefined);
+            cargarPrestamoEmpleado(idempleado);
+          } catch (err) { alert(err.message || 'No se pudo otorgar.'); }
+        };
+      };
+    }
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+async function cargarDescansosEmpleado(idempleado) {
+  const cont = document.getElementById('ed-descansos');
+  try {
+    const lista = await api('GET', `/api/descansos-empleado/empleado/${idempleado}`);
+    cont.innerHTML = lista.length === 0 ? '<div class="vacio">Sin descansos registrados.</div>' : lista.slice(0, 10).map(d => `
+      <div class="detalle-fila">
+        <span class="k">${d.fecha}${d.observaciones ? ' — ' + escapar(d.observaciones) : ''}</span>
+        <span class="v"><button class="btn-icono ed-del-descanso" data-id="${d.iddescanso}">${ic('x')}</button></span>
+      </div>`).join('');
+    document.querySelectorAll('.ed-del-descanso').forEach(btn => {
+      btn.onclick = async () => {
+        try {
+          await api('DELETE', `/api/descansos-empleado/${btn.dataset.id}`, undefined);
+          cargarDescansosEmpleado(idempleado);
+        } catch (err) { alert(err.message || 'No se pudo quitar.'); }
+      };
+    });
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
 }
 
 // ── Punto de venta ───────────────────────────────────────────────────────
