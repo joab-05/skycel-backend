@@ -162,6 +162,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
   if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
   if (SUPERIOR.includes(s.rol)) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
+  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/descansos', i: ic('calendar'), t: 'Descansos', grupo: 'Administración' });
   items.push({ h: '#/pendientes', i: ic('cloud-upload'), t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
   return items;
 }
@@ -246,6 +247,7 @@ async function render() {
     if (ruta === 'nomina') return pantallaNomina();
     if (ruta === 'nomina-detalle' && param) return pantallaNominaDetalle(param);
     if (ruta === 'nomina-historial') return pantallaNominaHistorial();
+    if (ruta === 'descansos') return pantallaDescansos();
     if (ruta === 'traspaso' && param) return pantallaTraspasoDetalle(param);
     if (ruta === 'traspaso-nuevo') return pantallaTraspasoNuevo(param);
     if (ruta === 'faltantes') return pantallaFaltantes();
@@ -3733,7 +3735,7 @@ async function pantallaEmpleadoDetalle(id) {
     cargarPrestamoEmpleado(u.idempleado);
     cargarDescansosEmpleado(u.idempleado);
     document.getElementById('ed-nuevo-descanso').onclick = async () => {
-      const fecha = prompt('Fecha del descanso (AAAA-MM-DD):', fechaLocalISO(new Date()));
+      const fecha = prompt('Fecha del descanso (AAAA-MM-DD):', fechaISOCorta(new Date()));
       if (!fecha) return;
       try {
         await api('POST', `/api/descansos-empleado?idempleado=${u.idempleado}&fecha=${fecha}`, undefined);
@@ -3794,12 +3796,18 @@ async function cargarPrestamoEmpleado(idempleado) {
 async function cargarDescansosEmpleado(idempleado) {
   const cont = document.getElementById('ed-descansos');
   try {
-    const lista = await api('GET', `/api/descansos-empleado/empleado/${idempleado}`);
-    cont.innerHTML = lista.length === 0 ? '<div class="vacio">Sin descansos registrados.</div>' : lista.slice(0, 10).map(d => `
+    const hoy = new Date();
+    const desdeD = new Date(hoy); desdeD.setFullYear(desdeD.getFullYear() - 1);
+    const hastaD = new Date(hoy); hastaD.setMonth(hastaD.getMonth() + 1);
+    const lista = await api('GET', `/api/descansos-empleado/empleado/${idempleado}?desde=${fechaISOCorta(desdeD)}&hasta=${fechaISOCorta(hastaD)}`);
+    cont.innerHTML = `
+      <div class="ayuda" style="margin-bottom:6px;">${lista.length} descanso(s) en el último año.</div>
+      ${lista.length === 0 ? '<div class="vacio">Sin descansos registrados.</div>' : lista.slice(0, 10).map(d => `
       <div class="detalle-fila">
         <span class="k">${d.fecha}${d.observaciones ? ' — ' + escapar(d.observaciones) : ''}</span>
         <span class="v"><button class="btn-icono ed-del-descanso" data-id="${d.iddescanso}">${ic('x')}</button></span>
-      </div>`).join('');
+      </div>`).join('')}
+      ${lista.length > 10 ? '<div class="ayuda" style="margin-top:6px;">Mostrando los 10 más recientes.</div>' : ''}`;
     document.querySelectorAll('.ed-del-descanso').forEach(btn => {
       btn.onclick = async () => {
         try {
@@ -3808,6 +3816,63 @@ async function cargarDescansosEmpleado(idempleado) {
         } catch (err) { alert(err.message || 'No se pudo quitar.'); }
       };
     });
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
+/** Control de descansos de toda una sucursal: cuántos días tomó cada empleado en el rango elegido. */
+async function pantallaDescansos() {
+  const s = Sesion.obtener();
+  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver esta sección.</div>'; return; }
+  root.innerHTML = `
+    <h1>${ic('calendar')} Descansos</h1>
+    <div id="ds-tienda"></div>
+    <div class="fila">
+      <div><label>Desde</label><input type="date" id="ds-desde"></div>
+      <div><label>Hasta</label><input type="date" id="ds-hasta"></div>
+    </div>
+    <button id="ds-buscar" class="btn btn-azul btn-chico" style="margin-top:8px;">${ic('search')} Buscar</button>
+    <div id="ds-cuerpo" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
+
+  const hoy = new Date();
+  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  document.getElementById('ds-desde').value = fechaISOCorta(inicioMes);
+  document.getElementById('ds-hasta').value = fechaISOCorta(finMes);
+
+  let codti = await dibujarSelectorSucursal(document.getElementById('ds-tienda'), s, (c) => { codti = c; cargarDescansosTienda(codti); });
+  document.getElementById('ds-buscar').onclick = () => cargarDescansosTienda(codti);
+  if (codti != null) cargarDescansosTienda(codti);
+}
+
+async function cargarDescansosTienda(codti) {
+  const cont = document.getElementById('ds-cuerpo');
+  cont.innerHTML = '<div class="vacio">Cargando...</div>';
+  try {
+    const desde = document.getElementById('ds-desde').value;
+    const hasta = document.getElementById('ds-hasta').value;
+    const qs = new URLSearchParams();
+    if (desde) qs.set('desde', desde);
+    if (hasta) qs.set('hasta', hasta);
+    const lista = await api('GET', `/api/descansos-empleado/tienda/${codti}?${qs.toString()}`);
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">Sin descansos registrados en ese rango.</div>'; return; }
+
+    const porEmpleado = new Map();
+    lista.forEach(d => {
+      if (!porEmpleado.has(d.idempleado)) porEmpleado.set(d.idempleado, { nombre: d.nombreEmpleado, fechas: [] });
+      porEmpleado.get(d.idempleado).fechas.push(d);
+    });
+    const grupos = Array.from(porEmpleado.values()).sort((a, b) => b.fechas.length - a.fechas.length);
+    cont.innerHTML = grupos.map(g => `
+      <div class="tarjeta">
+        <div class="detalle-fila">
+          <span class="k">${escapar(g.nombre)}</span>
+          <span class="v">${g.fechas.length} día(s)</span>
+        </div>
+        ${g.fechas.sort((a, b) => a.fecha < b.fecha ? 1 : -1).map(d => `
+        <div class="ayuda" style="margin-top:4px;">${d.fecha}${d.observaciones ? ' — ' + escapar(d.observaciones) : ''}</div>`).join('')}
+      </div>`).join('');
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
   }
