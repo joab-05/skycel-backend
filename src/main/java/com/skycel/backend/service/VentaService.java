@@ -139,9 +139,11 @@ public class VentaService {
         Usuario vendedor = usuarioRepository.findById(idUsuarioVendedor)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuario vendedor no encontrado"));
 
-        // Un vendedor o un encargado solo vende en SU tienda (un administrador, en cualquiera). Las ventas que genera una
-        // orden de servicio o una devolución son de la tienda dueña de la orden, no de quien las cierra.
-        if (!desdeOrden && vendedor.getRol() != Rol.ROOT && vendedor.getRol() != Rol.ADMIN
+        // Un encargado solo vende en SU tienda (administradores, en cualquiera). Un vendedor tampoco tiene tienda fija:
+        // rotan día a día según dónde se les necesite, así que venden en la que estén trabajando ese momento — el propio
+        // selector de sucursal del POS ya decide eso, no hace falta anclarlo a su tienda de nómina. Las ventas que genera
+        // una orden de servicio o una devolución son de la tienda dueña de la orden, no de quien las cierra.
+        if (!desdeOrden && vendedor.getRol() != Rol.ROOT && vendedor.getRol() != Rol.ADMIN && vendedor.getRol() != Rol.VENDEDOR
                 && (vendedor.getTienda() == null || !vendedor.getTienda().getCodti().equals(tienda.getCodti()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes vender en tu propia tienda.");
         }
@@ -342,7 +344,7 @@ public class VentaService {
     public void validarAccesoAVenta(Integer codtiDeLaVenta, String username) {
         Usuario u = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario autenticado no encontrado"));
-        if (u.getRol() == Rol.ROOT || u.getRol() == Rol.ADMIN) return;
+        if (u.getRol() == Rol.ROOT || u.getRol() == Rol.ADMIN || u.getRol() == Rol.VENDEDOR) return;
         if (u.getTienda() == null || !u.getTienda().getCodti().equals(codtiDeLaVenta)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes consultar las ventas de tu tienda.");
         }

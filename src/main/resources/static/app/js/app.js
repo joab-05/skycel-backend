@@ -98,8 +98,35 @@ async function actualizarEncabezado() {
   navInferior.classList.remove('oculto');
   sidebar.classList.remove('oculto');
   usuarioActualEl.textContent = `${s.nombreCompleto || s.username} · ${etiquetaRol(s.rol)}`;
+  await dibujarSelectorTiendaTrabajo(s);
   dibujarNavInferior();
   await dibujarSidebar();
+}
+
+/**
+ * Un vendedor no tiene sucursal fija: rota día a día según dónde se le necesite (o cubre a un encargado que
+ * descansa). Este selector, visible solo para su rol, cambia la sucursal con la que trabaja en el momento —
+ * el back ya no exige que coincida con la tienda de su alta (esa sigue siendo su tienda de nómina/RH).
+ */
+async function dibujarSelectorTiendaTrabajo(s) {
+  const cont = document.getElementById('tienda-trabajo');
+  if (!cont) return;
+  if (s.rol !== 'VENDEDOR') { cont.classList.add('oculto'); cont.innerHTML = ''; return; }
+  cont.classList.remove('oculto');
+  cont.innerHTML = `<select id="sel-tienda-trabajo"><option>${escapar(s.nombreTienda || 'Cargando...')}</option></select>`;
+  try {
+    const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+    const sel = document.getElementById('sel-tienda-trabajo');
+    if (!sel) return; // la pantalla pudo cambiar mientras se cargaba
+    sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+    if (s.codti != null) sel.value = s.codti;
+    sel.onchange = () => {
+      const t = tiendas.find(x => x.codti === Number(sel.value));
+      if (!t) return;
+      Sesion.cambiarTienda(t.codti, t.nombre);
+      render(); // el hash no cambia, así que hay que forzar el re-dibujado de la pantalla actual
+    };
+  } catch { /* si falla, se queda mostrando la tienda actual sin poder cambiarla */ }
 }
 function etiquetaRol(rol) {
   return ({ ROOT: 'Administrador', ADMIN: 'Administrador', ENCARGADO_TIENDA: 'Encargado', VENDEDOR: 'Vendedor', TECNICO: 'Técnico' })[rol] || rol;

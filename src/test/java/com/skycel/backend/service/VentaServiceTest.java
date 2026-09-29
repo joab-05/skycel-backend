@@ -878,8 +878,20 @@ class VentaServiceTest {
         }
 
         @Test
-        @DisplayName("un vendedor no puede vender en otra tienda (403)")
-        void vendedorEnOtraTienda_seRechaza() {
+        @DisplayName("un vendedor sí puede vender en otra tienda: no tiene tienda fija, rota día a día")
+        void vendedorEnOtraTienda_sePermite() {
+            accesorioEnStock();
+            vendedor.setTienda(Tienda.builder().codti(2).nombre("Otra").build());
+
+            VentaResponseDto r = ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 1))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("15");
+        }
+
+        @Test
+        @DisplayName("un encargado no puede vender en otra tienda (403)")
+        void encargadoEnOtraTienda_seRechaza() {
+            vendedor.setRol(com.skycel.backend.domain.enums.Rol.ENCARGADO_TIENDA);
             vendedor.setTienda(Tienda.builder().codti(2).nombre("Otra").build());
 
             assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 1))), ID_VENDEDOR))

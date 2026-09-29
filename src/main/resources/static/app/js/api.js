@@ -11,8 +11,16 @@ const Sesion = (() => {
   function guardar(s) { localStorage.setItem(CLAVE, JSON.stringify(s)); }
   function limpiar() { localStorage.removeItem(CLAVE); }
   function activa() { return !!obtener()?.token; }
+  /** Cambia la sucursal en la que está trabajando ahora (un vendedor no tiene tienda fija: rota día a día). */
+  function cambiarTienda(codti, nombreTienda) {
+    const s = obtener();
+    if (!s) return;
+    s.codti = codti;
+    s.nombreTienda = nombreTienda;
+    guardar(s);
+  }
 
-  return { obtener, guardar, limpiar, activa };
+  return { obtener, guardar, limpiar, activa, cambiarTienda };
 })();
 
 /** true si el modelo de datos habla de "éxito" (StandardApiResponse envuelto); si no, se usa el JSON tal cual. */

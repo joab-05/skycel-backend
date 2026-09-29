@@ -661,8 +661,9 @@ public class OrdenServicioService {
         return u.getTienda() != null && u.getTienda().getCodti().equals(codti);
     }
 
+    // Un vendedor no tiene tienda fija (rota día a día); un encargado sí, solo la suya.
     private boolean puedeGestionarTienda(Usuario u, Integer codti) {
-        return esSuperior(u) || ((u.getRol() == Rol.ENCARGADO_TIENDA || u.getRol() == Rol.VENDEDOR) && mismaTienda(u, codti));
+        return esSuperior(u) || u.getRol() == Rol.VENDEDOR || (u.getRol() == Rol.ENCARGADO_TIENDA && mismaTienda(u, codti));
     }
 
     /** El técnico encargado del equipo: ve todas las órdenes de su tienda y asigna las reparaciones. */

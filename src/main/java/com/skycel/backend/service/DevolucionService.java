@@ -414,8 +414,9 @@ public class DevolucionService {
         return u.getTienda() != null && u.getTienda().getCodti().equals(codti);
     }
 
+    // Un vendedor no tiene tienda fija (rota día a día); un encargado sí, solo la suya.
     private void exigirOperaTienda(Usuario u, Integer codti) {
-        boolean ok = esSuperior(u) || ((u.getRol() == Rol.ENCARGADO_TIENDA || u.getRol() == Rol.VENDEDOR) && operaTienda(u, codti));
+        boolean ok = esSuperior(u) || u.getRol() == Rol.VENDEDOR || (u.getRol() == Rol.ENCARGADO_TIENDA && operaTienda(u, codti));
         if (!ok) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permiso para operar devoluciones de la tienda " + codti + ".");
     }
 

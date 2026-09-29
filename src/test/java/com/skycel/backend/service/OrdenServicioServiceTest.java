@@ -691,12 +691,12 @@ class OrdenServicioServiceTest {
         }
 
         @Test
-        @DisplayName("el personal de otra tienda no ve ni opera la orden (403)")
+        @DisplayName("un encargado de otra tienda no ve ni opera la orden (403); un vendedor sí, no tiene tienda fija")
         void otraTienda() {
             int o = orden(linea("SRV-000001", null, null, null));
 
             assertEstado(HttpStatus.FORBIDDEN, () -> service.obtener(o, "guillermo"));
-            assertEstado(HttpStatus.FORBIDDEN, () -> service.registrarAnticipo(o, anticipo("100", 1), "oscar"));
+            assertThat(service.obtener(o, "oscar").getIdorden()).isEqualTo(o);
             assertThat(service.obtener(o, "root").getIdorden()).isEqualTo(o);
         }
 

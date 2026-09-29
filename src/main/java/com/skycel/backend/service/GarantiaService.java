@@ -369,9 +369,10 @@ public class GarantiaService {
         return u.getRol() == Rol.ROOT || u.getRol() == Rol.ADMIN;
     }
 
+    // Un vendedor no tiene tienda fija (rota día a día); un encargado sí, solo la suya.
     private boolean puedeOperarTienda(Usuario u, Integer codti) {
-        return esSuperior(u) || ((u.getRol() == Rol.ENCARGADO_TIENDA || u.getRol() == Rol.VENDEDOR)
-                && u.getTienda() != null && u.getTienda().getCodti().equals(codti));
+        return esSuperior(u) || u.getRol() == Rol.VENDEDOR
+                || (u.getRol() == Rol.ENCARGADO_TIENDA && u.getTienda() != null && u.getTienda().getCodti().equals(codti));
     }
 
     private void exigirOperaTienda(Usuario u, Integer codti) {
