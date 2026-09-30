@@ -3662,6 +3662,8 @@ async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
       <input id="ef-correo" type="email" value="${escapar(empleado?.email || '')}">
       <label>Sueldo base</label>
       <input id="ef-sueldo" type="number" inputmode="decimal" step="0.01" value="${empleado?.sueldoBase ?? ''}">
+      <label>Fecha de ingreso</label>
+      <input id="ef-fecha-ingreso" type="date" value="${empleado?.fechaIngreso || ''}">
       <button id="ef-guardar" class="btn btn-verde">Guardar</button>
     </div>`;
 
@@ -3685,6 +3687,7 @@ async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
       telefono: document.getElementById('ef-tel').value.trim() || null,
       email: document.getElementById('ef-correo').value.trim() || null,
       sueldoBase: Number(document.getElementById('ef-sueldo').value) || null,
+      fechaIngreso: document.getElementById('ef-fecha-ingreso').value || null,
     };
     const password = document.getElementById('ef-password').value;
     if (!empleado) {
@@ -3838,6 +3841,11 @@ async function cargarSaldoEmpleado(idempleado) {
       </div>
       ${saldo.configurado ? `<div class="ayuda">Desde ${saldo.fechaCorte}: ${saldo.saldoInicial} inicial + ${saldo.diasGanados} ganados − ${saldo.diasTomados} tomados${saldo.ajustesTotal !== 0 ? (saldo.ajustesTotal > 0 ? ' + ' : ' − ') + Math.abs(saldo.ajustesTotal) + ' de ajustes' : ''}.</div>`
         : '<div class="ayuda">Sin saldo inicial configurado (se toma como 0 desde su ingreso).</div>'}
+      ${saldo.sugerenciaVacaciones && esAdmin ? `
+      <div class="mensaje info" style="margin-top:8px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+        <span>${ic('calendar')} Por su ${saldo.sugerenciaVacaciones.anios}.º aniversario le tocan ${saldo.sugerenciaVacaciones.dias} días de vacaciones de ley.</span>
+        <button id="ed-aplicar-vacaciones" class="btn btn-verde btn-chico">Registrar</button>
+      </div>` : ''}
       <div id="ed-saldo-ajustes" style="margin-top:6px;"></div>
       ${esAdmin ? `
       <div class="grupo-botones" style="margin-top:8px;">
@@ -3893,6 +3901,17 @@ async function cargarSaldoEmpleado(idempleado) {
             <div class="ayuda" style="margin-top:4px;">${a.fecha}: ${a.dias > 0 ? '+' : ''}${a.dias} día(s) — ${escapar(a.motivo)}${a.registradoPor ? ' (' + escapar(a.registradoPor) + ')' : ''}</div>`).join('');
         } catch (err) { histCont.innerHTML = `<div class="mensaje error">${escapar(err.message || 'No se pudo cargar.')}</div>`; }
       };
+      const btnAplicarVacaciones = document.getElementById('ed-aplicar-vacaciones');
+      if (btnAplicarVacaciones) {
+        btnAplicarVacaciones.onclick = async () => {
+          btnAplicarVacaciones.disabled = true;
+          try {
+            const { dias, motivo } = saldo.sugerenciaVacaciones;
+            await api('POST', `/api/descansos-empleado/${idempleado}/ajustes?dias=${dias}&motivo=${encodeURIComponent(motivo)}`, undefined);
+            cargarSaldoEmpleado(idempleado);
+          } catch (err) { alert(err.message || 'No se pudo registrar.'); btnAplicarVacaciones.disabled = false; }
+        };
+      }
     }
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
@@ -3964,7 +3983,8 @@ async function cargarReporteSaldos(codti) {
     if (lista.length === 0) { cont.innerHTML = '<div class="vacio">Sin empleados activos en esta sucursal.</div>'; return; }
     cont.innerHTML = lista.map(r => `
       <div class="detalle-fila">
-        <span class="k">${escapar(r.nombreEmpleado)} <span class="ayuda">(${escapar(r.categoriaDisplay)})</span></span>
+        <span class="k">${escapar(r.nombreEmpleado)} <span class="ayuda">(${escapar(r.categoriaDisplay)})</span>
+          ${r.sugerenciaVacaciones ? ' <span class="pastilla por-tomar">' + ic('calendar') + ' Vacaciones de ley pendientes</span>' : ''}</span>
         <span class="v">${r.saldoActual} de máx. ${r.maximo}
           ${r.excedeMaximo ? ' <span class="pastilla error">' + ic('triangle-alert') + ' Excede</span>' : ''}</span>
       </div>`).join('');

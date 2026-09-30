@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -124,6 +125,42 @@ public class EmpleadoDescansoService {
         return total;
     }
 
+    /** Tabla de vacaciones dignas (LFT Art. 76 reformado 2023): 12 días el año 1, +2 por cada año hasta el 5
+     *  (20 el año 5), y +2 cada 5 años después de eso (22 en el 6-10, 24 en el 11-15, ...). Package-visible
+     *  para probarla sin Spring. */
+    static int diasVacacionesLey(int aniosServicio) {
+        if (aniosServicio <= 0) return 0;
+        if (aniosServicio <= 5) return 10 + aniosServicio * 2;
+        return 22 + ((aniosServicio - 6) / 5) * 2;
+    }
+
+    /** Años completos de servicio cumplidos a partir de la fecha de ingreso (0 si aún no cumple el primero). */
+    static int aniosServicio(LocalDate fechaIngreso, LocalDate hoy) {
+        if (fechaIngreso == null || hoy.isBefore(fechaIngreso)) return 0;
+        return Period.between(fechaIngreso, hoy).getYears();
+    }
+
+    /** Si el empleado acaba de cumplir un aniversario cuyas vacaciones de ley todavía no se le registraron
+     *  como ajuste, arma la sugerencia (año, días, motivo) para que un admin la confirme con un clic — nunca
+     *  se aplica sola, el negocio tiene demasiadas excepciones (bajas, licencias, adelantos) para automatizarla
+     *  del todo. Solo detecta el aniversario más reciente; uno anterior sin reclamar se agrega a mano. */
+    static Map<String, Object> sugerenciaVacaciones(LocalDate fechaIngreso, LocalDate hoy, List<EmpleadoDescansoAjuste> ajustes) {
+        int anios = aniosServicio(fechaIngreso, hoy);
+        if (anios < 1) return null;
+        String motivo = motivoVacacionesLey(anios);
+        boolean yaRegistrado = ajustes.stream().anyMatch(a -> motivo.equals(a.getMotivo()));
+        if (yaRegistrado) return null;
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("anios", anios);
+        m.put("dias", diasVacacionesLey(anios));
+        m.put("motivo", motivo);
+        return m;
+    }
+
+    private static String motivoVacacionesLey(int anios) {
+        return "Vacaciones de ley (aniversario " + anios + ")";
+    }
+
     @Transactional
     public Map<String, Object> establecerSaldoInicial(Integer idempleado, Integer saldoInicial, LocalDate fechaCorte, String username) {
         EmpleadoPerfil empleado = empleadoDe(idempleado);
@@ -202,8 +239,8 @@ public class EmpleadoDescansoService {
 
         int ganados = diasGanados(categoria, fechaCorte, LocalDate.now());
         long tomados = descansoRepository.countByEmpleado_IdempleadoAndFechaGreaterThanEqual(empleado.getIdempleado(), fechaCorte);
-        int ajustes = ajusteRepository.findByEmpleado_Idempleado(empleado.getIdempleado()).stream()
-                .mapToInt(EmpleadoDescansoAjuste::getDias).sum();
+        List<EmpleadoDescansoAjuste> listaAjustes = ajusteRepository.findByEmpleado_Idempleado(empleado.getIdempleado());
+        int ajustes = listaAjustes.stream().mapToInt(EmpleadoDescansoAjuste::getDias).sum();
         int saldoActual = saldoInicial + ganados - (int) tomados + ajustes;
 
         Map<String, Object> m = new LinkedHashMap<>();
@@ -222,6 +259,7 @@ public class EmpleadoDescansoService {
         m.put("saldoActual", saldoActual);
         m.put("maximo", maximo);
         m.put("excedeMaximo", saldoActual > maximo);
+        m.put("sugerenciaVacaciones", sugerenciaVacaciones(empleado.getFechaIngreso(), LocalDate.now(), listaAjustes));
         return m;
     }
 

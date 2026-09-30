@@ -296,4 +296,68 @@ class EmpleadoDescansoServiceTest {
         when(empleadoPerfilRepository.findByActivoTrue()).thenReturn(List.of(empleadoZocalo));
         assertThat(service.reporte(null, "admin")).hasSize(1);
     }
+
+    // ── Vacaciones de ley por aniversario ────────────────────────────────────
+
+    @Test
+    @DisplayName("diasVacacionesLey: tabla de la LFT reformada (2023)")
+    void diasVacacionesLey_tabla() {
+        assertThat(EmpleadoDescansoService.diasVacacionesLey(0)).isEqualTo(0);
+        assertThat(EmpleadoDescansoService.diasVacacionesLey(1)).isEqualTo(12);
+        assertThat(EmpleadoDescansoService.diasVacacionesLey(2)).isEqualTo(14);
+        assertThat(EmpleadoDescansoService.diasVacacionesLey(5)).isEqualTo(20);
+        assertThat(EmpleadoDescansoService.diasVacacionesLey(6)).isEqualTo(22);
+        assertThat(EmpleadoDescansoService.diasVacacionesLey(10)).isEqualTo(22);
+        assertThat(EmpleadoDescansoService.diasVacacionesLey(11)).isEqualTo(24);
+        assertThat(EmpleadoDescansoService.diasVacacionesLey(16)).isEqualTo(26);
+    }
+
+    @Test
+    @DisplayName("aniosServicio: cuenta años completos cumplidos, 0 antes del primer aniversario")
+    void aniosServicio_aniosCompletos() {
+        LocalDate ingreso = LocalDate.of(2024, 3, 10);
+        assertThat(EmpleadoDescansoService.aniosServicio(ingreso, LocalDate.of(2025, 3, 9))).isEqualTo(0);
+        assertThat(EmpleadoDescansoService.aniosServicio(ingreso, LocalDate.of(2025, 3, 10))).isEqualTo(1);
+        assertThat(EmpleadoDescansoService.aniosServicio(ingreso, LocalDate.of(2026, 3, 10))).isEqualTo(2);
+        assertThat(EmpleadoDescansoService.aniosServicio(null, LocalDate.now())).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("sugerenciaVacaciones: sin un año cumplido no sugiere nada")
+    void sugerenciaVacaciones_sinAnioCumplido_null() {
+        LocalDate ingreso = LocalDate.now().minusMonths(3);
+        assertThat(EmpleadoDescansoService.sugerenciaVacaciones(ingreso, LocalDate.now(), List.of())).isNull();
+    }
+
+    @Test
+    @DisplayName("sugerenciaVacaciones: con un aniversario cumplido y sin ajuste registrado, sugiere los días de ley")
+    void sugerenciaVacaciones_aniversarioSinRegistrar() {
+        LocalDate ingreso = LocalDate.now().minusYears(2);
+        Map<String, Object> s = EmpleadoDescansoService.sugerenciaVacaciones(ingreso, LocalDate.now(), List.of());
+        assertThat(s.get("anios")).isEqualTo(2);
+        assertThat(s.get("dias")).isEqualTo(14);
+        assertThat(s.get("motivo")).isEqualTo("Vacaciones de ley (aniversario 2)");
+    }
+
+    @Test
+    @DisplayName("sugerenciaVacaciones: si ya existe un ajuste con ese motivo, no vuelve a sugerir")
+    void sugerenciaVacaciones_yaRegistrada_null() {
+        LocalDate ingreso = LocalDate.now().minusYears(2);
+        List<EmpleadoDescansoAjuste> ajustes = List.of(
+                EmpleadoDescansoAjuste.builder().dias(14).motivo("Vacaciones de ley (aniversario 2)").build());
+        assertThat(EmpleadoDescansoService.sugerenciaVacaciones(ingreso, LocalDate.now(), ajustes)).isNull();
+    }
+
+    @Test
+    @DisplayName("saldoDe: incluye la sugerencia de vacaciones de ley cuando aplica")
+    void saldoDe_incluyeSugerenciaVacaciones() {
+        empleadoZocalo.setFechaIngreso(LocalDate.now().minusYears(1));
+
+        Map<String, Object> r = service.saldoDe(5, "admin");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sugerencia = (Map<String, Object>) r.get("sugerenciaVacaciones");
+        assertThat(sugerencia.get("anios")).isEqualTo(1);
+        assertThat(sugerencia.get("dias")).isEqualTo(12);
+    }
 }
