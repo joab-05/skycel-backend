@@ -48,12 +48,17 @@ public class VentaService {
     private static final byte ESTADO_COMPLETADA = 1;
     private static final byte ESTADO_CANCELADA  = 2;
     private static final byte METODO_EFECTIVO   = 1;
+    private static final byte METODO_TRANSFERENCIA = 3;
     private static final byte METODO_MIXTO      = 4;
     /** Solo en el desglose de una venta de una orden de servicio: lo que el cliente ya pagó como anticipo. */
     private static final byte METODO_ANTICIPO   = 6;
     private static final byte METODO_CREDITO_DEVOLUCION = 7;
-    /** Métodos admitidos en las líneas de un pago Mixto: efectivo, tarjeta, transferencia y PayJoy. */
+    /** Métodos admitidos en las líneas de un pago Mixto: efectivo, tarjeta, transferencia y PayJoy (histórico). */
     private static final Set<Byte> METODOS_DESGLOSE = Set.of((byte) 1, (byte) 2, (byte) 3, (byte) 5);
+
+    public static final byte TIPO_VENTA_NORMAL = 0;
+    /** El enganche es lo único que cobra la tienda; el resto lo financia PayJoy y se liquida aparte. */
+    public static final byte TIPO_VENTA_CREDITO_PAYJOY = 1;
 
     private final VentaRepository          ventaRepository;
     private final VentaDetalleRepository   ventaDetalleRepository;
@@ -167,12 +172,24 @@ public class VentaService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La venta debe tener al menos un artículo.");
         }
 
+        byte tipoVenta = dto.getTipoVenta() != null ? dto.getTipoVenta() : TIPO_VENTA_NORMAL;
+        boolean esPayjoy = tipoVenta == TIPO_VENTA_CREDITO_PAYJOY;
+        if (esPayjoy) {
+            if (dto.getMetodoPago() == null || (dto.getMetodoPago() != METODO_EFECTIVO && dto.getMetodoPago() != METODO_TRANSFERENCIA)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "En una venta a crédito PayJoy el enganche se cobra en Efectivo o Transferencia.");
+            }
+            if (dto.getPagos() != null && !dto.getPagos().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una venta a crédito PayJoy no lleva desglose de pagos.");
+            }
+        }
+
         // 1) Resolver y validar cada línea SIN mutar nada todavía, para poder
         //    fallar rápido antes de tocar stock/IMEIs.
         List<LineaResuelta> lineas = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
         for (VentaDetalleRequestDto d : dto.getDetalles()) {
-            LineaResuelta linea = resolverLinea(d, tienda, vendedor, desdeOrden, offline);
+            LineaResuelta linea = resolverLinea(d, tienda, vendedor, desdeOrden, offline, esPayjoy);
             lineas.add(linea);
             total = total.add(linea.subtotal);
         }
@@ -181,9 +198,18 @@ public class VentaService {
                     "La venta no puede ser de $0: agregue al menos un artículo con precio.");
         }
 
-        BigDecimal montoAbonado = resolverMontoAbonado(dto, total, desdeOrden);
+        BigDecimal montoAbonado;
+        if (esPayjoy) {
+            montoAbonado = lineas.stream().map(l -> l.enganchePayjoy).reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (dto.getMontoAbonado() != null && dto.getMontoAbonado().compareTo(montoAbonado) != 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "El monto abonado ($" + dto.getMontoAbonado() + ") no coincide con la suma de los enganches ($" + montoAbonado + ").");
+            }
+        } else {
+            montoAbonado = resolverMontoAbonado(dto, total, desdeOrden);
+        }
 
-        if (montoAbonado.compareTo(total) < 0 && cliente == null) {
+        if (!esPayjoy && montoAbonado.compareTo(total) < 0 && cliente == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "El monto abonado ($" + montoAbonado + ") es menor al total ($" + total +
                             "). Una venta a crédito requiere un cliente registrado.");
@@ -203,6 +229,7 @@ public class VentaService {
                 .caja(caja)
                 .tipoComprobante(dto.getTipoComprobante() != null ? dto.getTipoComprobante() : (byte) 1)
                 .metodoPago(dto.getMetodoPago())
+                .tipoVenta(tipoVenta)
                 .estado(ESTADO_COMPLETADA)
                 .total(total)
                 .montoAbonado(montoAbonado)
@@ -231,6 +258,9 @@ public class VentaService {
                     .costoUnitarioCompra(linea.costoUnitarioCompra)
                     .esRegalo(linea.esRegalo)
                     .imei(linea.imei)
+                    .enganchePayjoy(linea.enganchePayjoy)
+                    .plazoSemanasPayjoy(linea.plazoSemanasPayjoy)
+                    .precioAutorizado(linea.precioAutorizado())
                     .build();
             detallesGuardados.add(ventaDetalleRepository.save(detalle));
         }
@@ -243,8 +273,9 @@ public class VentaService {
             movimientoCajaService.registrarEntradaVenta(venta, vendedor, efectivoDelDesglose(dto));
         }
 
-        // 5) Venta a crédito: el saldo queda como cuenta por cobrar (el cliente es obligatorio, ya validado).
-        if (montoAbonado.compareTo(total) < 0) {
+        // 5) Venta a crédito con cliente: el saldo queda como cuenta por cobrar. Una venta PayJoy NO genera CxC:
+        //    el resto lo cubre PayJoy (la financiadora), se liquida fuera del sistema, no es deuda del cliente.
+        if (!esPayjoy && montoAbonado.compareTo(total) < 0) {
             cuentaPorCobrarService.crearDesdeVenta(venta, total.subtract(montoAbonado), dto.getFechaVencimientoCredito());
         }
 
@@ -467,9 +498,13 @@ public class VentaService {
         String avisoPrecio;   // solo en ventas sin conexión: el precio cobrado no coincide con el del sistema
         BigDecimal subtotal;
         Boolean esRegalo;
+        BigDecimal enganchePayjoy;     // solo venta a crédito PayJoy
+        Integer plazoSemanasPayjoy;    // solo venta a crédito PayJoy
+
+        boolean precioAutorizado() { return avisoPrecio != null; }
     }
 
-    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor, boolean desdeOrden, boolean sinConexion) {
+    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor, boolean desdeOrden, boolean sinConexion, boolean esPayjoy) {
         ProductoMaster master = productoMasterRepository.findById(d.getIdprodmaster())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Producto maestro no encontrado: " + d.getIdprodmaster()));
@@ -547,6 +582,24 @@ public class VentaService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta el precio de '" + master.getNombreBase() + "'.");
         }
         linea.precioUnitarioFinal = d.getPrecioUnitarioFinal();
+        if (esPayjoy) {
+            if (master.getTipo() != TipoProducto.CELULAR && master.getTipo() != TipoProducto.TABLET) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "PayJoy solo financia equipos (celular/tablet): '" + master.getNombreBase() + "'.");
+            }
+            if (d.getEnganchePayjoy() == null || d.getEnganchePayjoy().signum() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el enganche de '" + master.getNombreBase() + "'.");
+            }
+            if (d.getEnganchePayjoy().compareTo(linea.precioUnitarioFinal) >= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "El enganche de '" + master.getNombreBase() + "' debe ser menor al precio del equipo.");
+            }
+            if (d.getPlazoSemanasPayjoy() == null || d.getPlazoSemanasPayjoy() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el plazo en semanas de '" + master.getNombreBase() + "'.");
+            }
+            linea.enganchePayjoy = d.getEnganchePayjoy();
+            linea.plazoSemanasPayjoy = d.getPlazoSemanasPayjoy();
+        }
         validarRegalo(linea, vendedor, desdeOrden);
         // El precio lo pone el sistema (el del producto en Inventario o el propio de la unidad): ni un vendedor ni un
         // administrador lo cambian al vender; solo se cambia en Inventario. Excepciones: un regalo ($0, autorizado), las líneas
@@ -674,6 +727,8 @@ public class VentaService {
                 .descripcionComprobante(descripcionComprobante(venta.getTipoComprobante()))
                 .metodoPago(venta.getMetodoPago())
                 .descripcionMetodoPago(descripcionMetodoPago(venta.getMetodoPago()))
+                .tipoVenta(venta.getTipoVenta())
+                .descripcionTipoVenta(descripcionTipoVenta(venta.getTipoVenta()))
                 .estado(venta.getEstado())
                 .descripcionEstado(descripcionEstado(venta.getEstado()))
                 .total(total)
@@ -700,6 +755,9 @@ public class VentaService {
                 .subtotal(d.getPrecioUnitarioFinal().multiply(cantidad))
                 .imei(d.getImei())
                 .esRegalo(d.getEsRegalo())
+                .enganchePayjoy(d.getEnganchePayjoy())
+                .plazoSemanasPayjoy(d.getPlazoSemanasPayjoy())
+                .precioAutorizado(d.getPrecioAutorizado())
                 .build();
     }
 
@@ -722,6 +780,10 @@ public class VentaService {
             case 7 -> "Crédito por devolución";
             default -> "Efectivo";
         };
+    }
+
+    private String descripcionTipoVenta(Byte tipoVenta) {
+        return tipoVenta != null && tipoVenta == TIPO_VENTA_CREDITO_PAYJOY ? "Crédito PayJoy" : "Normal";
     }
 
     private String descripcionEstado(Byte estado) {

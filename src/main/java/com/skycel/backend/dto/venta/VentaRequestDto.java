@@ -30,12 +30,19 @@ public class VentaRequestDto {
 
     /**
      * Método de pago:
-     * 1 = Efectivo, 2 = Tarjeta, 3 = Transferencia, 4 = Mixto, 5 = PayJoy
+     * 1 = Efectivo, 2 = Tarjeta, 3 = Transferencia, 4 = Mixto
+     * (PayJoy ya no es un método de pago: ver tipoVenta)
      */
     @NotNull(message = "El método de pago es obligatorio")
     private Byte metodoPago;
 
-    /** Monto entregado por el cliente (para calcular cambio) */
+    /**
+     * 0 = Normal (default), 1 = Crédito PayJoy. En una venta PayJoy, metodoPago describe cómo se cobró el
+     * enganche (solo 1 Efectivo o 3 Transferencia) y montoAbonado es la suma de los enganches de sus líneas.
+     */
+    private Byte tipoVenta = 0;
+
+    /** Monto entregado por el cliente (para calcular cambio); en una venta PayJoy, la suma de los enganches. */
     private BigDecimal montoAbonado;
 
     private String observaciones;

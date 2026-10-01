@@ -363,6 +363,157 @@ class VentaServiceTest {
         }
     }
 
+    // ── Crear — venta a crédito PayJoy ────────────────────────────────────────
+
+    @Nested
+    @DisplayName("crear — crédito PayJoy")
+    class CreditoPayjoy {
+
+        private VentaDetalleRequestDto lineaCelularPayjoy(String imei, BigDecimal enganche, Integer plazoSemanas) {
+            VentaDetalleRequestDto d = lineaCelular(imei);
+            d.setEnganchePayjoy(enganche);
+            d.setPlazoSemanasPayjoy(plazoSemanas);
+            return d;
+        }
+
+        private void celularDisponible(String imei) {
+            ProductoMaster master = masterCelular();
+            Producto producto = productoCelular(master, BigDecimal.ONE);
+            ProductoImei pi = ProductoImei.builder().id(1L).producto(producto).imei(imei).estado("DISPONIBLE").build();
+            lenient().when(productoMasterRepository.findById(1)).thenReturn(Optional.of(master));
+            lenient().when(productoImeiRepository.findByImei(imei)).thenReturn(Optional.of(pi));
+        }
+
+        @Test
+        @DisplayName("enganche en efectivo: se guarda tipoVenta=1, montoAbonado=enganche, no genera cuenta por cobrar y SÍ mueve caja")
+        void enganeEfectivo_sePermiteSinCxcYMueveCaja() {
+            celularDisponible("123456789012345");
+
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+            request.setMetodoPago((byte) 1); // efectivo
+
+            VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
+
+            assertThat(response.getTipoVenta()).isEqualTo((byte) 1);
+            assertThat(response.getTotal()).isEqualByComparingTo("199");
+            assertThat(response.getMontoAbonado()).isEqualByComparingTo("50");
+            assertThat(response.getDetalles().get(0).getEnganchePayjoy()).isEqualByComparingTo("50");
+            assertThat(response.getDetalles().get(0).getPlazoSemanasPayjoy()).isEqualTo(10);
+
+            verify(cuentaPorCobrarService, never()).crearDesdeVenta(any(), any(), any());
+            verify(movimientoCajaService).registrarVentaEfectivo(any(Venta.class), eq(vendedor));
+        }
+
+        @Test
+        @DisplayName("enganche por transferencia: no mueve caja (igual que cualquier venta por transferencia)")
+        void engancheTransferencia_noMueveCaja() {
+            celularDisponible("123456789012345");
+
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+            request.setMetodoPago((byte) 3); // transferencia
+
+            ventaService.crear(request, ID_VENDEDOR);
+
+            verify(movimientoCajaService, never()).registrarVentaEfectivo(any(), any());
+            verify(movimientoCajaService, never()).registrarEntradaVenta(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("metodoPago tarjeta en una venta PayJoy: 400 (el enganche solo se cobra en efectivo o transferencia)")
+        void metodoTarjeta_lanzaBadRequest() {
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+            request.setMetodoPago((byte) 2); // tarjeta
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("Efectivo o Transferencia");
+            verify(ventaRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("un accesorio en una venta PayJoy: 400 (PayJoy solo financia equipos)")
+        void accesorioEnPayjoy_lanzaBadRequest() {
+            ProductoMaster master = masterAccesorio();
+            Producto producto = productoAccesorio(master, BigDecimal.TEN);
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(producto));
+
+            VentaDetalleRequestDto linea = lineaAccesorio((short) 1);
+            linea.setEnganchePayjoy(new BigDecimal("5"));
+            linea.setPlazoSemanasPayjoy(4);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("solo financia equipos");
+        }
+
+        @Test
+        @DisplayName("enganche mayor o igual al precio: 400 (debe quedar algo por financiar)")
+        void engancheMayorOIgualAlPrecio_lanzaBadRequest() {
+            celularDisponible("123456789012345");
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("199"), 10);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("menor al precio");
+        }
+
+        @Test
+        @DisplayName("montoAbonado explícito que no coincide con la suma de enganches: 400")
+        void montoAbonadoNoCoincide_lanzaBadRequest() {
+            celularDisponible("123456789012345");
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+            request.setMontoAbonado(new BigDecimal("999"));
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("no coincide con la suma de los enganches");
+        }
+
+        @Test
+        @DisplayName("una venta PayJoy no admite desglose de pagos (Mixto): 400")
+        void conDesglose_lanzaBadRequest() {
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+            com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto pago = new com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto();
+            pago.setMetodoPago((byte) 1);
+            pago.setMonto(new BigDecimal("50"));
+            request.setPagos(List.of(pago));
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("no lleva desglose");
+        }
+
+        @Test
+        @DisplayName("sin cliente registrado: se permite igual (el saldo lo financia PayJoy, no es deuda del cliente)")
+        void sinCliente_sePermite() {
+            celularDisponible("123456789012345");
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+
+            VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
+
+            assertThat(response.getIdventa()).isNotNull();
+            verify(cuentaPorCobrarService, never()).crearDesdeVenta(any(), any(), any());
+        }
+    }
+
     // ── Crear — regalos y costo por unidad ───────────────────────────────────
 
     @Nested

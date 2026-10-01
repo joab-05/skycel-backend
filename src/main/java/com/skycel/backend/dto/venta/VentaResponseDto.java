@@ -33,6 +33,8 @@ public class VentaResponseDto {
     private String descripcionComprobante;  // "Ticket" / "Factura"
     private Byte metodoPago;
     private String descripcionMetodoPago;   // "Efectivo" / "Tarjeta" / etc.
+    private Byte tipoVenta;                 // 0 Normal, 1 Crédito PayJoy
+    private String descripcionTipoVenta;    // "Normal" / "Crédito PayJoy"
     private Byte estado;
     private String descripcionEstado;       // "Completada" / "Cancelada"
 

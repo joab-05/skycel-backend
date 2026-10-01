@@ -57,4 +57,44 @@ public interface VentaDetalleRepository extends JpaRepository<VentaDetalle, Inte
             """)
     List<TopProductoRow> topPorMonto(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta,
                                       @Param("codtis") List<Integer> codtis, Pageable limite);
+
+    /** Base para la comisión mensual de encargado: ventas NORMALES (sin PayJoy) de Equipo/Accesorio de su tienda,
+     *  sin regalos ni líneas con precio distinto al del sistema (no deben incentivar ese tipo de excepción). */
+    @Query("""
+            SELECT COALESCE(SUM(d.precioUnitarioFinal * d.cantidad), 0)
+            FROM VentaDetalle d JOIN d.venta v
+            WHERE v.estado = 1 AND v.tipoVenta = 0 AND v.tienda.codti = :codti
+            AND v.fechaVenta BETWEEN :desde AND :hasta
+            AND d.productoMaster.tipo <> com.skycel.backend.domain.enums.TipoProducto.SERVICIO
+            AND (d.esRegalo IS NULL OR d.esRegalo = false)
+            AND (d.precioAutorizado IS NULL OR d.precioAutorizado = false)
+            """)
+    java.math.BigDecimal baseComisionEncargado(@Param("codti") Integer codti,
+                                                @Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta);
+
+    /** Lo devuelto (procesado) de esas mismas ventas, para restarlo de la base mientras el período siga pendiente. */
+    @Query("""
+            SELECT COALESCE(SUM(dd.cantidad * dd.precioUnitario), 0)
+            FROM DevolucionDetalle dd
+            WHERE dd.devolucion.estado = 2
+            AND dd.iddetalleVenta IN (
+                SELECT d.iddetalleVenta FROM VentaDetalle d JOIN d.venta v
+                WHERE v.tipoVenta = 0 AND v.tienda.codti = :codti AND v.fechaVenta BETWEEN :desde AND :hasta
+            )
+            """)
+    java.math.BigDecimal devueltoComisionEncargado(@Param("codti") Integer codti,
+                                                     @Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta);
+
+    /** Cada línea de equipo vendida a crédito PayJoy en el rango (quién la vendió y en cuánto), para calcular
+     *  su comisión por tramo de precio. Ya excluye regalos y precio distinto al del sistema. */
+    @Query("""
+            SELECT new com.skycel.backend.dto.comision.VentaPayjoyLineaRow(
+                v.usuarioVendedor.idusuario, v.usuarioVendedor.nombreCompleto, d.iddetalleVenta, d.precioUnitarioFinal)
+            FROM VentaDetalle d JOIN d.venta v
+            WHERE v.estado = 1 AND v.tipoVenta = 1
+            AND v.fechaVenta BETWEEN :desde AND :hasta
+            AND (d.esRegalo IS NULL OR d.esRegalo = false)
+            AND (d.precioAutorizado IS NULL OR d.precioAutorizado = false)
+            """)
+    List<com.skycel.backend.dto.comision.VentaPayjoyLineaRow> lineasPayjoy(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta);
 }

@@ -18,4 +18,6 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Integer> {
     List<Usuario> findByTienda_CodtiAndActivoTrue(Integer codti);
 
     List<Usuario> findByRolAndActivoTrue(Rol rol);
+
+    List<Usuario> findByTienda_CodtiAndRolAndActivoTrue(Integer codti, Rol rol);
 }

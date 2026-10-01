@@ -29,4 +29,10 @@ public class VentaDetalleRequestDto {
 
     /** ¿El artículo es un regalo (precio 0 autorizado)? */
     private Boolean esRegalo = false;
+
+    /** Solo si la venta es tipoVenta=1 (Crédito PayJoy) y este renglón es el equipo financiado. */
+    private BigDecimal enganchePayjoy;
+
+    /** Solo junto con enganchePayjoy: plazo en semanas que PayJoy le dio al cliente. */
+    private Integer plazoSemanasPayjoy;
 }

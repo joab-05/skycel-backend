@@ -189,6 +189,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
   if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
   if (SUPERIOR.includes(s.rol)) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
+  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/comisiones', i: ic('percent'), t: 'Comisiones', grupo: 'Administración' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/descansos', i: ic('calendar'), t: 'Descansos', grupo: 'Administración' });
   items.push({ h: '#/pendientes', i: ic('cloud-upload'), t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
   return items;
@@ -275,6 +276,7 @@ async function render() {
     if (ruta === 'nomina-detalle' && param) return pantallaNominaDetalle(param);
     if (ruta === 'nomina-historial') return pantallaNominaHistorial();
     if (ruta === 'descansos') return pantallaDescansos();
+    if (ruta === 'comisiones') return pantallaComisiones();
     if (ruta === 'traspaso' && param) return pantallaTraspasoDetalle(param);
     if (ruta === 'traspaso-nuevo') return pantallaTraspasoNuevo(param);
     if (ruta === 'faltantes') return pantallaFaltantes();
@@ -3993,6 +3995,104 @@ async function cargarReporteSaldos(codti) {
   }
 }
 
+// ── Comisiones ───────────────────────────────────────────────────────────
+
+/** Comisión mensual de encargado (2% de su tienda, sin PayJoy) y comisión PayJoy (por equipo, quien lo venda). */
+async function pantallaComisiones() {
+  const s = Sesion.obtener();
+  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja las comisiones.</div>'; return; }
+
+  const hoy = new Date();
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+
+  root.innerHTML = `
+    <h1>${ic('percent')} Comisiones</h1>
+    <div class="tarjeta">
+      <label>Mes</label>
+      <input type="month" id="cm-mes" value="${mesActual}">
+      <button id="cm-ver-config" class="btn btn-gris btn-chico" style="margin-top:8px;">${ic('settings')} Tasas</button>
+      <div id="cm-config" class="oculto" style="margin-top:8px;"></div>
+    </div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Encargados (mensual)</h2>
+      <div id="cm-encargados"><div class="vacio">Cargando...</div></div>
+    </div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">PayJoy (por equipo)</h2>
+      <div id="cm-payjoy"><div class="vacio">Cargando...</div></div>
+    </div>`;
+
+  const selMes = document.getElementById('cm-mes');
+  selMes.onchange = () => cargarComisiones(selMes.value);
+  cargarComisiones(mesActual);
+
+  document.getElementById('cm-ver-config').onclick = async () => {
+    const cont = document.getElementById('cm-config');
+    cont.classList.toggle('oculto');
+    if (cont.classList.contains('oculto') || cont.innerHTML) return;
+    cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      const c = await api('GET', '/api/comisiones/config');
+      cont.innerHTML = `
+        <label>% mensual de encargado</label>
+        <input id="cc-tasa-encargado" type="number" step="0.01" value="${c.tasaEncargadoMensual}">
+        <label>PayJoy: precio umbral</label>
+        <input id="cc-umbral" type="number" step="0.01" value="${c.payjoyUmbral}">
+        <label>% PayJoy bajo el umbral</label>
+        <input id="cc-tasa-baja" type="number" step="0.01" value="${c.payjoyTasaBaja}">
+        <label>% PayJoy en el umbral o más</label>
+        <input id="cc-tasa-alta" type="number" step="0.01" value="${c.payjoyTasaAlta}">
+        <button id="cc-guardar" class="btn btn-verde btn-chico" style="margin-top:6px;">Guardar</button>`;
+      document.getElementById('cc-guardar').onclick = async () => {
+        try {
+          await api('PUT', '/api/comisiones/config', {
+            tasaEncargadoMensual: Number(document.getElementById('cc-tasa-encargado').value),
+            payjoyUmbral: Number(document.getElementById('cc-umbral').value),
+            payjoyTasaBaja: Number(document.getElementById('cc-tasa-baja').value),
+            payjoyTasaAlta: Number(document.getElementById('cc-tasa-alta').value),
+          });
+          mostrarMensaje(root, 'Tasas actualizadas.', 'ok');
+        } catch (err) { alert(err.message || 'No se pudo guardar.'); }
+      };
+    } catch (err) { cont.innerHTML = `<div class="mensaje error">${escapar(err.message || 'No se pudo cargar.')}</div>`; }
+  };
+}
+
+async function cargarComisiones(mes) {
+  const [anio, m] = mes.split('-').map(Number);
+  cargarListaComisiones('encargados', anio, m, document.getElementById('cm-encargados'));
+  cargarListaComisiones('payjoy', anio, m, document.getElementById('cm-payjoy'));
+}
+
+async function cargarListaComisiones(tipo, anio, mes, cont) {
+  cont.innerHTML = '<div class="vacio">Cargando...</div>';
+  try {
+    const lista = await api('GET', `/api/comisiones/${tipo}?anio=${anio}&mes=${mes}`);
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">Sin datos para este mes.</div>'; return; }
+    cont.innerHTML = lista.map((c, i) => `
+      <div class="detalle-fila">
+        <span class="k">${escapar(c.nombreEmpleado)}${c.nombreTienda ? ' <span class="ayuda">(' + escapar(c.nombreTienda) + ')</span>' : ''}
+          <div class="ayuda">Venta base: ${formatoDinero(c.ventaBase)}</div></span>
+        <span class="v">${formatoDinero(c.comision)}
+          ${c.pagada
+            ? ' <span class="pastilla lista">' + ic('circle-check') + ' Pagada ' + (c.fechaPago || '') + '</span>'
+            : ` <button class="btn btn-verde btn-chico cm-pagar" data-idx="${i}">Marcar pagada</button>`}</span>
+      </div>`).join('');
+    cont.querySelectorAll('.cm-pagar').forEach(btn => {
+      btn.onclick = async () => {
+        const c = lista[Number(btn.dataset.idx)];
+        if (!confirm(`¿Marcar como pagada la comisión de ${c.nombreEmpleado} (${formatoDinero(c.comision)})? Ya no se recalculará.`)) return;
+        try {
+          await api('POST', `/api/comisiones/${tipo}/${c.idempleado}/pagar?anio=${anio}&mes=${mes}`, undefined);
+          cargarListaComisiones(tipo, anio, mes, cont);
+        } catch (err) { alert(err.message || 'No se pudo marcar como pagada.'); }
+      };
+    });
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+  }
+}
+
 async function cargarDescansosTienda(codti) {
   const cont = document.getElementById('ds-cuerpo');
   cont.innerHTML = '<div class="vacio">Cargando...</div>';
@@ -4106,8 +4206,8 @@ async function pantallaPOS() {
         <option value="1">Efectivo</option>
         <option value="2">Tarjeta</option>
         <option value="3">Transferencia</option>
-        <option value="5">PayJoy</option>
       </select>
+      <div class="ayuda">Para una venta a crédito PayJoy usa JSystem en la tienda.</div>
       <div id="pv-efectivo-cont">
         <label>Monto recibido</label>
         <input id="pv-recibido" type="number" inputmode="decimal" min="0" step="0.01">

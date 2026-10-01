@@ -271,6 +271,26 @@ class DevolucionServiceTest {
             assertThat(r.getDiferencia()).isEqualByComparingTo("50");
             assertThat(r.getMetodoDiferencia()).isEqualTo((byte) 1);
         }
+
+        @Test
+        @DisplayName("reembolso de una venta PayJoy: el total es el enganche recibido, no el precio del equipo")
+        void reembolsoPayjoy_usaElEnganche() {
+            Venta ventaPayjoy = Venta.builder().idventa(51).tienda(zocalo).caja(caja).estado((byte) 1)
+                    .metodoPago((byte) 1).tipoVenta(VentaService.TIPO_VENTA_CREDITO_PAYJOY)
+                    .total(new BigDecimal("5000")).fechaVenta(LocalDateTime.now().minusDays(1)).build();
+            VentaDetalle dCelularPayjoy = VentaDetalle.builder().iddetalleVenta(20).venta(ventaPayjoy).productoMaster(mCelular)
+                    .codpro("CEL-000005").cantidad((short) 1).precioUnitarioFinal(new BigDecimal("5000"))
+                    .enganchePayjoy(new BigDecimal("500")).imei("350000000000099").esRegalo(false).build();
+            when(ventaRepository.findById(51)).thenReturn(Optional.of(ventaPayjoy));
+            when(ventaDetalleRepository.findByVenta_Idventa(51)).thenReturn(List.of(dCelularPayjoy));
+
+            DevolucionRequestDto dto = reembolso(linea(20, 1, true));
+            dto.setIdventa(51);
+
+            DevolucionResponseDto r = service.solicitar(dto, "yamilet");
+
+            assertThat(r.getTotalDevuelto()).isEqualByComparingTo("500");
+        }
     }
 
     // ── Aprobar / rechazar ────────────────────────────────────────────────────

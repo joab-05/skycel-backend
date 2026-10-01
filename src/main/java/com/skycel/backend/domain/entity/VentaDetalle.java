@@ -56,4 +56,18 @@ public class VentaDetalle {
 
     @Column(name = "imei", length = 20)
     private String imei;
+
+    /** Solo en una línea de una venta a crédito PayJoy: lo que el cliente dejó de enganche por ESTE equipo
+     *  (puede variar línea por línea si el carrito trae varios financiados). Null en cualquier otra línea. */
+    @Column(name = "enganche_payjoy", precision = 12, scale = 2)
+    private BigDecimal enganchePayjoy;
+
+    /** Plazo en semanas que PayJoy le dio al cliente para liquidar el resto de ESTE equipo. Null si no es PayJoy. */
+    @Column(name = "plazo_semanas_payjoy")
+    private Integer plazoSemanasPayjoy;
+
+    /** true cuando el precio cobrado no coincidió con el del sistema (venta sin conexión, aceptada ya ocurrida).
+     *  No comisiona: de lo contrario se incentivaría pedir precios distintos para ganar más comisión. */
+    @Column(name = "precio_autorizado", columnDefinition = "TINYINT(1) DEFAULT 0")
+    private Boolean precioAutorizado;
 }

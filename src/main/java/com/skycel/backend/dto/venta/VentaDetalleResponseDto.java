@@ -20,4 +20,7 @@ public class VentaDetalleResponseDto {
     private BigDecimal subtotal;
     private String imei;
     private Boolean esRegalo;
+    private BigDecimal enganchePayjoy;
+    private Integer plazoSemanasPayjoy;
+    private Boolean precioAutorizado;
 }

@@ -50,6 +50,11 @@ public class Venta {
     @Column(name = "metodo_pago", nullable = false, columnDefinition = "TINYINT")
     private Byte metodoPago;
 
+    /** 0 = Normal (de contado o a crédito con cliente), 1 = Crédito PayJoy (el enganche es lo único que cobra la
+     *  tienda; el resto lo financia PayJoy y se liquida aparte, fuera del sistema). No es un método de pago. */
+    @Column(name = "tipo_venta", nullable = false, columnDefinition = "TINYINT DEFAULT 0")
+    private Byte tipoVenta;
+
     @Column(name = "estado", nullable = false, columnDefinition = "TINYINT DEFAULT 1")
     private Byte estado;
 

@@ -140,7 +140,13 @@ public class DevolucionService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "De «" + nombre + "» solo se pueden devolver " + Math.max(0, disponible) + " unidad(es).");
             }
-            total = total.add(d.getPrecioUnitarioFinal().multiply(BigDecimal.valueOf(l.getCantidad())));
+            // En un reembolso de una venta a crédito PayJoy, lo único que la tienda puede devolver en efectivo es
+            // el enganche que recibió (el resto lo cubre PayJoy, no entró a la caja). Un cambio por otro producto
+            // sigue comparando contra el valor completo del equipo, no contra el enganche.
+            boolean esReembolsoPayjoy = dto.getTipo() == TIPO_REEMBOLSO
+                    && venta.getTipoVenta() != null && venta.getTipoVenta() == VentaService.TIPO_VENTA_CREDITO_PAYJOY
+                    && d.getEnganchePayjoy() != null;
+            total = total.add(esReembolsoPayjoy ? d.getEnganchePayjoy() : d.getPrecioUnitarioFinal().multiply(BigDecimal.valueOf(l.getCantidad())));
             detalles.add(DevolucionDetalle.builder()
                     .iddetalleVenta(d.getIddetalleVenta()).codpro(d.getCodpro()).nombreProducto(nombre).imei(d.getImei())
                     .cantidad(l.getCantidad()).precioUnitario(d.getPrecioUnitarioFinal())
