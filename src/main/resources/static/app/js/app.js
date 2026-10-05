@@ -2749,6 +2749,10 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       <label>Nombre del producto <span class="ayuda" style="display:inline;">(opcional: modelo, color, variante)</span></label>
       <input id="np-variante" maxlength="120" placeholder="Ej. A16 4/128gb Verde">
       <div class="ayuda" style="margin:6px 0 2px 0;">Se registrará como: <strong id="np-vista-previa">—</strong></div>
+      <label class="obligatorio">Proveedor</label>
+      <select id="np-proveedor"><option value="">Cargando proveedores...</option></select>
+      <label>Color <span class="ayuda" style="display:inline;">(opcional)</span></label>
+      <select id="np-color"><option value="">(sin color)</option></select>
       <div id="np-extra"></div>
       <label class="obligatorio">Precio de compra</label>
       <input id="np-precio-compra" type="number" inputmode="decimal" min="0" step="0.01">
@@ -2810,6 +2814,22 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   }
   dibujarNiveles();
 
+  // Proveedor (obligatorio al registrar) y color (opcional): se piden a los catálogos al abrir el formulario.
+  const selProveedor = document.getElementById('np-proveedor');
+  const selColor = document.getElementById('np-color');
+  (async () => {
+    try {
+      const [proveedores, colores] = await Promise.all([api('GET', '/api/catalogos/proveedores'), api('GET', '/api/catalogos/colores')]);
+      selProveedor.innerHTML = '<option value="">Elige el proveedor...</option>' +
+        proveedores.slice().sort((a, b) => (a.nombreCorto || '').localeCompare(b.nombreCorto || '', 'es'))
+          .map(p => `<option value="${p.id}">${escapar(p.nombreCorto)}</option>`).join('');
+      selColor.innerHTML = '<option value="">(sin color)</option>' +
+        colores.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(c => `<option value="${c.id}">${escapar(c.nombre)}</option>`).join('');
+    } catch {
+      selProveedor.innerHTML = '<option value="">No se pudo cargar la lista de proveedores</option>';
+    }
+  })();
+
   selPrincipal.onchange = () => dibujarNiveles({ principal: selPrincipal.value });
   selSub1.onchange = () => dibujarNiveles({ principal: selPrincipal.value, sub1: selSub1.value });
   selSub2.onchange = vistaPrevia;
@@ -2832,6 +2852,7 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
     const tipo = principal.tipo;
     const esEquipo = tipo === 'CELULAR' || tipo === 'TABLET';
     const esServicio = tipo === 'SERVICIO';
+    if (!selProveedor.value) { mostrarMensaje(root, 'Elige el proveedor del producto (si no está, agrégalo en Catálogos → Proveedores).', 'error'); return; }
     const precioCompra = Number(document.getElementById('np-precio-compra').value);
     const precioVenta = Number(document.getElementById('np-precio-venta').value);
     if ((!precioCompra && !esServicio) || precioCompra < 0) { mostrarMensaje(root, 'Indica el precio de compra.', 'error'); return; }
@@ -2843,6 +2864,8 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       codti: obtenerCodti(),
       precioCompra: precioCompra || 0,
       precioVenta,
+      idProveedor: Number(selProveedor.value),
+      idColor: selColor.value ? Number(selColor.value) : null,
       diasGarantia: document.getElementById('np-garantia').value ? Number(document.getElementById('np-garantia').value) : null,
     };
     if (esEquipo) {
@@ -2926,6 +2949,8 @@ async function pantallaProductoDetalle(param) {
       ${puedeEditar ? `<div class="detalle-fila"><span class="k">Precio compra</span><span class="v">${formatoDinero(p.preciopro)}</span></div>` : ''}
       <div class="detalle-fila"><span class="k">Precio venta</span><span class="v">${formatoDinero(p.preciopub)}</span></div>
       ${p.diasGarantia ? `<div class="detalle-fila"><span class="k">Garantía</span><span class="v">${p.diasGarantia} días</span></div>` : ''}
+      ${p.proveedor ? `<div class="detalle-fila"><span class="k">Proveedor</span><span class="v">${escapar(p.proveedor.nombreCorto || p.proveedor.nombreFiscal || '')}</span></div>` : ''}
+      ${p.color ? `<div class="detalle-fila"><span class="k">Color</span><span class="v">${escapar(p.color.nombre)}</span></div>` : ''}
     </div>
 
     ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
@@ -3002,7 +3027,7 @@ async function pantallaProductoEditar(param) {
   const s = Sesion.obtener();
   if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador puede editar productos.</div>'; return; }
   root.innerHTML = '<div class="vacio">Cargando...</div>';
-  let p, categorias = [];
+  let p, categorias = [], proveedores = [], colores = [];
   const volver = `#/producto/${encodeURIComponent(codti)}~${encodeURIComponent(codpro)}`;
   try {
     const productos = await api('GET', `/api/productos/tienda/${codti}`);
@@ -3012,6 +3037,9 @@ async function pantallaProductoEditar(param) {
       const aplanar = (lista) => lista.flatMap(c => [c, ...(c.subcategorias ? aplanar(c.subcategorias) : [])]);
       categorias = aplanar(await api('GET', '/api/categorias'));
     } catch { /* sin categorías se puede editar lo demás */ }
+    try {
+      [proveedores, colores] = await Promise.all([api('GET', '/api/catalogos/proveedores'), api('GET', '/api/catalogos/colores')]);
+    } catch { /* sin catálogos se puede editar lo demás */ }
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
       <button class="btn btn-gris" onclick="navegar('#/inventario')">Ir a inventario</button></div>`;
@@ -3062,8 +3090,14 @@ async function pantallaProductoEditar(param) {
     </div>
 
     <div class="tarjeta">
-      <h2>Precios y alerta de stock</h2>
+      <h2>Precios, proveedor y alerta de stock</h2>
       <div class="ayuda">${ayudaSucursal}.</div>
+      <label>Proveedor</label>
+      <select id="pe-proveedor"><option value="">(sin proveedor)</option>${proveedores.slice().sort((a, b) => (a.nombreCorto || '').localeCompare(b.nombreCorto || '', 'es'))
+        .map(x => `<option value="${x.id}" ${p.proveedor && p.proveedor.id === x.id ? 'selected' : ''}>${escapar(x.nombreCorto)}</option>`).join('')}</select>
+      <label>Color</label>
+      <select id="pe-color"><option value="">(sin color)</option>${colores.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+        .map(x => `<option value="${x.id}" ${p.color && p.color.id === x.id ? 'selected' : ''}>${escapar(x.nombre)}</option>`).join('')}</select>
       <div class="fila">
         <div><label>Precio de compra</label><input id="pe-precompra" type="number" inputmode="decimal" step="0.01" min="0" value="${p.preciopro ?? ''}"></div>
         <div><label class="obligatorio">Precio de venta</label><input id="pe-preventa" type="number" inputmode="decimal" step="0.01" min="0.01" value="${p.preciopub ?? ''}"></div>
@@ -3145,6 +3179,9 @@ async function pantallaProductoEditar(param) {
     if (venta == null || venta <= 0) { mostrarMensaje(root, 'Indica un precio de venta mayor a cero.', 'error'); return; }
     const todas = document.getElementById('pe-todas').checked;
     const cuerpo = { precioCompra: numero('pe-precompra'), precioVenta: venta };
+    const idProv = numero('pe-proveedor'), idCol = numero('pe-color');
+    if (idProv != null) cuerpo.idProveedor = idProv;
+    if (idCol != null) cuerpo.idColor = idCol;
     if (!esServicio) cuerpo.stockMinimo = numero('pe-stockmin') ?? 0;
     e.target.disabled = true;
     try {
@@ -4210,7 +4247,7 @@ function quitarAcentos(t) { return t.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 function textoBusqueda(p) {
   if (p._t === undefined) {
     p._t = quitarAcentos(`${p.nombreProductoMaster || ''} ${p.codpro || ''} ${p.marca || ''} ${p.modelo || ''} ${p.nombreCategoria || ''} ${p.categoriaPrincipal || ''} ${p.subcategoria1 || ''} ${p.subcategoria2 || ''} ` +
-      `${p.color?.nombre || ''} ${(p.imeisDisponibles || []).map(u => u.imei).join(' ')}`).toLowerCase();
+      `${p.color?.nombre || ''} ${p.proveedor?.nombreCorto || ''} ${(p.imeisDisponibles || []).map(u => u.imei).join(' ')}`).toLowerCase();
   }
   return p._t;
 }
