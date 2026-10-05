@@ -46,6 +46,7 @@ public class MigracionArbolService {
     private final CategoriaFolioRepository categoriaFolioRepository;
     private final DescuentoReglaRepository descuentoReglaRepository;
     private final jakarta.persistence.EntityManager entityManager;
+    private final DescripcionService descripcionService;
 
     @Transactional
     public MigracionArbolResultadoDTO planear() {
@@ -60,6 +61,77 @@ public class MigracionArbolService {
         MigracionArbolResultadoDTO r = new Corrida().ejecutar();
         r.setAplicado(true);
         return r;
+    }
+
+    /** Plan de la separación del color (solo lee: deshace la transacción). */
+    @Transactional
+    public MigracionArbolResultadoDTO planearSeparacionDeColor() {
+        MigracionArbolResultadoDTO r = separarColores();
+        TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        r.setAplicado(false);
+        return r;
+    }
+
+    @Transactional
+    public MigracionArbolResultadoDTO aplicarSeparacionDeColor() {
+        MigracionArbolResultadoDTO r = separarColores();
+        r.setAplicado(true);
+        return r;
+    }
+
+    /**
+     * Los artículos migrados llevan el color dentro de su descripción ("A16 4/128gb Verde"). Donde la descripción termina con el
+     * color de todos sus productos, el color pasa a ser un dato propio del artículo y la descripción queda sin él: el nombre
+     * completo no cambia. Los que no cumplen (la descripción no termina con el color, o sus productos tienen colores distintos)
+     * no se tocan.
+     */
+    private MigracionArbolResultadoDTO separarColores() {
+        MigracionArbolResultadoDTO resultado = new MigracionArbolResultadoDTO();
+        entityManager.setFlushMode(jakarta.persistence.FlushModeType.COMMIT);
+        for (ProductoMaster m : productoMasterRepository.findByActivoTrue()) {
+            if (m.getColor() != null || m.getNombreProducto() == null || m.getCategoria() == null) continue;
+            List<Producto> productos = productoRepository.findByProductoMaster_IdprodmasterOrderByIdproductoAsc(m.getIdprodmaster());
+            Set<Short> colores = new HashSet<>();
+            com.skycel.backend.domain.entity.Color color = null;
+            for (Producto p : productos) {
+                if (p.getColor() == null) { colores.add((short) -1); continue; }
+                colores.add(p.getColor().getIdcolor());
+                color = p.getColor();
+            }
+            if (color == null || colores.size() != 1) continue;
+            String desc = m.getNombreProducto().trim();
+            String c = color.getNombre().trim();
+            String resto;
+            if (desc.equalsIgnoreCase(c)) resto = null;
+            else if (desc.toLowerCase().endsWith(" " + c.toLowerCase())) resto = desc.substring(0, desc.length() - c.length() - 1).trim();
+            else continue;
+            String antes = m.getNombreBase();
+            m.setColor(color);
+            m.setNombreProducto(resto == null || resto.isEmpty() ? null : resto);
+            String despues = m.nombreCompleto();
+            if (!despues.equalsIgnoreCase(antes)) {
+                resultado.getAdvertencias().add("No se separó el color de '" + antes + "': el nombre quedaría '" + despues + "'.");
+                m.setColor(null);
+                m.setNombreProducto(desc);
+                continue;
+            }
+            productoMasterRepository.save(m);
+            resultado.getLineas().add(new Linea(m.getIdprodmaster(), desc, m.getNombreProducto() == null ? "" : m.getNombreProducto(), color.getNombre(), "COLOR_SEPARADO", productos.size()));
+            resultado.setMigrados(resultado.getMigrados() + 1);
+        }
+        // Cada descripción de los artículos pasa al catálogo (una por categoría y texto) para elegirla y reutilizarla.
+        int catalogadas = 0;
+        java.util.Set<Integer> yaCreadas = new java.util.HashSet<>();
+        for (ProductoMaster m : productoMasterRepository.findByActivoTrue()) {
+            if (m.getDescripcion() != null || m.getNombreProducto() == null || m.getNombreProducto().isBlank()
+                    || m.getCategoria() == null || m.getCategoria().nivel() < 2) continue;
+            com.skycel.backend.domain.entity.DescripcionProducto d = descripcionService.obtenerOCrear(m.getCategoria(), m.getNombreProducto());
+            if (yaCreadas.add(d.getIddescripcion())) catalogadas++;
+            m.setDescripcion(d);
+            productoMasterRepository.save(m);
+        }
+        resultado.setDescripcionesCatalogadas(catalogadas);
+        return resultado;
     }
 
     /** Una pasada de migración: guarda el estado (categorías conocidas, principales resueltas) mientras recorre los artículos. */

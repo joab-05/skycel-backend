@@ -16,6 +16,8 @@ public class MigracionArbolResultadoDTO {
     private int migrados;
     private int yaMigrados;
     private int tabletsComoEquipo;
+    /** Descripciones distintas que pasaron al catálogo de descripciones (separación del color). */
+    private int descripcionesCatalogadas;
     private List<String> categoriasCreadas = new ArrayList<>();
     private List<String> categoriasDesactivadas = new ArrayList<>();
     private List<String> advertencias = new ArrayList<>();

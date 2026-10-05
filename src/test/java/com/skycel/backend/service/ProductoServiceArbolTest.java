@@ -44,6 +44,7 @@ class ProductoServiceArbolTest {
     @Mock private ProductoMapper           productoMapper;
     @Mock private MovimientoInventarioService movimientoInventarioService;
     @Mock private DescuentoService         descuentoService;
+    @Mock private DescripcionService       descripcionService;
     @InjectMocks private ProductoService service;
 
     private Categoria equipos, celular, samsung, accesorios, cargador, servicios, reparacion, pantalla;
@@ -72,6 +73,9 @@ class ProductoServiceArbolTest {
         lenient().when(productoMapper.toProductoResponse(any(Producto.class))).thenAnswer(i -> new ProductoResponseDTO());
         lenient().when(productoRepository.save(any(Producto.class))).thenAnswer(i -> i.getArgument(0));
         lenient().when(categoriaFolioRepository.obtenerUltimoFolioGenerado(anyShort())).thenReturn(7L);
+        // el catálogo de descripciones: cada texto se vuelve una descripción de la categoría
+        lenient().when(descripcionService.obtenerOCrear(any(Categoria.class), anyString())).thenAnswer(i ->
+                DescripcionProducto.builder().iddescripcion(1).categoria(i.getArgument(0)).nombre(((String) i.getArgument(1)).trim()).activo(true).build());
     }
 
     private Categoria cat(int id, String nombre, Categoria padre, String codigo, TipoProducto tipo, boolean incluir) {
@@ -171,6 +175,81 @@ class ProductoServiceArbolTest {
         ArgumentCaptor<Producto> prod = ArgumentCaptor.forClass(Producto.class);
         verify(productoRepository).save(prod.capture());
         assertThat(prod.getValue().getCodpro()).isEqualTo("CEL-000008");
+    }
+
+    @Test
+    void el_color_va_aparte_de_la_descripcion_y_al_final_del_nombre() {
+        Color verde = new Color();
+        verde.setIdcolor((short) 5);
+        verde.setNombre("Verde");
+        when(colorRepository.findById((short) 5)).thenReturn(Optional.of(verde));
+        ProductoRequestDTO dto = alta((short) 3, "A16 4/128gb");
+        dto.setIdColor((short) 5);
+
+        service.crearProducto(dto);
+
+        ArgumentCaptor<ProductoMaster> master = ArgumentCaptor.forClass(ProductoMaster.class);
+        verify(productoMasterRepository).save(master.capture());
+        assertThat(master.getValue().getNombreBase()).isEqualTo("Celular Samsung A16 4/128gb Verde");
+        assertThat(master.getValue().getNombreProducto()).isEqualTo("A16 4/128gb");   // la descripción no lleva el color
+        assertThat(master.getValue().getColor()).isSameAs(verde);
+        ArgumentCaptor<Producto> prod = ArgumentCaptor.forClass(Producto.class);
+        verify(productoRepository).save(prod.capture());
+        assertThat(prod.getValue().getColor()).isSameAs(verde);   // el producto lleva el color de su artículo
+    }
+
+    @Test
+    void la_misma_descripcion_con_otro_color_es_otro_articulo_que_reutiliza_la_descripcion() {
+        Color azul = new Color();
+        azul.setIdcolor((short) 3);
+        azul.setNombre("Azul");
+        when(colorRepository.findById((short) 3)).thenReturn(Optional.of(azul));
+        ProductoRequestDTO dto = alta((short) 3, "A16 4/128gb");
+        dto.setIdColor((short) 3);
+        service.crearProducto(dto);
+
+        ArgumentCaptor<ProductoMaster> master = ArgumentCaptor.forClass(ProductoMaster.class);
+        verify(productoMasterRepository).save(master.capture());
+        assertThat(master.getValue().getNombreBase()).isEqualTo("Celular Samsung A16 4/128gb Azul");
+        verify(descripcionService).obtenerOCrear(samsung, "A16 4/128gb");   // una sola descripción en el catálogo
+    }
+
+    @Test
+    void una_descripcion_elegida_del_catalogo_se_usa_tal_cual() {
+        DescripcionProducto elegida = DescripcionProducto.builder().iddescripcion(9).categoria(samsung).nombre("A16 4/128gb").activo(true).build();
+        when(descripcionService.obtenerDe(9, samsung)).thenReturn(elegida);
+        ProductoRequestDTO dto = alta((short) 3, null);
+        dto.setIdDescripcion(9);
+
+        service.crearProducto(dto);
+
+        ArgumentCaptor<ProductoMaster> master = ArgumentCaptor.forClass(ProductoMaster.class);
+        verify(productoMasterRepository).save(master.capture());
+        assertThat(master.getValue().getDescripcion()).isSameAs(elegida);
+        assertThat(master.getValue().getNombreBase()).isEqualTo("Celular Samsung A16 4/128gb");
+        verify(descripcionService, never()).obtenerOCrear(any(Categoria.class), anyString());
+    }
+
+    @Test
+    void cambiar_el_color_rearma_el_nombre_y_el_color_de_los_productos() {
+        Color rojo = new Color();
+        rojo.setIdcolor((short) 4);
+        rojo.setNombre("Rojo");
+        when(colorRepository.findById((short) 4)).thenReturn(Optional.of(rojo));
+        ProductoMaster m = ProductoMaster.builder().idprodmaster(7).tipo(TipoProducto.CELULAR).categoria(samsung)
+                .nombreProducto("A16").nombreBase("Celular Samsung A16").build();
+        Producto fila = Producto.builder().idproducto(1).productoMaster(m).build();
+        when(productoMasterRepository.findById(7)).thenReturn(Optional.of(m));
+        when(productoRepository.findByProductoMaster_IdprodmasterOrderByIdproductoAsc(7)).thenReturn(java.util.List.of(fila));
+        when(productoMapper.toResponse(any(ProductoMaster.class))).thenAnswer(i -> new ProductoMasterResponseDTO());
+
+        ProductoMasterUpdateDTO dto = new ProductoMasterUpdateDTO();
+        dto.setIdColor((short) 4);
+        service.actualizarMaster(7, dto);
+
+        assertThat(m.getNombreBase()).isEqualTo("Celular Samsung A16 Rojo");
+        assertThat(m.getColor()).isSameAs(rojo);
+        assertThat(fila.getColor()).isSameAs(rojo);
     }
 
     @Test

@@ -38,6 +38,7 @@ public class ProductoService {
     private final DescuentoService         descuentoService;
     private final ProductoMapper           productoMapper;
     private final MovimientoInventarioService movimientoInventarioService;
+    private final DescripcionService       descripcionService;
 
     /** Contador reservado para los equipos (CEL-000001...). categoria_folio no tiene FK real, así que 0 no choca con ninguna categoría. */
     private static final short FOLIO_EQUIPOS = 0;
@@ -203,7 +204,9 @@ public class ProductoService {
         if (codpro == null || codpro.trim().isEmpty()) {
             // Si otra sucursal ya tiene este artículo, se reutiliza su código: el código identifica al artículo.
             final ProductoMaster masterFinal = master;
-            codpro = codigoDeOtraSucursal(masterFinal, dto.getIdColor(), tienda.getCodti())
+            final Short idColorEfectivo = dto.getIdColor() != null ? dto.getIdColor()
+                    : (masterFinal.getColor() != null ? masterFinal.getColor().getIdcolor() : null);
+            codpro = codigoDeOtraSucursal(masterFinal, idColorEfectivo, tienda.getCodti())
                     .orElseGet(() -> generarCodigoPara(masterFinal));
         } else {
             codpro = codpro.trim();
@@ -256,6 +259,7 @@ public class ProductoService {
 
         // Opcionales
         if (dto.getIdColor()     != null) producto.setColor(colorRepository.findById(dto.getIdColor()).orElse(null));
+        else if (master.getColor() != null) producto.setColor(master.getColor());   // el producto lleva el color de su artículo
         if (dto.getIdProveedor() != null) producto.setProveedor(proveedorRepository.findById(dto.getIdProveedor()).orElse(null));
         if (dto.getIdSeccion()   != null) producto.setSeccion(seccionRepository.findById(dto.getIdSeccion()).orElse(null));
 
@@ -285,8 +289,16 @@ public class ProductoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Elige al menos la subcategoría 1 (ej. Celular, Cargador, Reparación): los artículos no cuelgan de la categoría principal.");
         }
-        String nombreProducto = trimOrNull(dto.getNombreProducto());
-        String nombreCompleto = NombreArticulo.construir(cat, nombreProducto);
+        DescripcionProducto descripcion = null;
+        if (dto.getIdDescripcion() != null) {
+            descripcion = descripcionService.obtenerDe(dto.getIdDescripcion(), cat);
+        } else if (trimOrNull(dto.getNombreProducto()) != null) {
+            descripcion = descripcionService.obtenerOCrear(cat, dto.getNombreProducto());
+        }
+        String nombreProducto = descripcion != null ? descripcion.getNombre() : null;
+        Color colorArticulo = dto.getIdColor() == null ? null : colorRepository.findById(dto.getIdColor())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Color no encontrado: " + dto.getIdColor()));
+        String nombreCompleto = NombreArticulo.construir(cat, nombreProducto, colorArticulo != null ? colorArticulo.getNombre() : null);
 
         Optional<ProductoMaster> existente = productoMasterRepository.findByNombreBaseIgnoreCaseAndActivoTrue(nombreCompleto);
         if (existente.isPresent()) {
@@ -297,6 +309,8 @@ public class ProductoService {
         return productoMasterRepository.save(ProductoMaster.builder()
                 .nombreBase(nombreCompleto)
                 .nombreProducto(nombreProducto)
+                .descripcion(descripcion)
+                .color(colorArticulo)
                 .categoria(cat)
                 .tipo(tipo)
                 .compatibilidad(trimOrNull(dto.getCompatibilidad()))
@@ -391,16 +405,42 @@ public class ProductoService {
             }
             cambiaEstructura = !cat.getIdcat().equals(master.getCategoria() != null ? master.getCategoria().getIdcat() : null);
             master.setCategoria(cat);
+            if (cambiaEstructura && master.getNombreProducto() != null && dto.getIdDescripcion() == null && dto.getNombreProducto() == null
+                    && cat.nivel() >= 2) {
+                master.setDescripcion(descripcionService.obtenerOCrear(cat, master.getNombreProducto())); // la misma descripción, en la categoría nueva
+            }
         }
-        if (dto.getNombreProducto() != null) {
-            String variante = trimOrNull(dto.getNombreProducto());
+        if (dto.getIdDescripcion() != null || dto.getNombreProducto() != null) {
+            Categoria catDesc = master.getCategoria();
+            DescripcionProducto d = null;
+            if (dto.getIdDescripcion() != null) {
+                d = descripcionService.obtenerDe(dto.getIdDescripcion(), catDesc);
+            } else if (trimOrNull(dto.getNombreProducto()) != null) {
+                d = descripcionService.obtenerOCrear(catDesc, dto.getNombreProducto());
+            }
+            String variante = d != null ? d.getNombre() : null;
             cambiaEstructura |= !java.util.Objects.equals(variante, master.getNombreProducto());
+            master.setDescripcion(d);
             master.setNombreProducto(variante);
+        }
+        if (dto.getIdColor() != null || Boolean.TRUE.equals(dto.getSinColor())) {
+            Color nuevo = Boolean.TRUE.equals(dto.getSinColor()) ? null : colorRepository.findById(dto.getIdColor())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Color no encontrado: " + dto.getIdColor()));
+            Short idActual = master.getColor() != null ? master.getColor().getIdcolor() : null;
+            if (!java.util.Objects.equals(idActual, nuevo != null ? nuevo.getIdcolor() : null)) {
+                cambiaEstructura = true;
+                master.setColor(nuevo);
+                // el color de los productos (una fila por sucursal) sigue al del artículo
+                for (Producto fila : productoRepository.findByProductoMaster_IdprodmasterOrderByIdproductoAsc(master.getIdprodmaster())) {
+                    fila.setColor(nuevo);
+                    productoRepository.save(fila);
+                }
+            }
         }
         // Si cambió la categoría o la variante y no se manda un nombre propio, el nombre completo se rearma con el árbol.
         String nombreNuevo = dto.getNombreBase() != null ? dto.getNombreBase()
                 : cambiaEstructura && master.getCategoria() != null && master.getCategoria().nivel() >= 2
-                        ? NombreArticulo.construir(master.getCategoria(), master.getNombreProducto()) : null;
+                        ? master.nombreCompleto() : null;
         if (nombreNuevo != null) {
             String nombre = nombreNuevo.trim().replaceAll("\\s+", " ");
             if (nombre.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre del artículo no puede quedar vacío.");
@@ -693,7 +733,15 @@ public class ProductoService {
             if (ruta.size() >= 2) dto.setSubcategoria1(ruta.get(1).getNombre());
             if (ruta.size() >= 3) dto.setSubcategoria2(ruta.get(2).getNombre());
         }
-        if (p.getProductoMaster() != null) dto.setNombreProducto(p.getProductoMaster().getNombreProducto());
+        if (p.getProductoMaster() != null) {
+            dto.setNombreProducto(p.getProductoMaster().getNombreProducto());
+            if (p.getProductoMaster().getDescripcion() != null) dto.setIdDescripcion(p.getProductoMaster().getDescripcion().getIddescripcion());
+            Color colorArt = p.getProductoMaster().getColor();
+            if (colorArt != null) {
+                dto.setIdColorArticulo(colorArt.getIdcolor());
+                dto.setColorArticulo(colorArt.getNombre());
+            }
+        }
         boolean esServicio = false;
         if (p.getProductoMaster() != null) {
             dto.setMarca(p.getProductoMaster().getMarca());

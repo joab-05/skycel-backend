@@ -2670,10 +2670,48 @@ function rutaDeCategoria(categorias, idcat) {
 }
 
 /** El nombre completo que tendrá el artículo: lo mismo que arma el servidor. */
-function nombreArmadoDeArticulo(categorias, idHoja, variante) {
+function nombreArmadoDeArticulo(categorias, idHoja, descripcion, color) {
   const partes = rutaDeCategoria(categorias, idHoja).filter(c => c.incluirEnNombre !== false).map(c => c.nombre);
-  if (variante && variante.trim()) partes.push(variante.trim());
+  if (descripcion && descripcion.trim()) partes.push(descripcion.trim());
+  if (color && color.trim()) partes.push(color.trim());
   return partes.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Descripciones guardadas de una categoría (se eligen de la lista para reutilizarlas, como una subcategoría más). */
+async function cargarDescripciones(idCategoria) {
+  if (!idCategoria) return [];
+  try { return await api('GET', '/api/descripciones?idCategoria=' + idCategoria); } catch { return []; }
+}
+
+/** Formulario para crear una descripción nueva en la categoría; si ya existe una igual, el servidor devuelve esa. */
+function formularioNuevaDescripcion(cont, hoja, alCrear) {
+  cont.classList.remove('oculto');
+  cont.innerHTML = `
+    <div class="tarjeta" style="background:var(--gris-claro);">
+      <h2 style="margin-top:0;">Nueva descripción en ${escapar(hoja.nombre)}</h2>
+      <label class="obligatorio">Descripción</label>
+      <input id="nd-nombre" maxlength="120" placeholder="Ej. A16 4/128gb (sin el color)">
+      <div class="ayuda">Se guarda para elegirla otra vez (por ejemplo con otro color). El color va aparte.</div>
+      <div class="grupo-botones">
+        <button id="nd-guardar" class="btn btn-azul btn-chico">Guardar</button>
+        <button id="nd-cancelar" class="btn btn-gris btn-chico">Cancelar</button>
+      </div>
+    </div>`;
+  document.getElementById('nd-cancelar').onclick = () => { cont.classList.add('oculto'); cont.innerHTML = ''; };
+  document.getElementById('nd-guardar').onclick = async (e) => {
+    const nombre = document.getElementById('nd-nombre').value.trim();
+    if (!nombre) { mostrarMensaje(root, 'Escribe la descripción.', 'error'); return; }
+    e.target.disabled = true;
+    try {
+      const d = await api('POST', '/api/descripciones', { idCategoria: hoja.idcat, nombre });
+      cont.classList.add('oculto');
+      cont.innerHTML = '';
+      alCrear(d);
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+    }
+  };
 }
 
 /**
@@ -2746,13 +2784,17 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
         <button id="np-nueva-sub2" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
       </div>
       <div id="np-categoria-form" class="oculto"></div>
-      <label>Nombre del producto <span class="ayuda" style="display:inline;">(opcional: modelo, color, variante)</span></label>
-      <input id="np-variante" maxlength="120" placeholder="Ej. A16 4/128gb Verde">
+      <label>Descripción del producto <span class="ayuda" style="display:inline;">(modelo, medida...; sin el color)</span></label>
+      <div class="fila">
+        <select id="np-descripcion"><option value="">(sin descripción)</option></select>
+        <button id="np-nueva-descripcion" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+      </div>
+      <div id="np-descripcion-form" class="oculto"></div>
+      <label>Color <span class="ayuda" style="display:inline;">(opcional)</span></label>
+      <select id="np-color"><option value="">(sin color)</option></select>
       <div class="ayuda" style="margin:6px 0 2px 0;">Se registrará como: <strong id="np-vista-previa">—</strong></div>
       <label class="obligatorio">Proveedor</label>
       <select id="np-proveedor"><option value="">Cargando proveedores...</option></select>
-      <label>Color <span class="ayuda" style="display:inline;">(opcional)</span></label>
-      <select id="np-color"><option value="">(sin color)</option></select>
       <div id="np-extra"></div>
       <label class="obligatorio">Precio de compra</label>
       <input id="np-precio-compra" type="number" inputmode="decimal" min="0" step="0.01">
@@ -2766,7 +2808,10 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   const selPrincipal = document.getElementById('np-principal');
   const selSub1 = document.getElementById('np-sub1');
   const selSub2 = document.getElementById('np-sub2');
-  const inputVariante = document.getElementById('np-variante');
+  const selDescripcion = document.getElementById('np-descripcion');
+  const contDescripcion = document.getElementById('np-descripcion-form');
+  let colores = [];
+  let descripciones = [];
   const contForm = document.getElementById('np-categoria-form');
   const opciones = (lista, vacio) => (vacio ? `<option value="">${vacio}</option>` : '') + lista.map(c => `<option value="${c.idcat}">${escapar(c.nombre)}</option>`).join('');
   const principalActual = () => categorias.find(c => c.idcat === Number(selPrincipal.value)) || null;
@@ -2791,9 +2836,23 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
     }
   }
 
+  const selColorActual = () => colores.find(c => c.id === Number(document.getElementById('np-color').value)) || null;
+  const descripcionActual = () => descripciones.find(d => d.id === Number(selDescripcion.value)) || null;
+
   function vistaPrevia() {
     const hoja = sub2Actual() || sub1Actual();
-    document.getElementById('np-vista-previa').textContent = hoja ? nombreArmadoDeArticulo(categorias, hoja.idcat, inputVariante.value) : '—';
+    document.getElementById('np-vista-previa').textContent = hoja
+      ? nombreArmadoDeArticulo(categorias, hoja.idcat, descripcionActual()?.nombre, selColorActual()?.nombre) : '—';
+  }
+
+  // Las descripciones guardadas de la categoría elegida (la más profunda): se eligen, o se crea una con "+ Nueva".
+  async function llenarDescripciones(elegida) {
+    const hoja = sub2Actual() || sub1Actual();
+    descripciones = hoja ? await cargarDescripciones(hoja.idcat) : [];
+    selDescripcion.innerHTML = '<option value="">(sin descripción)</option>' + descripciones.map(d => `<option value="${d.id}">${escapar(d.nombre)}</option>`).join('');
+    if (elegida != null) selDescripcion.value = elegida;
+    document.getElementById('np-nueva-descripcion').disabled = !hoja;
+    vistaPrevia();
   }
 
   function dibujarNiveles(elegir = {}) {
@@ -2811,6 +2870,7 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
     document.getElementById('np-nueva-sub2').disabled = !s1;
     dibujarExtra();
     vistaPrevia();
+    llenarDescripciones();
   }
   dibujarNiveles();
 
@@ -2819,7 +2879,8 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   const selColor = document.getElementById('np-color');
   (async () => {
     try {
-      const [proveedores, colores] = await Promise.all([api('GET', '/api/catalogos/proveedores'), api('GET', '/api/catalogos/colores')]);
+      const [proveedores, listaColores] = await Promise.all([api('GET', '/api/catalogos/proveedores'), api('GET', '/api/catalogos/colores')]);
+      colores = listaColores;
       selProveedor.innerHTML = '<option value="">Elige el proveedor...</option>' +
         proveedores.slice().sort((a, b) => (a.nombreCorto || '').localeCompare(b.nombreCorto || '', 'es'))
           .map(p => `<option value="${p.id}">${escapar(p.nombreCorto)}</option>`).join('');
@@ -2832,8 +2893,13 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
 
   selPrincipal.onchange = () => dibujarNiveles({ principal: selPrincipal.value });
   selSub1.onchange = () => dibujarNiveles({ principal: selPrincipal.value, sub1: selSub1.value });
-  selSub2.onchange = vistaPrevia;
-  inputVariante.addEventListener('input', vistaPrevia);
+  selSub2.onchange = () => { vistaPrevia(); llenarDescripciones(); };
+  selDescripcion.onchange = vistaPrevia;
+  selColor.onchange = vistaPrevia;
+  document.getElementById('np-nueva-descripcion').onclick = () => {
+    const hoja = sub2Actual() || sub1Actual();
+    if (hoja) formularioNuevaDescripcion(contDescripcion, hoja, (d) => { llenarDescripciones(d.id); mostrarMensaje(root, `Descripción "${d.nombre}" lista para elegir.`, 'ok'); });
+  };
 
   document.getElementById('np-nueva-principal').onclick = () =>
     formularioNuevaCategoria(contForm, 1, null, (n) => { categorias.push(n); dibujarNiveles({ principal: n.idcat }); });
@@ -2860,7 +2926,7 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
 
     const payload = {
       idCategoria: hoja.idcat,
-      nombreProducto: inputVariante.value.trim() || null,
+      idDescripcion: selDescripcion.value ? Number(selDescripcion.value) : null,
       codti: obtenerCodti(),
       precioCompra: precioCompra || 0,
       precioVenta,
@@ -2950,7 +3016,8 @@ async function pantallaProductoDetalle(param) {
       <div class="detalle-fila"><span class="k">Precio venta</span><span class="v">${formatoDinero(p.preciopub)}</span></div>
       ${p.diasGarantia ? `<div class="detalle-fila"><span class="k">Garantía</span><span class="v">${p.diasGarantia} días</span></div>` : ''}
       ${p.proveedor ? `<div class="detalle-fila"><span class="k">Proveedor</span><span class="v">${escapar(p.proveedor.nombreCorto || p.proveedor.nombreFiscal || '')}</span></div>` : ''}
-      ${p.color ? `<div class="detalle-fila"><span class="k">Color</span><span class="v">${escapar(p.color.nombre)}</span></div>` : ''}
+      ${p.nombreProducto ? `<div class="detalle-fila"><span class="k">Descripción</span><span class="v">${escapar(p.nombreProducto)}</span></div>` : ''}
+      ${(p.colorArticulo || p.color) ? `<div class="detalle-fila"><span class="k">Color</span><span class="v">${escapar(p.colorArticulo || p.color.nombre)}</span></div>` : ''}
     </div>
 
     ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
@@ -3073,8 +3140,15 @@ async function pantallaProductoEditar(param) {
         <select id="pe-sub1">${hijosDeCategoria(categorias, rutaActual[0].idcat).map(c => `<option value="${c.idcat}" ${c.idcat === rutaActual[1].idcat ? 'selected' : ''}>${escapar(c.nombre)}</option>`).join('')}</select>
         <label>Subcategoría 2</label>
         <select id="pe-sub2"></select>
-        <label>Nombre del producto</label>
-        <input id="pe-variante" maxlength="120" value="${escapar(p.nombreProducto || '')}" placeholder="Ej. A16 4/128gb Verde">
+        <label>Descripción del producto</label>
+        <div class="fila">
+          <select id="pe-descripcion"><option value="">(sin descripción)</option></select>
+          <button id="pe-nueva-descripcion" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+        </div>
+        <div id="pe-descripcion-form" class="oculto"></div>
+        <label>Color <span class="ayuda" style="display:inline;">(opcional)</span></label>
+        <select id="pe-color-art"><option value="">(sin color)</option>${colores.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+          .map(x => `<option value="${x.id}" ${p.idColorArticulo === x.id ? 'selected' : ''}>${escapar(x.nombre)}</option>`).join('')}</select>
         <div class="ayuda" style="margin:6px 0 2px 0;">Se registra como: <strong id="pe-vista-previa">—</strong></div>
       ` : `
         <label class="obligatorio">Nombre</label>
@@ -3095,9 +3169,6 @@ async function pantallaProductoEditar(param) {
       <label>Proveedor</label>
       <select id="pe-proveedor"><option value="">(sin proveedor)</option>${proveedores.slice().sort((a, b) => (a.nombreCorto || '').localeCompare(b.nombreCorto || '', 'es'))
         .map(x => `<option value="${x.id}" ${p.proveedor && p.proveedor.id === x.id ? 'selected' : ''}>${escapar(x.nombreCorto)}</option>`).join('')}</select>
-      <label>Color</label>
-      <select id="pe-color"><option value="">(sin color)</option>${colores.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-        .map(x => `<option value="${x.id}" ${p.color && p.color.id === x.id ? 'selected' : ''}>${escapar(x.nombre)}</option>`).join('')}</select>
       <div class="fila">
         <div><label>Precio de compra</label><input id="pe-precompra" type="number" inputmode="decimal" step="0.01" min="0" value="${p.preciopro ?? ''}"></div>
         <div><label class="obligatorio">Precio de venta</label><input id="pe-preventa" type="number" inputmode="decimal" step="0.01" min="0.01" value="${p.preciopub ?? ''}"></div>
@@ -3134,19 +3205,36 @@ async function pantallaProductoEditar(param) {
   if (enArbol) {
     const selSub1 = document.getElementById('pe-sub1');
     const selSub2 = document.getElementById('pe-sub2');
-    const inputVariante = document.getElementById('pe-variante');
+    const selDescripcion = document.getElementById('pe-descripcion');
+    const selColorArt = document.getElementById('pe-color-art');
     const hojaActual = () => Number(selSub2.value) || Number(selSub1.value);
+    let descripciones = [];
     const llenarSub2 = (elegida) => {
       selSub2.innerHTML = '<option value="">(ninguna)</option>' +
         hijosDeCategoria(categorias, Number(selSub1.value)).map(c => `<option value="${c.idcat}">${escapar(c.nombre)}</option>`).join('');
       if (elegida) selSub2.value = elegida;
     };
-    const vistaPrevia = () => { document.getElementById('pe-vista-previa').textContent = nombreArmadoDeArticulo(categorias, hojaActual(), inputVariante.value) || '—'; };
+    const vistaPrevia = () => {
+      const d = descripciones.find(x => x.id === Number(selDescripcion.value));
+      const c = colores.find(x => x.id === Number(selColorArt.value));
+      document.getElementById('pe-vista-previa').textContent = nombreArmadoDeArticulo(categorias, hojaActual(), d?.nombre, c?.nombre) || '—';
+    };
+    const llenarDescripciones = async (elegida) => {
+      descripciones = await cargarDescripciones(hojaActual());
+      selDescripcion.innerHTML = '<option value="">(sin descripción)</option>' + descripciones.map(d => `<option value="${d.id}">${escapar(d.nombre)}</option>`).join('');
+      if (elegida != null) selDescripcion.value = elegida;
+      vistaPrevia();
+    };
     llenarSub2(rutaActual[2]?.idcat);
-    vistaPrevia();
-    selSub1.onchange = () => { llenarSub2(null); vistaPrevia(); };
-    selSub2.onchange = vistaPrevia;
-    inputVariante.addEventListener('input', vistaPrevia);
+    llenarDescripciones(p.idDescripcion);
+    selSub1.onchange = () => { llenarSub2(null); llenarDescripciones(); };
+    selSub2.onchange = () => llenarDescripciones();
+    selDescripcion.onchange = vistaPrevia;
+    selColorArt.onchange = vistaPrevia;
+    document.getElementById('pe-nueva-descripcion').onclick = () => {
+      formularioNuevaDescripcion(document.getElementById('pe-descripcion-form'), { idcat: hojaActual(), nombre: rutaDeCategoria(categorias, hojaActual()).slice(-1)[0]?.nombre || '' },
+        (d) => { llenarDescripciones(d.id); mostrarMensaje(root, `Descripción "${d.nombre}" lista para elegir.`, 'ok'); });
+    };
   }
 
   document.getElementById('pe-guardar-datos').onclick = async (e) => {
@@ -3154,7 +3242,11 @@ async function pantallaProductoEditar(param) {
     if (enArbol) {
       const hoja = Number(document.getElementById('pe-sub2').value) || Number(document.getElementById('pe-sub1').value);
       if (!hoja) { mostrarMensaje(root, 'Elige la subcategoría 1.', 'error'); return; }
-      cuerpo = { idCategoria: hoja, nombreProducto: document.getElementById('pe-variante').value.trim() };
+      cuerpo = { idCategoria: hoja };
+      const dsel = document.getElementById('pe-descripcion').value;
+      if (dsel) cuerpo.idDescripcion = Number(dsel); else if (p.nombreProducto) cuerpo.nombreProducto = '';
+      const csel = document.getElementById('pe-color-art').value;
+      if (csel) cuerpo.idColor = Number(csel); else if (p.idColorArticulo != null) cuerpo.sinColor = true;
     } else {
       const nombre = document.getElementById('pe-nombre').value.trim();
       if (!nombre) { mostrarMensaje(root, 'El nombre no puede quedar vacío.', 'error'); return; }
@@ -3179,9 +3271,8 @@ async function pantallaProductoEditar(param) {
     if (venta == null || venta <= 0) { mostrarMensaje(root, 'Indica un precio de venta mayor a cero.', 'error'); return; }
     const todas = document.getElementById('pe-todas').checked;
     const cuerpo = { precioCompra: numero('pe-precompra'), precioVenta: venta };
-    const idProv = numero('pe-proveedor'), idCol = numero('pe-color');
+    const idProv = numero('pe-proveedor');
     if (idProv != null) cuerpo.idProveedor = idProv;
-    if (idCol != null) cuerpo.idColor = idCol;
     if (!esServicio) cuerpo.stockMinimo = numero('pe-stockmin') ?? 0;
     e.target.disabled = true;
     try {

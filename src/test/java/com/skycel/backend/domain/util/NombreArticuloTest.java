@@ -45,6 +45,16 @@ class NombreArticuloTest {
     }
 
     @Test
+    void el_color_va_al_final_despues_de_la_descripcion() {
+        Categoria equipos = cat("Equipos", null, false);
+        Categoria celular = cat("Celular", equipos, true);
+        Categoria samsung = cat("Samsung", celular, true);
+        assertThat(NombreArticulo.construir(samsung, "A16 4/128gb", "Verde")).isEqualTo("Celular Samsung A16 4/128gb Verde");
+        assertThat(NombreArticulo.construir(samsung, null, "Verde")).isEqualTo("Celular Samsung Verde");
+        assertThat(NombreArticulo.construir(samsung, "A16", null)).isEqualTo("Celular Samsung A16");
+    }
+
+    @Test
     void ruta_nivel_y_subcategoria1() {
         Categoria equipos = cat("Equipos", null, false);
         Categoria celular = cat("Celular", equipos, true);

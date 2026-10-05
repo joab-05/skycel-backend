@@ -31,7 +31,10 @@ public class ProductoResponseDTO {
     private Integer diasGarantia;         // días de garantía del artículo o servicio
     private String  nombreCategoria;      // ← categoría del maestro (la más profunda del árbol)
     private Short   idCategoria;          // id de esa categoría
-    private String  nombreProducto;       // último eslabón del nombre (la variante), si lo tiene
+    private String  nombreProducto;       // la descripción del producto (sin el color), si la tiene
+    private Integer idDescripcion;        // id de la descripción en el catálogo
+    private Short   idColorArticulo;      // color del artículo (parte de su nombre completo), si lo tiene
+    private String  colorArticulo;
     private Short   idCategoriaPrincipal; // categoría principal del árbol (nivel 1)
     private String  categoriaPrincipal;
     private String  subcategoria1;        // nivel 2 (define el prefijo del código)

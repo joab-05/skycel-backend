@@ -17,6 +17,9 @@ public interface ProductoMasterRepository extends JpaRepository<ProductoMaster, 
     
     List<ProductoMaster> findByCategoria_IdcatAndActivoTrue(Short idcat);
 
+    /** Los artículos que usan esa descripción del catálogo. */
+    List<ProductoMaster> findByDescripcion_Iddescripcion(Integer iddescripcion);
+
     /** Los artículos (activos o no) que cuelgan de cualquiera de esas categorías. */
     List<ProductoMaster> findByCategoria_IdcatIn(java.util.Collection<Short> idcats);
 

@@ -38,6 +38,24 @@ public class ProductoMaster {
     @Column(name = "nombre_producto", length = 120)
     private String nombreProducto;
 
+    // La descripción guardada en el catálogo (se elige o se crea una vez y se reutiliza). nombreProducto es su texto.
+    @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "iddescripcion")
+    private DescripcionProducto descripcion;
+
+    // Color del artículo, separado de la descripción (nombreProducto). El nombre completo es
+    // categorías + descripción + color. Es opcional; el color de cada producto (por sucursal) sigue en Producto.
+    @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idcolor")
+    private Color color;
+
+    /** Nombre completo según el árbol de categorías: camino + descripción + color. */
+    public String nombreCompleto() {
+        return com.skycel.backend.domain.util.NombreArticulo.construir(categoria, nombreProducto, color != null ? color.getNombre() : null);
+    }
+
     @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "idcat", nullable = false)

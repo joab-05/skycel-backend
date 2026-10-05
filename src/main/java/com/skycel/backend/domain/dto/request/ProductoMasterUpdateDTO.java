@@ -19,6 +19,13 @@ public class ProductoMasterUpdateDTO {
     @Size(max = 120, message = "El nombre del producto no puede exceder los 120 caracteres")
     private String nombreProducto;
 
+    /** Otra descripción del catálogo de la categoría (alternativa a nombreProducto). */
+    private Integer idDescripcion;
+
+    /** Nuevo color del artículo (separado de la descripción). Con sinColor se quita. */
+    private Short idColor;
+    private Boolean sinColor;
+
     /** Nueva categoría (del mismo tipo de producto que el artículo). */
     private Short idCategoria;
 

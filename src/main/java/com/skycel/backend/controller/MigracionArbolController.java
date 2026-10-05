@@ -38,4 +38,24 @@ public class MigracionArbolController {
         }
         return migracionArbolService.aplicar();
     }
+
+    @Operation(summary = "Plan: separar el color de la descripción", description = "Muestra qué artículos migrados pasarían a llevar el color como dato propio. No guarda nada.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/separar-color/plan")
+    @PreAuthorize("hasRole('ROOT')")
+    public MigracionArbolResultadoDTO planSepararColor() {
+        return migracionArbolService.planearSeparacionDeColor();
+    }
+
+    @Operation(summary = "Separar el color de la descripción", description = "Requiere confirmar=true. El nombre completo de los artículos no cambia.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/separar-color/aplicar")
+    @PreAuthorize("hasRole('ROOT')")
+    public MigracionArbolResultadoDTO aplicarSepararColor(@RequestParam(defaultValue = "false") boolean confirmar) {
+        if (!confirmar) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Esta operación modifica el catálogo. Respalda la base de datos y vuelve a llamar con confirmar=true.");
+        }
+        return migracionArbolService.aplicarSeparacionDeColor();
+    }
 }

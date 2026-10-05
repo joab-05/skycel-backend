@@ -56,7 +56,8 @@ public class ProductoRequestDTO {
     // El nombre completo se arma con las categorías; el tipo (comportamiento) sale de la categoría principal.
     private Short  idCategoria;
     @Size(max = 120)
-    private String nombreProducto;
+    private String nombreProducto;       // la descripción como texto: se reutiliza la del catálogo si ya existe, o se crea
+    private Integer idDescripcion;       // o el id de una descripción ya elegida del catálogo de la categoría
 
     private String tipoMaster;         // Opcional. CELULAR, ACCESORIO, SERVICIO. Usado si se crea el maestro.
 

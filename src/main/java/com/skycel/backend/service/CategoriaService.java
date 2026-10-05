@@ -104,7 +104,7 @@ public class CategoriaService {
         List<ProductoMaster> afectados = productoMasterRepository.findByCategoria_IdcatIn(subarbol);
         Map<Integer, Boolean> nombreArmado = new HashMap<>();
         for (ProductoMaster m : afectados) {
-            nombreArmado.put(m.getIdprodmaster(), NombreArticulo.construir(m.getCategoria(), m.getNombreProducto())
+            nombreArmado.put(m.getIdprodmaster(), m.nombreCompleto()
                     .equalsIgnoreCase(m.getNombreBase()));
         }
 
@@ -159,7 +159,7 @@ public class CategoriaService {
 
         for (ProductoMaster m : afectados) {
             if (Boolean.TRUE.equals(nombreArmado.get(m.getIdprodmaster()))) {
-                m.setNombreBase(NombreArticulo.construir(m.getCategoria(), m.getNombreProducto()));
+                m.setNombreBase(m.nombreCompleto());
                 productoMasterRepository.save(m);
             }
         }

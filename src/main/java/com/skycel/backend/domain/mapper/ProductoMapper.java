@@ -17,6 +17,9 @@ public interface ProductoMapper {
     @Mapping(target = "idprodmaster", ignore = true)
     @Mapping(target = "nombreBase", source = "nombre")
     @Mapping(target = "especificaciones", source = "descripcion")
+    @Mapping(target = "descripcion", ignore = true) // la descripción del catálogo se asigna en el servicio
+    @Mapping(target = "color", ignore = true)
+    @Mapping(target = "nombreProducto", ignore = true)
     @Mapping(target = "notaAdicional", ignore = true)
     @Mapping(target = "categoria", ignore = true) // Set in service
     @Mapping(target = "activo", constant = "true")
@@ -26,6 +29,9 @@ public interface ProductoMapper {
     @Mapping(target = "idprodmaster", ignore = true)
     @Mapping(target = "nombreBase", source = "nombre")
     @Mapping(target = "especificaciones", source = "descripcion")
+    @Mapping(target = "descripcion", ignore = true) // la descripción del catálogo se asigna en el servicio
+    @Mapping(target = "color", ignore = true)
+    @Mapping(target = "nombreProducto", ignore = true)
     @Mapping(target = "notaAdicional", ignore = true)
     @Mapping(target = "categoria", ignore = true)
     @Mapping(target = "activo", ignore = true)
