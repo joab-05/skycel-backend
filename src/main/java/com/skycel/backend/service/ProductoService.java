@@ -5,6 +5,7 @@ import com.skycel.backend.domain.dto.response.*;
 import com.skycel.backend.domain.entity.*;
 import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.domain.mapper.ProductoMapper;
+import com.skycel.backend.domain.util.NombreArticulo;
 import com.skycel.backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -127,6 +128,8 @@ public class ProductoService {
         if (dto.getIdProductoMaster() != null) {
             master = productoMasterRepository.findById(Math.toIntExact(dto.getIdProductoMaster()))
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Producto Master no encontrado"));
+        } else if (dto.getIdCategoria() != null) {
+            master = resolverMasterDelArbol(dto);
         } else {
             // Resolver tipo de producto primero — decide cómo se arma el nombre y qué
             // campos (marca/modelo vs descripción/descripción2) aplican.
@@ -267,6 +270,42 @@ public class ProductoService {
         return toDto(saved);
     }
 
+    /**
+     * Registro por árbol de categorías: el artículo es "categorías + nombreProducto" (ej. Celular > Samsung > A16 4/128gb Verde).
+     * Si ya existe uno con ese nombre completo se reutiliza (otra sucursal, o un alta repetida); si no, se crea.
+     * El tipo (comportamiento) lo da la categoría principal.
+     */
+    private ProductoMaster resolverMasterDelArbol(ProductoRequestDTO dto) {
+        Categoria cat = categoriaRepository.findById(dto.getIdCategoria())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Categoría no encontrada: " + dto.getIdCategoria()));
+        if (!Boolean.TRUE.equals(cat.getActivo())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La categoría '" + cat.getNombre() + "' está desactivada.");
+        }
+        if (cat.nivel() < 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Elige al menos la subcategoría 1 (ej. Celular, Cargador, Reparación): los artículos no cuelgan de la categoría principal.");
+        }
+        String nombreProducto = trimOrNull(dto.getNombreProducto());
+        String nombreCompleto = NombreArticulo.construir(cat, nombreProducto);
+
+        Optional<ProductoMaster> existente = productoMasterRepository.findByNombreBaseIgnoreCaseAndActivoTrue(nombreCompleto);
+        if (existente.isPresent()) {
+            return existente.get();
+        }
+        TipoProducto tipo = cat.raiz().getTipo();
+        boolean esServicio = tipo == TipoProducto.SERVICIO;
+        return productoMasterRepository.save(ProductoMaster.builder()
+                .nombreBase(nombreCompleto)
+                .nombreProducto(nombreProducto)
+                .categoria(cat)
+                .tipo(tipo)
+                .compatibilidad(trimOrNull(dto.getCompatibilidad()))
+                .tiempoEstimadoMin(esServicio ? validarTiempo(dto.getTiempoEstimadoMin()) : null)
+                .diasGarantia(validarDiasGarantia(dto.getDiasGarantia()))
+                .activo(true)
+                .build());
+    }
+
     // ── Actualizar precios / datos ────────────────────────────────────────────
 
     /**
@@ -343,21 +382,32 @@ public class ProductoService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Producto maestro no encontrado: " + idprodmaster));
 
-        if (dto.getNombreBase() != null) {
-            String nombre = dto.getNombreBase().trim().replaceAll("\\s+", " ");
-            if (nombre.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre del artículo no puede quedar vacío.");
-            productoMasterRepository.findByNombreBaseIgnoreCaseAndActivoTrue(nombre)
-                    .filter(otro -> !otro.getIdprodmaster().equals(master.getIdprodmaster()))
-                    .ifPresent(otro -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe otro artículo llamado '" + nombre + "'."); });
-            master.setNombreBase(nombre);
-        }
+        boolean cambiaEstructura = false;
         if (dto.getIdCategoria() != null) {
             Categoria cat = categoriaRepository.findById(dto.getIdCategoria())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Categoría no encontrada."));
             if (cat.getTipo() != master.getTipo()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La categoría '" + cat.getNombre() + "' es de otro tipo de producto.");
             }
+            cambiaEstructura = !cat.getIdcat().equals(master.getCategoria() != null ? master.getCategoria().getIdcat() : null);
             master.setCategoria(cat);
+        }
+        if (dto.getNombreProducto() != null) {
+            String variante = trimOrNull(dto.getNombreProducto());
+            cambiaEstructura |= !java.util.Objects.equals(variante, master.getNombreProducto());
+            master.setNombreProducto(variante);
+        }
+        // Si cambió la categoría o la variante y no se manda un nombre propio, el nombre completo se rearma con el árbol.
+        String nombreNuevo = dto.getNombreBase() != null ? dto.getNombreBase()
+                : cambiaEstructura && master.getCategoria() != null && master.getCategoria().nivel() >= 2
+                        ? NombreArticulo.construir(master.getCategoria(), master.getNombreProducto()) : null;
+        if (nombreNuevo != null) {
+            String nombre = nombreNuevo.trim().replaceAll("\\s+", " ");
+            if (nombre.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre del artículo no puede quedar vacío.");
+            productoMasterRepository.findByNombreBaseIgnoreCaseAndActivoTrue(nombre)
+                    .filter(otro -> !otro.getIdprodmaster().equals(master.getIdprodmaster()))
+                    .ifPresent(otro -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe otro artículo llamado '" + nombre + "'."); });
+            master.setNombreBase(nombre);
         }
         if (dto.getCompatibilidad() != null) master.setCompatibilidad(trimOrNull(dto.getCompatibilidad()));
         if (dto.getTiempoEstimadoMin() != null) {
@@ -634,8 +684,16 @@ public class ProductoService {
             dto.setNombreTienda(p.getTienda().getNombre());
         }
         if (p.getProductoMaster() != null && p.getProductoMaster().getCategoria() != null) {
-            dto.setNombreCategoria(p.getProductoMaster().getCategoria().getNombre());
+            Categoria cat = p.getProductoMaster().getCategoria();
+            dto.setNombreCategoria(cat.getNombre());
+            dto.setIdCategoria(cat.getIdcat());
+            List<Categoria> ruta = cat.ruta();
+            dto.setIdCategoriaPrincipal(ruta.get(0).getIdcat());
+            dto.setCategoriaPrincipal(ruta.get(0).getNombre());
+            if (ruta.size() >= 2) dto.setSubcategoria1(ruta.get(1).getNombre());
+            if (ruta.size() >= 3) dto.setSubcategoria2(ruta.get(2).getNombre());
         }
+        if (p.getProductoMaster() != null) dto.setNombreProducto(p.getProductoMaster().getNombreProducto());
         boolean esServicio = false;
         if (p.getProductoMaster() != null) {
             dto.setMarca(p.getProductoMaster().getMarca());
@@ -843,9 +901,22 @@ public class ProductoService {
      * el producto en la tienda destino.
      */
     public String generarCodigoPara(ProductoMaster master) {
-        return master.getTipo() == com.skycel.backend.domain.enums.TipoProducto.CELULAR
-                ? generarCodigoEquipo()
-                : generarCodigoPorCategoria(master.getCategoria());
+        // En el árbol de categorías el prefijo lo define la subcategoría 1 (Celular → CEL, Cargador → CAR...).
+        Categoria sub1 = master.getCategoria() != null ? master.getCategoria().subcategoria1() : null;
+        boolean sub1ConCodigo = sub1 != null && sub1.getCodigo() != null && !sub1.getCodigo().isBlank();
+        for (int intento = 0; intento < 50; intento++) {
+            String codigo;
+            if (sub1ConCodigo || (sub1 != null && master.getTipo() != TipoProducto.CELULAR)) {
+                codigo = generarCodigoPorCategoria(sub1);
+            } else {
+                codigo = master.getTipo() == TipoProducto.CELULAR
+                        ? generarCodigoEquipo()
+                        : generarCodigoPorCategoria(master.getCategoria());
+            }
+            // Dos contadores pueden compartir prefijo (CEL del árbol y el de equipos anterior): nunca se repite un código.
+            if (productoRepository.findAllByCodpro(codigo).isEmpty()) return codigo;
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "No se pudo generar un código libre para '" + master.getNombreBase() + "'.");
     }
 
     /** Código consecutivo de un equipo (CEL-000001), con un contador propio. */

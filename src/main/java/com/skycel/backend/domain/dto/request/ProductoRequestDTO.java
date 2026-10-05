@@ -51,6 +51,13 @@ public class ProductoRequestDTO {
                                         // Si no, el nombre se arma solo a partir de los campos
                                         // de abajo según el tipo — ver ProductoService.construirNombreBase.
 
+    // Registro por árbol de categorías (reemplaza a tipoMaster/marca/modelo/descripcion): la categoría más
+    // profunda elegida (subcategoría 1 o 2) y, opcional, el último eslabón del nombre (la variante).
+    // El nombre completo se arma con las categorías; el tipo (comportamiento) sale de la categoría principal.
+    private Short  idCategoria;
+    @Size(max = 120)
+    private String nombreProducto;
+
     private String tipoMaster;         // Opcional. CELULAR, ACCESORIO, SERVICIO. Usado si se crea el maestro.
 
     private String categoriaMaster;    // Opcional. Nombre de la categoría/Tipo2. Usado si se crea el maestro.

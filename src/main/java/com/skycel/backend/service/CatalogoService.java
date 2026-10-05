@@ -40,6 +40,7 @@ public class CatalogoService {
     private final SeccionRepository seccionRepository;
     private final TiendaRepository tiendaRepository;
     private final CatalogoMapper catalogoMapper;
+    private final CategoriaService categoriaService;
 
     // ==========================================
     // === LECTURAS (Solo activos) + CACHE    ===
@@ -110,26 +111,12 @@ public class CatalogoService {
         return catalogoMapper.toProveedorResponse(proveedorRepository.save(proveedor));
     }
 
+    // Las reglas del árbol de categorías (3 niveles, tipo heredado, código único, renombrado de artículos) viven
+    // en CategoriaService: esta ruta del catálogo solo le delega y limpia el caché.
     @CacheEvict(value = "categoriasCache", allEntries = true)
     @Transactional
     public CategoriaResponseDTO crearCategoria(CategoriaRequestDTO dto) {
-        log.info("Creando categoría: {} bajo padre: {}",
-                dto.getNombreCat(), dto.getIdCategoriaSuperior());
-        Categoria categoria = catalogoMapper.toEntity(dto);
-        // 1. Validar unicidad jerárquica
-        validarUnicidadJerarquica(dto.getNombreCat(), dto.getIdCategoriaSuperior(), null);
-
-        // 2. Asignar padre si existe
-        if (dto.getIdCategoriaSuperior() != null) {
-            Categoria superior = categoriaRepository.findById(dto.getIdCategoriaSuperior())
-                    .orElseThrow(() -> new RecursoNoEncontradoException(
-                            "Categoría superior", dto.getIdCategoriaSuperior()));
-            categoria.setCategoriaSuperior(superior);
-        }
-
-        Categoria guardada = categoriaRepository.save(categoria);
-        log.info("Categoría creada con ID: {}", guardada.getIdcat());
-        return catalogoMapper.toCategoriaResponse(categoriaRepository.save(categoria));
+        return categoriaService.crear(dto);
     }
 
     // ========== PUT - Actualizar Categoría ==========
@@ -137,50 +124,7 @@ public class CatalogoService {
     @CacheEvict(value = "categoriasCache", allEntries = true)
     @Transactional
     public CategoriaResponseDTO actualizarCategoria(Short id, CategoriaRequestDTO dto) {
-        log.info("Actualizando categoría ID: {} - Nuevo nombre: {} - Nuevo padre: {}",
-                id, dto.getNombreCat(), dto.getIdCategoriaSuperior());
-
-        // 1. Buscar categoría existente
-        Categoria categoria = categoriaRepository.findById(id)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Categoría", id));
-
-        // 2. Si cambia el padre, validar que no se cree un ciclo
-        if (dto.getIdCategoriaSuperior() != null &&
-                (categoria.getCategoriaSuperior() == null ||
-                        !categoria.getCategoriaSuperior().getIdcat().equals(dto.getIdCategoriaSuperior()))) {
-
-            validarNoCiclo(id, dto.getIdCategoriaSuperior());
-        }
-
-        // 3. Validar unicidad jerárquica (si cambió nombre o padre)
-        boolean cambioNombre = !categoria.getNombre().equalsIgnoreCase(dto.getNombreCat());
-        boolean cambioPadre = (categoria.getCategoriaSuperior() == null && dto.getIdCategoriaSuperior() != null) ||
-                (categoria.getCategoriaSuperior() != null &&
-                        !categoria.getCategoriaSuperior().getIdcat().equals(dto.getIdCategoriaSuperior()));
-
-        if (cambioNombre || cambioPadre) {
-            validarUnicidadJerarquica(dto.getNombreCat(), dto.getIdCategoriaSuperior(), id);
-        }
-
-        // 4. Actualizar relación de padre si cambió
-        if (cambioPadre) {
-            if (dto.getIdCategoriaSuperior() == null) {
-                categoria.setCategoriaSuperior(null);
-            } else {
-                Categoria nuevoPadre = categoriaRepository.findById(dto.getIdCategoriaSuperior())
-                        .orElseThrow(() -> new RecursoNoEncontradoException(
-                                "Categoría superior", dto.getIdCategoriaSuperior()));
-                categoria.setCategoriaSuperior(nuevoPadre);
-            }
-        }
-
-        // 5. Actualizar demás campos
-        catalogoMapper.updateEntityFromDto(dto, categoria);
-
-        Categoria actualizada = categoriaRepository.save(categoria);
-        log.info("Categoría {} actualizada exitosamente", id);
-
-        return catalogoMapper.toCategoriaResponse(actualizada);
+        return categoriaService.actualizar(id, dto);
     }
 
     @CacheEvict(value = "coloresCache", allEntries = true)
@@ -296,64 +240,4 @@ public class CatalogoService {
 
     @CacheEvict(value = "seccionesCache", allEntries = true)
     public void limpiarCacheSecciones() {}
-
-    private void validarUnicidadJerarquica(String nombre, Short idPadre, Short idExcluir) {
-        boolean existe;
-
-        if (idPadre == null) {
-            // Es categoría raíz
-            if (idExcluir == null) {
-                existe = categoriaRepository.existsByNombreIgnoreCaseAndCategoriaSuperiorIsNull(nombre);
-            } else {
-                existe = categoriaRepository.existsByNombreIgnoreCaseAndCategoriaSuperiorIsNullAndIdcatNot(
-                        nombre, idExcluir);
-            }
-        } else {
-            // Es subcategoría
-            if (idExcluir == null) {
-                existe = categoriaRepository.existsByNombreIgnoreCaseAndCategoriaSuperiorIdcat(nombre, idPadre);
-            } else {
-                existe = categoriaRepository.existsByNombreIgnoreCaseAndCategoriaSuperiorIdcatAndIdcatNot(
-                        nombre, idPadre, idExcluir);
-            }
-        }
-
-        if (existe) {
-            String nivel = idPadre == null ? "categorías principales" : "esta subcategoría";
-            throw new RecursoDuplicadoException(
-                    "Categoría",
-                    "nombre",
-                    String.format("'%s' en %s", nombre, nivel)
-            );
-        }
-    }
-
-    /**
-     * Valida que no se cree un ciclo: una categoría no puede ser movida a una de sus subcategorías
-     */
-    private void validarNoCiclo(Short categoriaId, Short nuevoPadreId) {
-        if (categoriaId.equals(nuevoPadreId)) {
-            throw new IllegalArgumentException("Una categoría no puede ser subcategoría de sí misma");
-        }
-
-        // Verificar recursivamente que el nuevo padre no sea descendiente de la categoría
-        List<Short> descendientes = obtenerTodosDescendientes(categoriaId);
-        if (descendientes.contains(nuevoPadreId)) {
-            throw new IllegalArgumentException(
-                    "No se puede mover la categoría a una de sus subcategorías (crearía un ciclo)");
-        }
-    }
-
-    private List<Short> obtenerTodosDescendientes(Short categoriaId) {
-        List<Short> todos = new ArrayList<>();
-        List<Short> hijosDirectos = categoriaRepository.findIdsByCategoriaSuperiorId(categoriaId);
-
-        for (Short hijo : hijosDirectos) {
-            todos.add(hijo);
-            todos.addAll(obtenerTodosDescendientes(hijo)); // Recursión
-        }
-
-        return todos;
-    }
-
 }

@@ -17,6 +17,9 @@ public interface ProductoMasterRepository extends JpaRepository<ProductoMaster, 
     
     List<ProductoMaster> findByCategoria_IdcatAndActivoTrue(Short idcat);
 
+    /** Los artículos (activos o no) que cuelgan de cualquiera de esas categorías. */
+    List<ProductoMaster> findByCategoria_IdcatIn(java.util.Collection<Short> idcats);
+
     @Query("SELECT p FROM ProductoMaster p WHERE p.activo = true AND " +
            "(LOWER(p.nombreBase) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(p.notaAdicional) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +

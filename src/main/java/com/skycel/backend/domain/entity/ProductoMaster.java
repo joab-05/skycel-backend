@@ -32,6 +32,12 @@ public class ProductoMaster {
     @Column(name = "modelo", length = 120)
     private String modelo;
 
+    // Último eslabón del nombre en el registro por árbol de categorías: la variante ("A16 4/128gb Verde",
+    // "iPhone 13"). Opcional: un artículo puede ser el último nivel de categorías. nombreBase guarda el
+    // nombre completo (categorías + nombreProducto) y se recalcula si cambia el nombre de alguna categoría.
+    @Column(name = "nombre_producto", length = 120)
+    private String nombreProducto;
+
     @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "idcat", nullable = false)

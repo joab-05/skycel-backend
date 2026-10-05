@@ -29,7 +29,13 @@ public class ProductoResponseDTO {
     private String  compatibilidad;       // modelos con los que sirve — ACCESORIO/SERVICIO
     private Integer tiempoEstimadoMin;    // duración estimada en minutos — solo SERVICIO
     private Integer diasGarantia;         // días de garantía del artículo o servicio
-    private String  nombreCategoria;      // ← categoría del maestro
+    private String  nombreCategoria;      // ← categoría del maestro (la más profunda del árbol)
+    private Short   idCategoria;          // id de esa categoría
+    private String  nombreProducto;       // último eslabón del nombre (la variante), si lo tiene
+    private Short   idCategoriaPrincipal; // categoría principal del árbol (nivel 1)
+    private String  categoriaPrincipal;
+    private String  subcategoria1;        // nivel 2 (define el prefijo del código)
+    private String  subcategoria2;        // nivel 3 (opcional)
     private String  tipo;                 // Tipo de producto (CELULAR, ACCESORIO, SERVICIO)
     private java.util.List<ImeiInfoDTO> imeisDisponibles; // IMEIs disponibles con su precio (solo celulares)
     private Boolean activo;

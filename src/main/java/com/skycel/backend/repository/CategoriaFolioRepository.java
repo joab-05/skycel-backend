@@ -26,4 +26,11 @@ public interface CategoriaFolioRepository extends JpaRepository<CategoriaFolio, 
 
     @Query(value = "SELECT ultimo_folio FROM categoria_folio WHERE idcat = :idcat", nativeQuery = true)
     Long obtenerUltimoFolioGenerado(@Param("idcat") Short idcat);
+
+    /** Sube el contador al menos hasta {@code valor} (nunca lo baja): la migración lo deja donde iban los códigos de ese prefijo. */
+    @Modifying
+    @Query(value = "INSERT INTO categoria_folio (idcat, ultimo_folio) VALUES (:idcat, :valor) " +
+            "ON DUPLICATE KEY UPDATE ultimo_folio = GREATEST(ultimo_folio, :valor)",
+            nativeQuery = true)
+    void fijarMinimo(@Param("idcat") Short idcat, @Param("valor") Long valor);
 }

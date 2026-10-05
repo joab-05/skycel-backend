@@ -2634,12 +2634,7 @@ async function pantallaInventario() {
       cont.classList.toggle('oculto');
       if (cont.classList.contains('oculto')) return;
       if (categorias === null) {
-        try {
-          const planas = [];
-          const aplanar = (lista) => { for (const c of lista) { planas.push(c); if (c.subcategorias) aplanar(c.subcategorias); } };
-          aplanar(await api('GET', '/api/categorias'));
-          categorias = planas;
-        } catch { categorias = []; }
+        try { categorias = await cargarCategorias(); } catch { categorias = []; }
       }
       dibujarFormularioProducto(cont, categorias, () => codti, () => { cont.classList.add('oculto'); cargar(); });
     };
@@ -2647,45 +2642,114 @@ async function pantallaInventario() {
   }
 }
 
+// ── Árbol de categorías ──────────────────────────────────────────────────
+// Principal (define el comportamiento) → subcategoría 1 (Celular, Cargador, Reparación...; su código corto es el
+// prefijo del código del artículo) → subcategoría 2 opcional (marca o trabajo). El artículo cuelga de la más profunda
+// y su nombre completo se arma con el camino (solo las categorías marcadas "entra en el nombre") + el nombre del producto.
+
+const TIPOS_PRINCIPAL = [
+  { valor: 'CELULAR', texto: 'Equipos (se venden por IMEI o serie)' },
+  { valor: 'ACCESORIO', texto: 'Accesorios (por piezas)' },
+  { valor: 'SERVICIO', texto: 'Servicios (sin inventario)' },
+];
+
+async function cargarCategorias() {
+  const planas = [];
+  const aplanar = (lista) => { for (const c of lista) { planas.push(c); if (c.subcategorias) aplanar(c.subcategorias); } };
+  aplanar(await api('GET', '/api/categorias'));
+  return planas;
+}
+
+const hijosDeCategoria = (categorias, idPadre) => categorias.filter(c => (c.idCategoriaSuperior ?? null) === (idPadre ?? null));
+
+/** Camino desde la categoría principal hasta la indicada. */
+function rutaDeCategoria(categorias, idcat) {
+  const ruta = [];
+  for (let c = categorias.find(x => x.idcat === idcat); c && ruta.length < 6; c = categorias.find(x => x.idcat === c.idCategoriaSuperior)) ruta.unshift(c);
+  return ruta;
+}
+
+/** El nombre completo que tendrá el artículo: lo mismo que arma el servidor. */
+function nombreArmadoDeArticulo(categorias, idHoja, variante) {
+  const partes = rutaDeCategoria(categorias, idHoja).filter(c => c.incluirEnNombre !== false).map(c => c.nombre);
+  if (variante && variante.trim()) partes.push(variante.trim());
+  return partes.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Formulario para crear una categoría dentro de `cont`. nivel 1 = principal (pide el tipo), 2 = subcategoría 1 (pide el
+ * código corto), 3 = subcategoría 2. alCrear recibe la categoría creada.
+ */
+function formularioNuevaCategoria(cont, nivel, padre, alCrear) {
+  const nombres = { 1: 'categoría principal', 2: 'subcategoría 1', 3: 'subcategoría 2' };
+  cont.classList.remove('oculto');
+  cont.innerHTML = `
+    <div class="tarjeta" style="background:var(--gris-claro);">
+      <h2 style="margin-top:0;">Nueva ${nombres[nivel]}${padre ? ' en ' + escapar(padre.nombre) : ''}</h2>
+      <label class="obligatorio">Nombre</label>
+      <input id="nc-nombre" maxlength="50" placeholder="${nivel === 1 ? 'Ej. Accesorios' : nivel === 2 ? 'Ej. Cargador, Celular, Reparación' : 'Ej. Samsung, Cambio de Pantalla'}">
+      ${nivel === 1 ? `
+        <label class="obligatorio">Comportamiento</label>
+        <select id="nc-tipo">${TIPOS_PRINCIPAL.map(t => `<option value="${t.valor}">${t.texto}</option>`).join('')}</select>` : ''}
+      ${nivel === 2 ? `
+        <label class="obligatorio">Código corto</label>
+        <input id="nc-codigo" maxlength="10" placeholder="Ej. CAR — es el inicio del código de sus productos (CAR-000001)">` : ''}
+      ${nivel >= 2 ? `
+        <label class="casilla"><input type="checkbox" id="nc-incluir" checked> Su nombre forma parte del nombre del producto</label>` : ''}
+      <div class="grupo-botones">
+        <button id="nc-guardar" class="btn btn-azul btn-chico">Guardar</button>
+        <button id="nc-cancelar" class="btn btn-gris btn-chico">Cancelar</button>
+      </div>
+    </div>`;
+  document.getElementById('nc-cancelar').onclick = () => { cont.classList.add('oculto'); cont.innerHTML = ''; };
+  document.getElementById('nc-guardar').onclick = async (e) => {
+    const nombreCat = document.getElementById('nc-nombre').value.trim();
+    if (!nombreCat) { mostrarMensaje(root, 'Indica el nombre.', 'error'); return; }
+    const cuerpo = { nombreCat, idCategoriaSuperior: padre ? padre.idcat : null };
+    if (nivel === 1) cuerpo.tipo = document.getElementById('nc-tipo').value;
+    if (nivel === 2) {
+      cuerpo.codigo = document.getElementById('nc-codigo').value.trim();
+      if (!cuerpo.codigo) { mostrarMensaje(root, 'Indica el código corto.', 'error'); return; }
+    }
+    if (nivel >= 2) cuerpo.incluirEnNombre = document.getElementById('nc-incluir').checked;
+    e.target.disabled = true;
+    try {
+      const nueva = await api('POST', '/api/categorias', cuerpo);
+      cont.classList.add('oculto');
+      cont.innerHTML = '';
+      mostrarMensaje(root, `"${nueva.nombre}" creada.`, 'ok');
+      alCrear(nueva);
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+    }
+  };
+}
+
 function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   cont.innerHTML = `
     <div class="tarjeta">
       <h2 style="margin-top:0;">Nuevo producto</h2>
-      <div class="segmentado">
-        <button id="np-seg-accesorio" class="activo">Accesorio</button>
-        <button id="np-seg-equipo">Equipo</button>
-        <button id="np-seg-servicio">Servicio</button>
-      </div>
-      <div id="np-campos-accesorio">
-        <label class="obligatorio">Descripción</label>
-        <input id="np-descripcion" placeholder="Funda Silicon iPhone 16 Pro">
-        <label>Compatible con</label>
-        <input id="np-compatibilidad" placeholder="Opcional, ej. iPhone 16 Pro">
-        <label class="obligatorio">Stock inicial</label>
-        <input id="np-stock" type="number" inputmode="decimal" min="0" step="1" value="1">
-      </div>
-      <div id="np-campos-equipo" class="oculto">
-        <label class="obligatorio">Marca</label>
-        <input id="np-marca" placeholder="Samsung, Apple...">
-        <label class="obligatorio">Modelo</label>
-        <input id="np-modelo" placeholder="A54, iPhone 13...">
-        <label class="obligatorio">IMEIs (uno por línea)</label>
-        <textarea id="np-imeis" placeholder="Un IMEI o serie por línea. El stock inicial es la cantidad que captures aquí."></textarea>
-      </div>
-      <div id="np-campos-servicio" class="oculto">
-        <label class="obligatorio">Nombre del servicio</label>
-        <input id="np-servicio-nombre" placeholder="Cambio de Pantalla">
-        <label>Equipo al que aplica</label>
-        <input id="np-servicio-equipo" placeholder="Opcional, ej. Samsung A56 5G">
-        <label>Minutos estimados</label>
-        <input id="np-servicio-tiempo" type="number" inputmode="numeric" min="0" placeholder="Opcional">
-      </div>
-      <label class="obligatorio">Categoría</label>
+      <label class="obligatorio">Categoría principal</label>
       <div class="fila">
-        <select id="np-categoria"></select>
-        <button id="np-nueva-categoria" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+        <select id="np-principal"></select>
+        <button id="np-nueva-principal" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+      </div>
+      <label class="obligatorio">Subcategoría 1</label>
+      <div class="fila">
+        <select id="np-sub1"></select>
+        <button id="np-nueva-sub1" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+      </div>
+      <label>Subcategoría 2 <span class="ayuda" style="display:inline;">(opcional: marca, trabajo...)</span></label>
+      <div class="fila">
+        <select id="np-sub2"></select>
+        <button id="np-nueva-sub2" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
       </div>
       <div id="np-categoria-form" class="oculto"></div>
+      <label>Nombre del producto <span class="ayuda" style="display:inline;">(opcional: modelo, color, variante)</span></label>
+      <input id="np-variante" maxlength="120" placeholder="Ej. A16 4/128gb Verde">
+      <div class="ayuda" style="margin:6px 0 2px 0;">Se registrará como: <strong id="np-vista-previa">—</strong></div>
+      <div id="np-extra"></div>
       <label class="obligatorio">Precio de compra</label>
       <input id="np-precio-compra" type="number" inputmode="decimal" min="0" step="0.01">
       <label class="obligatorio">Precio de venta</label>
@@ -2695,136 +2759,104 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       <button id="np-guardar" class="btn btn-verde">Guardar producto</button>
     </div>`;
 
-  let grupo = 'ACCESORIO'; // ACCESORIO | EQUIPO | SERVICIO
+  const selPrincipal = document.getElementById('np-principal');
+  const selSub1 = document.getElementById('np-sub1');
+  const selSub2 = document.getElementById('np-sub2');
+  const inputVariante = document.getElementById('np-variante');
+  const contForm = document.getElementById('np-categoria-form');
+  const opciones = (lista, vacio) => (vacio ? `<option value="">${vacio}</option>` : '') + lista.map(c => `<option value="${c.idcat}">${escapar(c.nombre)}</option>`).join('');
+  const principalActual = () => categorias.find(c => c.idcat === Number(selPrincipal.value)) || null;
+  const sub1Actual = () => categorias.find(c => c.idcat === Number(selSub1.value)) || null;
+  const sub2Actual = () => categorias.find(c => c.idcat === Number(selSub2.value)) || null;
 
-  const segAcc = document.getElementById('np-seg-accesorio');
-  const segEquipo = document.getElementById('np-seg-equipo');
-  const segServicio = document.getElementById('np-seg-servicio');
-  const camposAcc = document.getElementById('np-campos-accesorio');
-  const camposEquipo = document.getElementById('np-campos-equipo');
-  const camposServicio = document.getElementById('np-campos-servicio');
-
-  function mostrarGrupo() {
-    camposAcc.classList.toggle('oculto', grupo !== 'ACCESORIO');
-    camposEquipo.classList.toggle('oculto', grupo !== 'EQUIPO');
-    camposServicio.classList.toggle('oculto', grupo !== 'SERVICIO');
-    segAcc.classList.toggle('activo', grupo === 'ACCESORIO');
-    segEquipo.classList.toggle('activo', grupo === 'EQUIPO');
-    segServicio.classList.toggle('activo', grupo === 'SERVICIO');
-  }
-
-  // El selector de categoría solo muestra las del grupo actual: un Accesorio no debe ver categorías de Equipo ni
-  // viceversa. Equipo junta Celular y Tablet en una sola lista — cuál de los dos es se decide por la categoría
-  // elegida (cada una ya sabe si es Celular o Tablet), no por otro control aparte.
-  // Recuerda la selección de cada grupo por separado, para no perderla al ir y venir entre segmentos.
-  const seleccionPorGrupo = {};
-  function categoriasDelGrupo() {
-    return grupo === 'EQUIPO'
-      ? categorias.filter(c => c.tipo === 'CELULAR' || c.tipo === 'TABLET')
-      : categorias.filter(c => c.tipo === grupo);
-  }
-  function renderCategorias() {
-    const sel = document.getElementById('np-categoria');
-    const delGrupo = categoriasDelGrupo();
-    sel.innerHTML = delGrupo.map(c => `<option value="${escapar(c.nombre)}">${escapar(c.nombre)}</option>`).join('') || '<option value="">Sin categorías de este tipo</option>';
-    if (seleccionPorGrupo[grupo] && delGrupo.some(c => c.nombre === seleccionPorGrupo[grupo])) {
-      sel.value = seleccionPorGrupo[grupo];
+  function dibujarExtra() {
+    const tipo = principalActual()?.tipo;
+    const extra = document.getElementById('np-extra');
+    if (tipo === 'CELULAR' || tipo === 'TABLET') {
+      extra.innerHTML = `
+        <label class="obligatorio">IMEIs (uno por línea)</label>
+        <textarea id="np-imeis" placeholder="Un IMEI o serie por línea. El stock inicial es la cantidad que captures aquí."></textarea>`;
+    } else if (tipo === 'SERVICIO') {
+      extra.innerHTML = `
+        <label>Minutos estimados</label>
+        <input id="np-tiempo" type="number" inputmode="numeric" min="0" placeholder="Opcional">`;
+    } else {
+      extra.innerHTML = `
+        <label class="obligatorio">Stock inicial</label>
+        <input id="np-stock" type="number" inputmode="decimal" min="0" step="1" value="1">`;
     }
-    sel.onchange = () => { seleccionPorGrupo[grupo] = sel.value; };
   }
-  renderCategorias();
 
-  const cambiarGrupo = (nuevo) => {
-    seleccionPorGrupo[grupo] = document.getElementById('np-categoria').value;
-    grupo = nuevo;
-    mostrarGrupo();
-    renderCategorias();
+  function vistaPrevia() {
+    const hoja = sub2Actual() || sub1Actual();
+    document.getElementById('np-vista-previa').textContent = hoja ? nombreArmadoDeArticulo(categorias, hoja.idcat, inputVariante.value) : '—';
+  }
+
+  function dibujarNiveles(elegir = {}) {
+    selPrincipal.innerHTML = opciones(hijosDeCategoria(categorias, null)) || '<option value="">Sin categorías</option>';
+    if (elegir.principal != null) selPrincipal.value = elegir.principal;
+    const p = principalActual();
+    const subs1 = p ? hijosDeCategoria(categorias, p.idcat) : [];
+    selSub1.innerHTML = opciones(subs1) || '<option value="">Crea la primera con + Nueva</option>';
+    if (elegir.sub1 != null) selSub1.value = elegir.sub1;
+    const s1 = sub1Actual();
+    const subs2 = s1 ? hijosDeCategoria(categorias, s1.idcat) : [];
+    selSub2.innerHTML = opciones(subs2, '(ninguna)');
+    if (elegir.sub2 != null) selSub2.value = elegir.sub2;
+    document.getElementById('np-nueva-sub1').disabled = !p;
+    document.getElementById('np-nueva-sub2').disabled = !s1;
+    dibujarExtra();
+    vistaPrevia();
+  }
+  dibujarNiveles();
+
+  selPrincipal.onchange = () => dibujarNiveles({ principal: selPrincipal.value });
+  selSub1.onchange = () => dibujarNiveles({ principal: selPrincipal.value, sub1: selSub1.value });
+  selSub2.onchange = vistaPrevia;
+  inputVariante.addEventListener('input', vistaPrevia);
+
+  document.getElementById('np-nueva-principal').onclick = () =>
+    formularioNuevaCategoria(contForm, 1, null, (n) => { categorias.push(n); dibujarNiveles({ principal: n.idcat }); });
+  document.getElementById('np-nueva-sub1').onclick = () => {
+    const p = principalActual();
+    if (p) formularioNuevaCategoria(contForm, 2, p, (n) => { categorias.push(n); dibujarNiveles({ principal: p.idcat, sub1: n.idcat }); });
   };
-  segAcc.onclick = () => cambiarGrupo('ACCESORIO');
-  segEquipo.onclick = () => cambiarGrupo('EQUIPO');
-  segServicio.onclick = () => cambiarGrupo('SERVICIO');
-
-  document.getElementById('np-nueva-categoria').onclick = () => {
-    const contCat = document.getElementById('np-categoria-form');
-    contCat.classList.toggle('oculto');
-    if (contCat.classList.contains('oculto')) return;
-    contCat.innerHTML = `
-      <label class="obligatorio">Nombre</label>
-      <input id="nc-nombre" placeholder="Ej. Cargadores">
-      ${grupo === 'EQUIPO' ? `
-        <label class="obligatorio">Tipo de equipo</label>
-        <select id="nc-tipo-equipo"><option value="CELULAR">Celular</option><option value="TABLET">Tablet</option></select>
-      ` : ''}
-      <label>Código corto</label>
-      <input id="nc-codigo" placeholder="Opcional, ej. CAR — para el código de sus productos" maxlength="10">
-      <button id="nc-guardar" class="btn btn-azul btn-chico">Guardar categoría</button>`;
-    document.getElementById('nc-guardar').onclick = async (e) => {
-      const nombreCat = document.getElementById('nc-nombre').value.trim();
-      if (!nombreCat) { mostrarMensaje(root, 'Indica el nombre de la categoría.', 'error'); return; }
-      e.target.disabled = true;
-      try {
-        const tipo = grupo === 'EQUIPO' ? document.getElementById('nc-tipo-equipo').value : grupo;
-        const nueva = await api('POST', '/api/categorias', {
-          nombreCat, tipo, codigo: document.getElementById('nc-codigo').value.trim() || null,
-        });
-        categorias.push(nueva);
-        seleccionPorGrupo[grupo] = nueva.nombre;
-        renderCategorias();
-        contCat.classList.add('oculto');
-        mostrarMensaje(root, `Categoría "${nueva.nombre}" creada.`, 'ok');
-      } catch (err) {
-        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
-        e.target.disabled = false;
-      }
-    };
+  document.getElementById('np-nueva-sub2').onclick = () => {
+    const p = principalActual(), s1 = sub1Actual();
+    if (s1) formularioNuevaCategoria(contForm, 3, s1, (n) => { categorias.push(n); dibujarNiveles({ principal: p.idcat, sub1: s1.idcat, sub2: n.idcat }); });
   };
 
   document.getElementById('np-guardar').onclick = async (e) => {
-    const categoriaMaster = document.getElementById('np-categoria').value;
+    const principal = principalActual(), sub1 = sub1Actual(), hoja = sub2Actual() || sub1;
+    if (!principal || !sub1 || !hoja) { mostrarMensaje(root, 'Elige la categoría principal y la subcategoría 1 (o crea una con + Nueva).', 'error'); return; }
+    const tipo = principal.tipo;
+    const esEquipo = tipo === 'CELULAR' || tipo === 'TABLET';
+    const esServicio = tipo === 'SERVICIO';
     const precioCompra = Number(document.getElementById('np-precio-compra').value);
     const precioVenta = Number(document.getElementById('np-precio-venta').value);
-    if (!precioCompra || precioCompra < 0) { mostrarMensaje(root, 'Indica el precio de compra.', 'error'); return; }
+    if ((!precioCompra && !esServicio) || precioCompra < 0) { mostrarMensaje(root, 'Indica el precio de compra.', 'error'); return; }
     if (!precioVenta || precioVenta <= 0) { mostrarMensaje(root, 'Indica el precio de venta.', 'error'); return; }
 
-    let tipoMaster = grupo;
-    if (grupo === 'EQUIPO') {
-      const categoriaElegida = categorias.find(c => c.nombre === categoriaMaster);
-      if (!categoriaElegida) { mostrarMensaje(root, 'Selecciona o crea primero una categoría (dice si es Celular o Tablet).', 'error'); return; }
-      tipoMaster = categoriaElegida.tipo;
-    }
-
     const payload = {
-      tipoMaster,
-      categoriaMaster,
+      idCategoria: hoja.idcat,
+      nombreProducto: inputVariante.value.trim() || null,
       codti: obtenerCodti(),
-      precioCompra,
+      precioCompra: precioCompra || 0,
       precioVenta,
       diasGarantia: document.getElementById('np-garantia').value ? Number(document.getElementById('np-garantia').value) : null,
     };
-    if (grupo === 'EQUIPO') {
-      const marca = document.getElementById('np-marca').value.trim();
-      const modelo = document.getElementById('np-modelo').value.trim();
+    if (esEquipo) {
       const imeis = document.getElementById('np-imeis').value.split('\n').map(s => s.trim()).filter(Boolean);
-      if (!marca || !modelo) { mostrarMensaje(root, 'Indica marca y modelo.', 'error'); return; }
       if (imeis.length === 0) { mostrarMensaje(root, 'Captura al menos un IMEI.', 'error'); return; }
-      payload.marca = marca;
-      payload.modelo = modelo;
       payload.imeis = imeis;
       payload.stock = imeis.length;
-    } else if (grupo === 'SERVICIO') {
-      const nombreServicio = document.getElementById('np-servicio-nombre').value.trim();
-      if (!nombreServicio) { mostrarMensaje(root, 'Indica el nombre del servicio.', 'error'); return; }
-      payload.descripcion = nombreServicio;
-      payload.descripcion2 = document.getElementById('np-servicio-equipo').value.trim() || null;
-      payload.tiempoEstimadoMin = document.getElementById('np-servicio-tiempo').value ? Number(document.getElementById('np-servicio-tiempo').value) : null;
+    } else if (esServicio) {
+      const tiempo = document.getElementById('np-tiempo').value;
+      payload.tiempoEstimadoMin = tiempo ? Number(tiempo) : null;
       payload.stock = 0;
     } else {
-      const descripcion = document.getElementById('np-descripcion').value.trim();
       const stock = Number(document.getElementById('np-stock').value);
-      if (!descripcion) { mostrarMensaje(root, 'Indica la descripción del producto.', 'error'); return; }
       if (!stock || stock < 0) { mostrarMensaje(root, 'Indica el stock inicial.', 'error'); return; }
-      payload.descripcion = descripcion;
-      payload.compatibilidad = document.getElementById('np-compatibilidad').value.trim() || null;
       payload.stock = stock;
     }
 
@@ -2886,8 +2918,8 @@ async function pantallaProductoDetalle(param) {
     <div class="tarjeta">
       ${p.bajoStock ? '<span class="pastilla error">' + ic('triangle-alert') + ' Bajo stock</span>' : ''}
       <div class="detalle-fila"><span class="k">Código</span><span class="v">${escapar(p.codpro)}</span></div>
-      ${p.marca ? `<div class="detalle-fila"><span class="k">Marca / Modelo</span><span class="v">${escapar(p.marca)} ${escapar(p.modelo)}</span></div>` : ''}
-      <div class="detalle-fila"><span class="k">Categoría</span><span class="v">${escapar(p.nombreCategoria || '—')}</span></div>
+      ${!p.categoriaPrincipal && p.marca ? `<div class="detalle-fila"><span class="k">Marca / Modelo</span><span class="v">${escapar(p.marca)} ${escapar(p.modelo)}</span></div>` : ''}
+      <div class="detalle-fila"><span class="k">Categoría</span><span class="v">${escapar([p.categoriaPrincipal, p.subcategoria1, p.subcategoria2].filter(Boolean).join(' › ') || p.nombreCategoria || '—')}</span></div>
       ${p.descripcion ? `<div class="detalle-fila"><span class="k">Descripción</span><span class="v">${escapar(p.descripcion)}</span></div>` : ''}
       ${p.compatibilidad ? `<div class="detalle-fila"><span class="k">Compatibilidad</span><span class="v">${escapar(p.compatibilidad)}</span></div>` : ''}
       ${p.tipo !== 'SERVICIO' ? `<div class="detalle-fila"><span class="k">Stock</span><span class="v">${Number(p.stock)}${Number(p.stockMinimo) > 0 ? ' (mínimo ' + Number(p.stockMinimo) + ')' : ''}</span></div>` : ''}
@@ -2990,6 +3022,9 @@ async function pantallaProductoEditar(param) {
   const esServicio = p.tipo === 'SERVICIO';
   const catsDelTipo = categorias.filter(c => c.tipo === p.tipo);
   const catActual = catsDelTipo.find(c => c.nombre === p.nombreCategoria);
+  // Artículo del árbol de categorías (subcategoría 1 o 2): se edita por categorías + nombre del producto
+  const rutaActual = p.idCategoria != null ? rutaDeCategoria(categorias, p.idCategoria) : [];
+  const enArbol = rutaActual.length >= 2;
   const ayudaSucursal = `Precios de <strong>${escapar(p.nombreTienda || 'esta sucursal')}</strong>`;
 
   root.innerHTML = `
@@ -3004,12 +3039,23 @@ async function pantallaProductoEditar(param) {
     <div class="tarjeta">
       <h2>Datos del artículo</h2>
       <div class="ayuda">Se aplican en <strong>todas las sucursales</strong>.</div>
-      <label class="obligatorio">Nombre</label>
-      <input id="pe-nombre" maxlength="255" value="${escapar(p.nombreProductoMaster)}">
-      ${catsDelTipo.length ? `
-        <label>Categoría</label>
-        <select id="pe-categoria">${catsDelTipo.map(c => `<option value="${c.idcat}" ${catActual && catActual.idcat === c.idcat ? 'selected' : ''}>${escapar(c.nombre)}</option>`).join('')}</select>` : ''}
-      ${!esEquipo ? `<label>Compatibilidad</label><input id="pe-compat" maxlength="255" value="${escapar(p.compatibilidad || '')}" placeholder="Modelos con los que sirve">` : ''}
+      ${enArbol ? `
+        <div class="ayuda">Categoría principal: <strong>${escapar(rutaActual[0].nombre)}</strong></div>
+        <label class="obligatorio">Subcategoría 1</label>
+        <select id="pe-sub1">${hijosDeCategoria(categorias, rutaActual[0].idcat).map(c => `<option value="${c.idcat}" ${c.idcat === rutaActual[1].idcat ? 'selected' : ''}>${escapar(c.nombre)}</option>`).join('')}</select>
+        <label>Subcategoría 2</label>
+        <select id="pe-sub2"></select>
+        <label>Nombre del producto</label>
+        <input id="pe-variante" maxlength="120" value="${escapar(p.nombreProducto || '')}" placeholder="Ej. A16 4/128gb Verde">
+        <div class="ayuda" style="margin:6px 0 2px 0;">Se registra como: <strong id="pe-vista-previa">—</strong></div>
+      ` : `
+        <label class="obligatorio">Nombre</label>
+        <input id="pe-nombre" maxlength="255" value="${escapar(p.nombreProductoMaster)}">
+        ${catsDelTipo.length ? `
+          <label>Categoría</label>
+          <select id="pe-categoria">${catsDelTipo.map(c => `<option value="${c.idcat}" ${catActual && catActual.idcat === c.idcat ? 'selected' : ''}>${escapar(c.nombre)}</option>`).join('')}</select>` : ''}
+        ${!esEquipo ? `<label>Compatibilidad</label><input id="pe-compat" maxlength="255" value="${escapar(p.compatibilidad || '')}" placeholder="Modelos con los que sirve">` : ''}
+      `}
       <label>Días de garantía</label>
       <input id="pe-garantia" type="number" inputmode="numeric" min="0" step="1" value="${p.diasGarantia ?? ''}">
       <button id="pe-guardar-datos" class="btn btn-azul">Guardar datos</button>
@@ -3051,14 +3097,39 @@ async function pantallaProductoEditar(param) {
   const errorDe = (err) => err.network ? 'Sin conexión con el servidor.' : err.message;
   const numero = (id) => { const v = document.getElementById(id)?.value; return v === '' || v == null ? null : Number(v); };
 
+  if (enArbol) {
+    const selSub1 = document.getElementById('pe-sub1');
+    const selSub2 = document.getElementById('pe-sub2');
+    const inputVariante = document.getElementById('pe-variante');
+    const hojaActual = () => Number(selSub2.value) || Number(selSub1.value);
+    const llenarSub2 = (elegida) => {
+      selSub2.innerHTML = '<option value="">(ninguna)</option>' +
+        hijosDeCategoria(categorias, Number(selSub1.value)).map(c => `<option value="${c.idcat}">${escapar(c.nombre)}</option>`).join('');
+      if (elegida) selSub2.value = elegida;
+    };
+    const vistaPrevia = () => { document.getElementById('pe-vista-previa').textContent = nombreArmadoDeArticulo(categorias, hojaActual(), inputVariante.value) || '—'; };
+    llenarSub2(rutaActual[2]?.idcat);
+    vistaPrevia();
+    selSub1.onchange = () => { llenarSub2(null); vistaPrevia(); };
+    selSub2.onchange = vistaPrevia;
+    inputVariante.addEventListener('input', vistaPrevia);
+  }
+
   document.getElementById('pe-guardar-datos').onclick = async (e) => {
-    const nombre = document.getElementById('pe-nombre').value.trim();
-    if (!nombre) { mostrarMensaje(root, 'El nombre no puede quedar vacío.', 'error'); return; }
-    const cuerpo = { nombreBase: nombre };
-    const cat = document.getElementById('pe-categoria');
-    if (cat && cat.value) cuerpo.idCategoria = Number(cat.value);
-    const compat = document.getElementById('pe-compat');
-    if (compat) cuerpo.compatibilidad = compat.value.trim();
+    let cuerpo;
+    if (enArbol) {
+      const hoja = Number(document.getElementById('pe-sub2').value) || Number(document.getElementById('pe-sub1').value);
+      if (!hoja) { mostrarMensaje(root, 'Elige la subcategoría 1.', 'error'); return; }
+      cuerpo = { idCategoria: hoja, nombreProducto: document.getElementById('pe-variante').value.trim() };
+    } else {
+      const nombre = document.getElementById('pe-nombre').value.trim();
+      if (!nombre) { mostrarMensaje(root, 'El nombre no puede quedar vacío.', 'error'); return; }
+      cuerpo = { nombreBase: nombre };
+      const cat = document.getElementById('pe-categoria');
+      if (cat && cat.value) cuerpo.idCategoria = Number(cat.value);
+      const compat = document.getElementById('pe-compat');
+      if (compat) cuerpo.compatibilidad = compat.value.trim();
+    }
     const gar = numero('pe-garantia');
     if (gar != null) cuerpo.diasGarantia = gar;
     e.target.disabled = true;
@@ -4138,7 +4209,7 @@ function quitarAcentos(t) { return t.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 /** Texto en minúsculas y sin acentos con lo que se puede buscar de un producto (se calcula una vez por producto). */
 function textoBusqueda(p) {
   if (p._t === undefined) {
-    p._t = quitarAcentos(`${p.nombreProductoMaster || ''} ${p.codpro || ''} ${p.marca || ''} ${p.modelo || ''} ${p.nombreCategoria || ''} ` +
+    p._t = quitarAcentos(`${p.nombreProductoMaster || ''} ${p.codpro || ''} ${p.marca || ''} ${p.modelo || ''} ${p.nombreCategoria || ''} ${p.categoriaPrincipal || ''} ${p.subcategoria1 || ''} ${p.subcategoria2 || ''} ` +
       `${p.color?.nombre || ''} ${(p.imeisDisponibles || []).map(u => u.imei).join(' ')}`).toLowerCase();
   }
   return p._t;
@@ -4248,7 +4319,7 @@ async function pantallaPOS() {
   const hayExistencia = (p) => p.tipo === 'SERVICIO' || (p.tipo === 'CELULAR' || p.tipo === 'TABLET' ? (p.imeisDisponibles || []).length > 0 : Number(p.stock) > 0);
   const dibujarChips = () => {
     const cuenta = {};
-    productos.filter(hayExistencia).forEach(p => { if (p.nombreCategoria) cuenta[p.nombreCategoria] = (cuenta[p.nombreCategoria] || 0) + 1; });
+    productos.filter(hayExistencia).forEach(p => { const c = p.categoriaPrincipal || p.nombreCategoria; if (c) cuenta[c] = (cuenta[c] || 0) + 1; });
     const top = Object.entries(cuenta).sort((a, b) => b[1] - a[1]).slice(0, 12).map(x => x[0]);
     contChips.innerHTML = top.length === 0 ? '' :
       `<button class="chip ${categoriaSel === null ? 'activo' : ''}" data-cat="">Todo</button>` +
@@ -4259,7 +4330,7 @@ async function pantallaPOS() {
     const q = inputBuscar.value.trim();
     if (q.length < 2 && !categoriaSel) { contResultados.innerHTML = ''; return; }
     let lista = q.length >= 2 ? filtrarProductos(productos, q) : productos;
-    if (categoriaSel) lista = lista.filter(p => p.nombreCategoria === categoriaSel);
+    if (categoriaSel) lista = lista.filter(p => (p.categoriaPrincipal || p.nombreCategoria) === categoriaSel);
     if (q.length < 2) lista = lista.filter(hayExistencia).sort((a, b) => a.nombreProductoMaster.localeCompare(b.nombreProductoMaster, 'es'));
     dibujarResultadosPOS(contResultados, lista.slice(0, 30));
   };
@@ -5304,14 +5375,16 @@ async function pantallaCatalogos() {
   root.innerHTML = `
     <h1>${ic('tags')} Catálogos</h1>
     <div class="segmentado">
-      <button id="ct-seg-colores" class="activo">Colores</button>
+      <button id="ct-seg-categorias" class="activo">Categorías</button>
+      <button id="ct-seg-colores">Colores</button>
       <button id="ct-seg-secciones">Secciones</button>
       <button id="ct-seg-proveedores">Proveedores</button>
     </div>
     <div id="ct-contenido"><div class="vacio">Cargando...</div></div>`;
 
-  let pestana = 'colores';
+  let pestana = 'categorias';
   const segs = {
+    categorias: document.getElementById('ct-seg-categorias'),
     colores: document.getElementById('ct-seg-colores'),
     secciones: document.getElementById('ct-seg-secciones'),
     proveedores: document.getElementById('ct-seg-proveedores'),
@@ -5321,6 +5394,7 @@ async function pantallaCatalogos() {
     Object.entries(segs).forEach(([k, el]) => el.classList.toggle('activo', k === p));
     dibujar();
   };
+  segs.categorias.onclick = () => activar('categorias');
   segs.colores.onclick = () => activar('colores');
   segs.secciones.onclick = () => activar('secciones');
   segs.proveedores.onclick = () => activar('proveedores');
@@ -5328,10 +5402,94 @@ async function pantallaCatalogos() {
   async function dibujar() {
     const cont = document.getElementById('ct-contenido');
     cont.innerHTML = '<div class="vacio">Cargando...</div>';
+    if (pestana === 'categorias') return dibujarCategorias(cont);
     if (pestana === 'colores') return dibujarColores(cont);
     if (pestana === 'secciones') return dibujarSecciones(cont);
     return dibujarProveedores(cont);
   }
+
+  // Árbol de categorías: ver, crear subcategorías y editar nombre, código corto y si entra en el nombre del producto.
+  async function dibujarCategorias(cont) {
+    let categorias;
+    try {
+      categorias = await cargarCategorias();
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+      return;
+    }
+    const tipoTexto = { CELULAR: 'con IMEI o serie', TABLET: 'con IMEI o serie', ACCESORIO: 'por piezas', SERVICIO: 'servicio, sin inventario' };
+    const fila = (c) => {
+      const nivel = c.nivel || 1;
+      const hijos = hijosDeCategoria(categorias, c.idcat);
+      return `
+        <div class="detalle-fila" style="padding-left:${(nivel - 1) * 18}px; align-items:center;">
+          <span class="k" style="font-weight:${nivel === 1 ? 700 : 500};">
+            ${escapar(c.nombre)}
+            ${nivel === 1 ? `<span class="pastilla" style="margin-left:6px;">${tipoTexto[c.tipo] || escapar(c.tipo)}</span>` : ''}
+            ${c.codigo ? `<span class="ayuda" style="display:inline; margin-left:6px;">${escapar(c.codigo)}</span>` : ''}
+            ${nivel >= 2 && c.incluirEnNombre === false ? '<span class="ayuda" style="display:inline; margin-left:6px;">no entra en el nombre</span>' : ''}
+          </span>
+          <span class="v">
+            <button class="btn btn-gris btn-chico ct-editar" data-id="${c.idcat}">${ic('pencil')}</button>
+            ${nivel < 3 ? `<button class="btn btn-azul btn-chico ct-agregar" data-id="${c.idcat}">+ Sub</button>` : ''}
+          </span>
+        </div>
+        ${hijos.map(fila).join('')}`;
+    };
+    cont.innerHTML = `
+      <div class="ayuda" style="margin-bottom:8px;">El producto cuelga de la última categoría que uses. Su nombre se arma con las categorías marcadas y el nombre del producto; la subcategoría 1 define el prefijo del código (CEL-000001).</div>
+      <button id="ct-cat-nueva" class="btn btn-verde btn-chico">+ Categoría principal</button>
+      <div id="ct-cat-form" class="oculto" style="margin-top:8px;"></div>
+      <div class="tarjeta" style="margin-top:10px;">
+        ${hijosDeCategoria(categorias, null).map(fila).join('') || '<div class="vacio">Sin categorías.</div>'}
+      </div>`;
+    const contForm = document.getElementById('ct-cat-form');
+    const recargar = () => dibujarCategorias(cont);
+    document.getElementById('ct-cat-nueva').onclick = () => formularioNuevaCategoria(contForm, 1, null, recargar);
+    cont.querySelectorAll('.ct-agregar').forEach(b => b.onclick = () => {
+      const padre = categorias.find(c => c.idcat === Number(b.dataset.id));
+      formularioNuevaCategoria(contForm, (padre.nivel || 1) + 1, padre, recargar);
+      contForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    cont.querySelectorAll('.ct-editar').forEach(b => b.onclick = () => {
+      const c = categorias.find(x => x.idcat === Number(b.dataset.id));
+      const nivel = c.nivel || 1;
+      contForm.classList.remove('oculto');
+      contForm.innerHTML = `
+        <div class="tarjeta" style="background:var(--gris-claro);">
+          <h2 style="margin-top:0;">Editar "${escapar(c.nombre)}"</h2>
+          <label class="obligatorio">Nombre</label>
+          <input id="ce-nombre" maxlength="50" value="${escapar(c.nombre)}">
+          ${nivel === 2 ? `<label>Código corto</label><input id="ce-codigo" maxlength="10" value="${escapar(c.codigo || '')}">` : ''}
+          ${nivel >= 2 ? `<label class="casilla"><input type="checkbox" id="ce-incluir" ${c.incluirEnNombre !== false ? 'checked' : ''}> Su nombre forma parte del nombre del producto</label>` : ''}
+          <div class="ayuda">Al cambiar el nombre o esta opción se actualizan los nombres de los productos que cuelgan de aquí (los que tienen un nombre propio no se tocan).</div>
+          <div class="grupo-botones">
+            <button id="ce-guardar" class="btn btn-azul btn-chico">Guardar</button>
+            <button id="ce-cancelar" class="btn btn-gris btn-chico">Cancelar</button>
+          </div>
+        </div>`;
+      contForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById('ce-cancelar').onclick = () => { contForm.classList.add('oculto'); contForm.innerHTML = ''; };
+      document.getElementById('ce-guardar').onclick = async (e) => {
+        const nombreCat = document.getElementById('ce-nombre').value.trim();
+        if (!nombreCat) { mostrarMensaje(root, 'Indica el nombre.', 'error'); return; }
+        const cuerpo = { nombreCat, idCategoriaSuperior: c.idCategoriaSuperior ?? null };
+        if (nivel === 1) cuerpo.tipo = c.tipo;
+        if (nivel === 2) cuerpo.codigo = document.getElementById('ce-codigo').value.trim();
+        if (nivel >= 2) cuerpo.incluirEnNombre = document.getElementById('ce-incluir').checked;
+        e.target.disabled = true;
+        try {
+          await api('PUT', '/api/categorias/' + c.idcat, cuerpo);
+          mostrarMensaje(root, 'Categoría actualizada.', 'ok');
+          recargar();
+        } catch (err) {
+          mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+          e.target.disabled = false;
+        }
+      };
+    });
+  }
+
 
   async function dibujarColores(cont) {
     try {

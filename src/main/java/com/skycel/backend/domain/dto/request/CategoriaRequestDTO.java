@@ -8,12 +8,16 @@ import lombok.Data;
 public class CategoriaRequestDTO {
 
     @NotBlank(message = "El nombre de la categoría es obligatorio")
-    @Size(max = 20, message = "El nombre no puede exceder los 20 caracteres")
+    @Size(max = 50, message = "El nombre no puede exceder los 50 caracteres")
     private String nombreCat;
 
-    // CELULAR, ACCESORIO, SERVICIO o TABLET — para que cada tipo de producto solo vea sus propias categorías.
-    @NotBlank(message = "El tipo de la categoría es obligatorio")
+    // CELULAR, ACCESORIO, SERVICIO o TABLET: el comportamiento de los artículos del árbol. Solo se pide en la
+    // categoría principal; las subcategorías lo heredan de ella (el valor que envíen se ignora).
     private String tipo;
+
+    // Si el nombre de esta categoría entra en el nombre completo de los artículos (por defecto: sí en
+    // subcategorías, no en la categoría principal).
+    private Boolean incluirEnNombre;
 
     private Short idCategoriaSuperior;
 

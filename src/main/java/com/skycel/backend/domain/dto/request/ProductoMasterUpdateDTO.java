@@ -15,6 +15,10 @@ public class ProductoMasterUpdateDTO {
     @Size(max = 255, message = "El nombre no puede exceder los 255 caracteres")
     private String nombreBase;
 
+    /** Nuevo último eslabón del nombre (la variante). Si cambia él o la categoría y no se manda nombreBase, el nombre completo se rearma. */
+    @Size(max = 120, message = "El nombre del producto no puede exceder los 120 caracteres")
+    private String nombreProducto;
+
     /** Nueva categoría (del mismo tipo de producto que el artículo). */
     private Short idCategoria;
 

@@ -41,4 +41,9 @@ public interface CategoriaRepository extends JpaRepository<Categoria, Short> {
     // Para obtener todos los IDs descendientes (prevenir ciclos)
     @Query("SELECT c.idcat FROM Categoria c WHERE c.categoriaSuperior.idcat = :parentId")
     List<Short> findIdsByCategoriaSuperiorId(@Param("parentId") Short parentId);
+
+    // El código corto es el prefijo de los códigos de artículo y su contador va por categoría: no puede repetirse.
+    boolean existsByCodigoIgnoreCase(String codigo);
+
+    boolean existsByCodigoIgnoreCaseAndIdcatNot(String codigo, Short idcat);
 }
