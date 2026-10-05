@@ -45,6 +45,7 @@ public class MigracionArbolService {
     private final ProductoRepository productoRepository;
     private final CategoriaFolioRepository categoriaFolioRepository;
     private final DescuentoReglaRepository descuentoReglaRepository;
+    private final jakarta.persistence.EntityManager entityManager;
 
     @Transactional
     public MigracionArbolResultadoDTO planear() {
@@ -68,10 +69,15 @@ public class MigracionArbolService {
         private final Map<Grupo, Categoria> principales = new EnumMap<>(Grupo.class);
         private final Map<Short, String> codigoAnteriorDeRaiz = new HashMap<>();
         private final Set<String> nombresAsignados = new HashSet<>();
+        /** Subcategorías 1 cuyo contador ya se ajustó en esta corrida (hacerlo por artículo recorre todos los códigos una y otra vez). */
+        private final Set<Short> contadoresSembrados = new HashSet<>();
         /** Decisión por nombre de subcategoría 1 de accesorios: ¿entra en el nombre de sus artículos? */
         private final Map<String, Boolean> incluirSub1 = new HashMap<>();
 
         MigracionArbolResultadoDTO ejecutar() {
+            // Con miles de artículos, vaciar la sesión antes de cada consulta (flush automático) vuelve cuadrático el recorrido:
+            // los cambios se escriben al hacer saveAndFlush o al terminar la transacción.
+            entityManager.setFlushMode(jakarta.persistence.FlushModeType.COMMIT);
             List<ProductoMaster> masters = new ArrayList<>(productoMasterRepository.findAll());
             masters.sort(Comparator.comparing(ProductoMaster::getIdprodmaster));
             List<DescuentoRegla> reglas = descuentoReglaRepository.findByActivoTrue();
@@ -135,8 +141,7 @@ public class MigracionArbolService {
             String hoja;
             switch (grupo) {
                 case EQUIPOS -> {
-                    boolean tablet = m.getTipo() == TipoProducto.TABLET;
-                    sub1 = hijo(principal, tablet ? "Tablet" : "Celular", tablet ? "TAB" : "CEL", true);
+                    sub1 = sub1DeEquipo(m, principal, marca);
                     if (marca != null) sub2 = hijo(sub1, marca, null, true);
                     hoja = modelo != null ? modelo : sinPrefijo(nombreAnterior, marca);
                 }
@@ -357,8 +362,10 @@ public class MigracionArbolService {
                 }
             } else {
                 Categoria raizAnterior = ruta.get(0);
-                sub1 = hijo(principal, raizAnterior.getNombre(), raizAnterior.getCodigo(),
-                        incluirSub1.getOrDefault(clave(raizAnterior.getNombre()), principal.getTipo() != TipoProducto.ACCESORIO));
+                boolean incluir = incluirSub1.getOrDefault(clave(raizAnterior.getNombre()), principal.getTipo() != TipoProducto.ACCESORIO);
+                sub1 = puedeAdoptarse(raizAnterior, principal)
+                        ? adoptar(raizAnterior, principal, incluir)
+                        : hijo(principal, raizAnterior.getNombre(), raizAnterior.getCodigo(), incluir);
                 if (ruta.size() >= 2) sub2 = hijo(sub1, ruta.get(1).getNombre(), null, false);
                 if (ruta.size() >= 3) {
                     resultado.getAdvertencias().add("'" + m.getNombreBase() + "' estaba en " + ruta.size()
@@ -368,9 +375,46 @@ public class MigracionArbolService {
             return new Categoria[]{sub1, sub2};
         }
 
+        /**
+         * Subcategoría 1 de un equipo. Lo que colgaba de la raíz que pasó a ser "Equipos" es Celular (o Tablet); lo que colgaba de
+         * otra raíz de equipos (Modem, Tablet...) conserva esa raíz como subcategoría 1, con su código y su contador.
+         */
+        private Categoria sub1DeEquipo(ProductoMaster m, Categoria principal, String marca) {
+            Categoria raiz = m.getCategoria() != null ? m.getCategoria().raiz() : null;
+            boolean raizDelPrincipal = raiz == null || raiz.getIdcat().equals(principal.getIdcat());
+            String nombreRaiz = raiz == null ? "" : raiz.getNombre().trim();
+            boolean tablet = m.getTipo() == TipoProducto.TABLET || (!raizDelPrincipal && nombreRaiz.toLowerCase().startsWith("tablet"));
+            // Una raíz que es en realidad una marca ("Samsung Celular") no es un tipo de equipo: esos son Celular de esa marca.
+            boolean raizEsMarca = !raizDelPrincipal && marca != null && nombreRaiz.toLowerCase().contains(marca.toLowerCase());
+            if (raizDelPrincipal || raizEsMarca || (tablet && !nombreRaiz.equalsIgnoreCase("Tablet"))) {
+                return hijo(principal, tablet ? "Tablet" : "Celular", tablet ? "TAB" : "CEL", true);
+            }
+            if (puedeAdoptarse(raiz, principal)) return adoptar(raiz, principal, true);
+            return hijo(principal, nombreRaiz, raiz.getCodigo(), true);
+        }
+
+        /** Una raíz anterior sin subcategorías propias y del mismo grupo puede pasar tal cual a ser subcategoría 1 (conserva su id y su contador). */
+        private boolean puedeAdoptarse(Categoria raiz, Categoria principal) {
+            if (raiz == null || raiz.getCategoriaSuperior() != null || raiz.getIdcat().equals(principal.getIdcat())) return false;
+            if (raiz.getTipo() == null || grupoDe(raiz.getTipo()) != grupoDe(principal.getTipo())) return false;
+            return todas.stream().noneMatch(c -> c.getCategoriaSuperior() != null && c.getCategoriaSuperior().getIdcat().equals(raiz.getIdcat()));
+        }
+
+        private Categoria adoptar(Categoria raiz, Categoria principal, boolean incluir) {
+            raiz.setCategoriaSuperior(principal);
+            raiz.setTipo(principal.getTipo());
+            raiz.setIncluirEnNombre(incluir);
+            raiz.setActivo(true);
+            categoriaRepository.save(raiz);
+            resultado.getCategoriasCreadas().add("'" + raiz.getNombre() + "' pasa a ser subcategoría 1 de '" + principal.getNombre() + "'");
+            sembrarContador(raiz);
+            return raiz;
+        }
+
         /** Que el contador de la subcategoría 1 siga donde iban los códigos de ese prefijo (CEL-000123 → próximo 124). */
         private void sembrarContador(Categoria sub1) {
             if (sub1.nivel() != 2 || sub1.getCodigo() == null || sub1.getCodigo().isBlank() || sub1.getIdcat() == null) return;
+            if (!contadoresSembrados.add(sub1.getIdcat())) return;
             String prefijo = sub1.getCodigo().trim().toUpperCase();
             long maximo = 0;
             for (String codpro : productoRepository.codigosConPrefijo(prefijo)) {
@@ -390,7 +434,7 @@ public class MigracionArbolService {
             principales.values().forEach(c -> principalesIds.add(c.getIdcat()));
             Set<Short> conArticulos = new HashSet<>();
             for (ProductoMaster m : masters) {
-                if (m.getCategoria() == null) continue;
+                if (m.getCategoria() == null || !Boolean.TRUE.equals(m.getActivo())) continue;
                 for (Categoria c : m.getCategoria().ruta()) conArticulos.add(c.getIdcat());
             }
             for (Categoria c : new ArrayList<>(todas)) {
