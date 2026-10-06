@@ -215,11 +215,21 @@ async function dibujarSidebar() {
         ${it.badge ? `<span class="badge">${it.badge}</span>` : ''}
       </button>`;
   }).join('');
+  const nombreUsuario = s.nombreCompleto || s.username;
   sidebar.innerHTML = `
     <div class="sidebar-marca" id="sidebar-inicio"><span class="logo ${LOGO.tiene ? 'con-imagen' : ''}">${logoHtml()}</span> Skycel</div>
-    <div class="sidebar-items">${filas}</div>`;
+    <div class="sidebar-items">
+      <button data-h="#/menu" class="g-otro ${ruta === 'menu' ? 'activo' : ''}"><span class="icono">${ic('house')}</span><span class="texto">Inicio</span></button>
+      ${filas}
+    </div>
+    <div class="sidebar-usuario">
+      <div class="su-avatar">${escapar(nombreUsuario.trim().charAt(0).toUpperCase())}</div>
+      <div class="su-datos"><div class="su-nombre">${escapar(nombreUsuario)}</div><div class="su-rol">${escapar(etiquetaRol(s.rol))}</div></div>
+      <button class="su-salir" id="su-salir" title="Cerrar sesión" aria-label="Cerrar sesión">${ic('log-out')}</button>
+    </div>`;
   sidebar.querySelectorAll('button[data-h]').forEach(b => b.onclick = () => navegar(b.dataset.h));
   document.getElementById('sidebar-inicio').onclick = () => navegar('#/menu');
+  document.getElementById('su-salir').onclick = () => document.getElementById('btn-salir').click();
 }
 
 document.getElementById('btn-salir').onclick = () => {
@@ -399,7 +409,10 @@ async function pantallaMenu() {
   const gestor = GESTOR_ROLES.includes(s.rol);
   const personal = PERSONAL.includes(s.rol);
   const enTaller = TALLER_ROLES.includes(s.rol);
-  const fecha = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+  const fecha = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  // Accesos directos del banner: los módulos de uso diario que le tocan a su rol (los demás están en el menú lateral)
+  const preferidos = ['Devoluciones', 'Caja', 'Inventario', 'Cuentas por cobrar', 'Clientes', 'Taller', 'Recibir equipo', 'Consultar orden'];
+  const atajos = preferidos.map(t => tarjetas.find(x => x.t === t)).filter(Boolean).slice(0, 5);
 
   const kpis = [];
   if (gestor) kpis.push({ id: 'ventas', c: 'c1', i: 'trending-up', t: 'Ventas de hoy', h: '#/reportes' });
@@ -411,13 +424,17 @@ async function pantallaMenu() {
   if (pend + err > 0) kpis.push({ id: 'pend', c: 'c6', i: 'cloud-upload', t: 'Por enviar', h: '#/pendientes', v: String(pend + err) });
 
   root.innerHTML = `
-    <div class="dash-cab">
-      <div>
-        <h1 class="saludo">Hola, ${escapar((s.nombreCompleto || s.username).split(' ')[0])}</h1>
-        <div class="ayuda">${escapar(fecha.charAt(0).toUpperCase() + fecha.slice(1))}</div>
+    <section class="banner">
+      <div class="banner-fila">
+        <div>
+          <h1 class="saludo">${saludoDelDia()}, ${escapar((s.nombreCompleto || s.username).split(' ')[0])}</h1>
+          <div class="banner-fecha">${escapar(fecha.charAt(0).toUpperCase() + fecha.slice(1))} · <b id="dh-hora">${horaActual()}</b></div>
+          ${s.nombreTienda ? `<div class="banner-suc">Sucursal: ${escapar(s.nombreTienda)}</div>` : ''}
+        </div>
+        ${personal ? `<button id="dh-vender" class="btn btn-vender">${ic('shopping-cart')} Nueva venta</button>` : ''}
       </div>
-      ${personal ? `<button id="dh-vender" class="btn btn-azul btn-vender">${ic('shopping-cart')} Nueva venta</button>` : ''}
-    </div>
+      ${atajos.length ? `<div class="banner-chips">${atajos.map(a => `<button class="banner-chip" data-h="${a.h}">${a.i}${escapar(a.t)}</button>`).join('')}</div>` : ''}
+    </section>
     <div class="kp">
       ${kpis.map(k => `
         <div class="kpi" data-h="${k.h}">
@@ -433,13 +450,26 @@ async function pantallaMenu() {
         <div id="dh-grafica"><div class="vacio">Cargando...</div></div>
       </div>
       <div class="tarjeta hero-caja" id="dh-caja">
-        <small>Saldo de caja</small>
+        <div class="hero-titulo">Saldo de caja</div>
         <div class="hero-monto" id="dh-saldo">…</div>
-        <div class="hero-fila"><span>Entradas</span><span id="dh-entradas">…</span></div>
-        <div class="hero-fila"><span>Salidas</span><span id="dh-salidas">…</span></div>
+        <div class="hero-casillas">
+          <div class="hero-casilla"><small>Entradas</small><b id="dh-entradas">…</b></div>
+          <div class="hero-casilla"><small>Salidas</small><b id="dh-salidas">…</b></div>
+        </div>
         <button class="btn btn-chico hero-boton" data-h="#/caja">Ver caja</button>
       </div>
+    </div>
+    <div class="dash-listas">
+      <div class="tarjeta">
+        <div class="lista-cab"><h2>Últimas ventas</h2><button class="enlace" data-h="#/reportes">Ver reportes ${ic('chevron-right')}</button></div>
+        <div id="dh-ultimas"><div class="vacio">Cargando...</div></div>
+      </div>
+      <div class="tarjeta">
+        <div class="lista-cab"><h2>Productos con bajo stock</h2><button class="enlace" data-h="#/inventario">Ver inventario ${ic('chevron-right')}</button></div>
+        <div id="dh-bajos"><div class="vacio">Cargando...</div></div>
+      </div>
     </div>` : ''}
+    <div class="menu-movil">
     ${gruposDeMenu(tarjetas).map(g => `
       ${g.nombre ? `<h2 class="menu-grupo">${escapar(g.nombre)}</h2>` : ''}
       <div class="rejilla-menu">
@@ -450,10 +480,17 @@ async function pantallaMenu() {
             ${t.badge ? `<span class="badge">${t.badge}</span>` : ''}
           </div>`).join('')}
       </div>`).join('')}
+    </div>
     <div class="ayuda" style="text-align:center; margin-top:20px;">
       Para pagos mixtos, ventas a crédito y cambios de producto, usa JSystem en la tienda.
     </div>`;
   root.querySelectorAll('[data-h]').forEach(b => b.onclick = () => navegar(b.dataset.h));
+  // El reloj del banner avanza solo mientras la pantalla siga siendo el Inicio
+  const reloj = setInterval(() => {
+    const el = document.getElementById('dh-hora');
+    if (!el) { clearInterval(reloj); return; }
+    el.textContent = horaActual();
+  }, 20000);
   const vender = document.getElementById('dh-vender');
   if (vender) vender.onclick = () => navegar('#/pos');
 
@@ -478,6 +515,15 @@ async function pantallaMenu() {
         poner('dk-tickets', String(hoyN));
         const g = document.getElementById('dh-grafica');
         if (g) g.innerHTML = graficaVentas(dias);
+        const ultimas = ventas.filter(v => v.descripcionEstado !== 'Cancelada')
+          .sort((a, b) => new Date(b.fechaVenta) - new Date(a.fechaVenta)).slice(0, 5);
+        const u = document.getElementById('dh-ultimas');
+        if (u) u.innerHTML = ultimas.length ? ultimas.map(v => {
+          const cliente = v.nombreCliente || 'Público general';
+          const cuando = new Date(v.fechaVenta).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace('.', '');
+          const meta = [cuando, v.nombreVendedor || v.usernameVendedor, v.descripcionMetodoPago].filter(Boolean).join(' · ');
+          return filaLista(cliente, meta, `<span class="fl-monto">${formatoDinero(v.total)}</span>`);
+        }).join('') : '<div class="vacio">Aún no hay ventas en esta semana.</div>';
       } catch {
         poner('dk-ventas', '—'); poner('dk-tickets', '—');
         const g = document.getElementById('dh-grafica'); if (g) g.innerHTML = '<div class="vacio">Sin conexión.</div>';
@@ -494,6 +540,17 @@ async function pantallaMenu() {
         poner('dh-salidas', formatoDinero(saldo.totalSalidas));
       } catch { poner('dh-saldo', '—'); poner('dh-entradas', '—'); poner('dh-salidas', '—'); }
     })();
+    (async () => {
+      const b = document.getElementById('dh-bajos');
+      try {
+        const bajos = (await api('GET', `/api/productos/tienda/${codti}/bajo-stock`)).slice(0, 5);
+        if (b) b.innerHTML = bajos.length ? bajos.map(p => {
+          const stock = Number(p.stock || 0);
+          const marca = stock <= 0 ? '<span class="pastilla error">Agotado</span>' : `<span class="pastilla reparacion">${stock} ${stock === 1 ? 'pza' : 'pzas'}</span>`;
+          return filaLista(p.nombreProductoMaster || p.codpro, p.categoriaPrincipal || p.nombreCategoria || '', marca);
+        }).join('') : '<div class="vacio">Todo en existencia suficiente.</div>';
+      } catch { if (b) b.innerHTML = '<div class="vacio">Sin conexión.</div>'; }
+    })();
     api('GET', `/api/traspasos/tienda/${codti}/pendientes`).then(l => poner('dk-traspasos', String(l.length))).catch(() => poner('dk-traspasos', '—'));
     api('GET', `/api/compras?codti=${codti}&soloActivas=true`)
       .then(l => poner('dk-porpagar', formatoDinero(l.reduce((sum, c) => sum + Number(c.saldoPendiente || 0), 0))))
@@ -502,21 +559,54 @@ async function pantallaMenu() {
   if (enTaller) api('GET', '/api/ordenes-servicio/taller').then(l => poner('dk-taller', String(l.length))).catch(() => poner('dk-taller', '—'));
 }
 
-/** Gráfica de líneas de 7 días (SVG propio, sin librerías): total vendido por día, hoy al final. */
+/** Gráfica de barras de 7 días (HTML y CSS, sin librerías): total vendido por día; la barra de hoy va resaltada. */
 function graficaVentas(dias) {
   const max = Math.max(...dias.map(d => d.total), 1);
   const suma = dias.reduce((a, d) => a + d.total, 0);
-  const pts = dias.map((d, i) => [i * (300 / 6), 96 - (d.total / max) * 78]);
-  const linea = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
-  const nombres = dias.map(d => d.d.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', ''));
+  const nombres = dias.map(d => d.d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' }).replace('.', ''));
   return `
-    <div class="graf-total">${formatoDinero(suma)} <small>en 7 días</small></div>
-    <svg viewBox="0 0 300 110" width="100%" role="img" aria-label="Ventas por día de los últimos 7 días" preserveAspectRatio="none" class="graf">
-      <path d="${linea} L300 110 L0 110Z" class="graf-area"/>
-      <path d="${linea}" class="graf-linea"/>
-      ${pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === 6 ? 4.5 : 2.5}" class="graf-punto"><title>${escapar(nombres[i])}: ${formatoDinero(dias[i].total)}</title></circle>`).join('')}
-    </svg>
-    <div class="graf-dias">${nombres.map(n => `<span>${escapar(n)}</span>`).join('')}</div>`;
+    <div class="graf-total-semana">Total de la semana: ${formatoDinero(suma)}</div>
+    <div class="barras" role="img" aria-label="Ventas por día de los últimos 7 días">
+      ${dias.map((d, i) => `
+        <div class="barra-col">
+          <span class="barra-val">${d.total > 0 ? formatoDinero(d.total).replace('.00', '') : ''}</span>
+          <div class="barra-pista"><div class="barra ${i === 6 ? 'hoy' : ''}" style="height:${Math.max((d.total / max) * 100, d.total > 0 ? 4 : 1).toFixed(1)}%"></div></div>
+          <span class="barra-dia ${i === 6 ? 'hoy' : ''}">${i === 6 ? 'Hoy' : escapar(nombres[i])}</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+function saludoDelDia() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+}
+function horaActual() { return new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }); }
+
+/** Cabecera de pantalla como la de JSystem: título grande, subtítulo gris y, a la derecha, las acciones principales. */
+function cabeceraPantalla(titulo, subtitulo, acciones) {
+  return `<div class="pag-cab"><div><h1>${titulo}</h1>${subtitulo ? `<div class="pag-sub">${subtitulo}</div>` : ''}</div>${acciones ? `<div class="pag-acciones">${acciones}</div>` : ''}</div>`;
+}
+/** Indicador horizontal (ícono a la izquierda; cifra y nombre a la derecha), como los de Devoluciones y Reportes de JSystem. */
+function kpiH(clase, icono, valor, etiqueta, id) {
+  return `<div class="kpi-h"><b class="${clase}">${ic(icono)}</b><div><strong${id ? ` id="${id}"` : ''}>${valor}</strong><small>${etiqueta}</small></div></div>`;
+}
+
+/** Estado de una cuenta o compra con el color que manda el servidor. */
+function pastillaColor(estadoDisplay, estadoColor) {
+  return `<span class="pastilla" style="background:${estadoColor}22; color:${estadoColor};">${escapar(estadoDisplay)}</span>`;
+}
+function textoDias(d) { return d < 0 ? Math.abs(d) + ' días vencida' : 'vence en ' + d + ' días'; }
+
+/** Fila de lista con círculo de color e inicial (Inicio: últimas ventas, productos con bajo stock). */
+function filaLista(titulo, meta, derecha) {
+  const t = String(titulo || '?');
+  let n = 0;
+  for (const c of t) n = (n * 31 + c.charCodeAt(0)) % 5;
+  return `<div class="fila-lista">
+    <span class="avatar av${n}">${escapar(t.trim().charAt(0).toUpperCase())}</span>
+    <div class="fl-cuerpo"><div class="fl-nombre">${escapar(t)}</div>${meta ? `<div class="fl-meta">${escapar(meta)}</div>` : ''}</div>
+    ${derecha}
+  </div>`;
 }
 
 // ── Recepción de equipo ──────────────────────────────────────────────────
@@ -526,7 +616,8 @@ async function pantallaRecepcion() {
   if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para recibir equipos.</div>'; return; }
 
   root.innerHTML = `
-    <h1>${ic('inbox')} Recibir equipo</h1>
+    ${cabeceraPantalla(ic('inbox') + ' Recibir equipo', 'Registra el equipo que el cliente deja para reparación')}
+    <div class="dos-cols sin-span">
     <div class="tarjeta">
       <div id="rc-tienda"></div>
 
@@ -550,7 +641,9 @@ async function pantallaRecepcion() {
         <input id="rc-cli-tel" inputmode="tel">
       </div>
 
-      <h2 style="margin-top:18px;">Equipo</h2>
+    </div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Equipo</h2>
       <div class="fila">
         <div>
           <label class="obligatorio">Marca</label>
@@ -573,7 +666,9 @@ async function pantallaRecepcion() {
       <input id="rc-fecha-promesa" type="date">
       <div id="rc-tecnico-cont"></div>
 
-      <h2 style="margin-top:18px;">Anticipo</h2>
+    </div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Anticipo</h2>
       <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
         <input type="checkbox" id="rc-anticipo-chk" style="width:auto;"> El cliente deja un anticipo
       </label>
@@ -593,6 +688,7 @@ async function pantallaRecepcion() {
       </div>
 
       <button id="rc-btn" class="btn btn-verde">Recibir equipo</button>
+    </div>
     </div>`;
 
   // Tienda
@@ -744,16 +840,47 @@ async function pantallaRecepcion() {
 async function pantallaTaller() {
   const s = Sesion.obtener();
   if (!TALLER_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver el taller.</div>'; return; }
-  root.innerHTML = `<h1>${ic('wrench')} Taller</h1><div id="ta-lista"><div class="vacio">Cargando...</div></div>`;
+  root.innerHTML = `
+    ${cabeceraPantalla(ic('wrench') + ' Taller', 'Órdenes abiertas en reparación y por entregar')}
+    <div class="kp-h">
+      ${kpiH('c5', 'hourglass', '…', 'Por tomar', 'ta-k-tomar')}
+      ${kpiH('c4', 'wrench', '…', 'En reparación', 'ta-k-rep')}
+      ${kpiH('c3', 'circle-check', '…', 'Listas para entrega', 'ta-k-lista')}
+    </div>
+    <div class="tarjeta iv-filtros"><div id="ta-lista"><div class="vacio">Cargando...</div></div></div>`;
   const cont = document.getElementById('ta-lista');
   try {
     const ordenes = await api('GET', '/api/ordenes-servicio/taller');
+    const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
+    poner('ta-k-tomar', ordenes.filter(o => o.estado === 1 && !o.idTecnico).length);
+    poner('ta-k-rep', ordenes.filter(o => o.estadoDisplay === 'En reparación').length);
+    poner('ta-k-lista', ordenes.filter(o => o.estadoDisplay === 'Lista para entrega').length);
     if (ordenes.length === 0) { cont.innerHTML = '<div class="vacio">No hay órdenes abiertas.</div>'; return; }
-    cont.innerHTML = ordenes.map(o => itemOrden(o, s)).join('');
-    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/orden/' + el.dataset.id));
+    cont.innerHTML = tablaOrdenes(ordenes, s);
+    cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/orden/' + el.dataset.id));
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor: el taller solo se puede consultar en línea.' : err.message)}</div>`;
   }
+}
+
+/** Órdenes de servicio: tabla en escritorio y tarjetas en celular; un clic abre la orden. */
+function tablaOrdenes(ordenes, s) {
+  const estado = (o) => (o.estado === 1 && !o.idTecnico) ? '<span class="pastilla por-tomar">' + ic('hourglass') + ' Por tomar</span>' : pastillaEstado(o.estadoDisplay);
+  return `
+    <div class="tabla-cont"><table class="tabla">
+      <thead><tr><th>Folio</th><th>Ingreso</th><th>Cliente</th><th>Equipo</th><th>Falla reportada</th><th>Técnico</th><th>Promesa</th><th>Estado</th></tr></thead>
+      <tbody>${ordenes.map(o => `
+        <tr data-id="${o.idorden}">
+          <td>${escapar(o.folio)}</td><td>${formatoFecha(o.fechaIngreso)}</td>
+          <td class="tabla-nombre">${escapar(o.nombreCliente)}</td>
+          <td>${escapar(o.marca)} ${escapar(o.modelo)}</td>
+          <td class="celda-corta" title="${escapar(o.fallaReportada || '')}">${escapar(o.fallaReportada || '')}</td>
+          <td>${o.idTecnico ? escapar(o.nombreTecnico) : 'Sin técnico'}</td>
+          <td>${escapar(o.fechaPromesa || '—')}</td>
+          <td>${estado(o)}</td>
+        </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="inv-tarjetas">${ordenes.map(o => itemOrden(o, s)).join('')}</div>`;
 }
 
 function itemOrden(o, s) {
@@ -778,14 +905,16 @@ function itemOrden(o, s) {
 async function pantallaConsultar() {
   const s = Sesion.obtener();
   root.innerHTML = `
-    <h1>${ic('search')} Consultar orden</h1>
-    <div class="buscador">
-      <input id="co-folio" placeholder="Folio (OS-000123)" autocapitalize="characters">
-      <button id="co-btn" class="btn btn-azul btn-chico">Buscar</button>
+    ${cabeceraPantalla(ic('search') + ' Consultar orden', 'Busca una orden por su folio o revisa las más recientes')}
+    <div class="tarjeta iv-filtros">
+      <div class="buscador buscar-ic">${ic('search')}<input id="co-folio" placeholder="Folio (OS-000123)" autocapitalize="characters">
+        <button id="co-btn" class="btn btn-azul btn-chico">Buscar</button></div>
+      <div id="co-resultado"></div>
     </div>
-    <div id="co-resultado"></div>
-    <h2 style="margin-top:18px;">${SUPERIOR.includes(s.rol) ? 'Órdenes de tu sucursal' : 'Órdenes recientes'}</h2>
-    <div id="co-lista"><div class="vacio">Cargando...</div></div>`;
+    <div class="tarjeta">
+      <h2>${SUPERIOR.includes(s.rol) ? 'Órdenes de tu sucursal' : 'Órdenes recientes'}</h2>
+      <div id="co-lista"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
   const buscar = async () => {
     const folio = document.getElementById('co-folio').value.trim().toUpperCase();
@@ -810,8 +939,8 @@ async function pantallaConsultar() {
     if (!codti) { cont.innerHTML = '<div class="vacio">Indica un folio para buscar.</div>'; return; }
     const ordenes = await api('GET', '/api/ordenes-servicio/tienda/' + codti);
     if (ordenes.length === 0) { cont.innerHTML = '<div class="vacio">No hay órdenes.</div>'; return; }
-    cont.innerHTML = ordenes.slice(0, 25).map(o => itemOrden(o, s)).join('');
-    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/orden/' + el.dataset.id));
+    cont.innerHTML = tablaOrdenes(ordenes.slice(0, 25), s);
+    cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/orden/' + el.dataset.id));
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
   }
@@ -835,12 +964,15 @@ async function pantallaOrdenDetalle(id) {
   const esTecnicoLibre = s.rol === 'TECNICO' && !o.idTecnico && o.estado === 1;
 
   root.innerHTML = `
-    <h1>${escapar(o.folio)}${o.folioLocal ? ` <span class="ayuda">(${escapar(o.folioLocal)})</span>` : ''}</h1>
+    <button class="enlace" onclick="history.length > 1 ? history.back() : navegar('#/taller')" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
+    ${cabeceraPantalla(escapar(o.folio) + (o.folioLocal ? ` <span class="ayuda">(${escapar(o.folioLocal)})</span>` : ''), `${escapar(o.marca)} ${escapar(o.modelo)} · ingresó ${formatoFecha(o.fechaIngreso)}`, pastillaEstado(o.estadoDisplay))}
+    <div class="kp-h">
+      ${kpiH('c1', 'banknote', formatoDinero(o.total), 'Total')}
+      ${kpiH('c3', 'circle-check', formatoDinero(o.totalAnticipos), 'Anticipos')}
+      ${kpiH('c4', 'clock', formatoDinero(o.saldo), 'Saldo por cobrar')}
+    </div>
     <div class="tarjeta">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-        ${pastillaEstado(o.estadoDisplay)}
-        <span class="orden-fecha">${formatoFecha(o.fechaIngreso)}</span>
-      </div>
+      <h2>Información de la orden</h2>
       <div class="detalle-fila"><span class="k">Cliente</span><span class="v">${escapar(o.nombreCliente)}</span></div>
       <div class="detalle-fila"><span class="k">Teléfono</span><span class="v">${escapar(o.telefonoCliente || '—')}</span></div>
       <div class="detalle-fila"><span class="k">Sucursal</span><span class="v">${escapar(o.nombreTienda)}</span></div>
@@ -853,9 +985,6 @@ async function pantallaOrdenDetalle(id) {
       <div class="detalle-fila"><span class="k">Técnico</span><span class="v">${escapar(o.nombreTecnico || 'Sin asignar')}</span></div>
       <div class="detalle-fila"><span class="k">Recibió</span><span class="v">${escapar(o.nombreRecibe)}</span></div>
       <div class="detalle-fila"><span class="k">Fecha prometida</span><span class="v">${o.fechaPromesa || '—'}</span></div>
-      <div class="detalle-fila"><span class="k">Total</span><span class="v">${formatoDinero(o.total)}</span></div>
-      <div class="detalle-fila"><span class="k">Anticipos</span><span class="v">${formatoDinero(o.totalAnticipos)}</span></div>
-      <div class="detalle-fila"><span class="k">Saldo</span><span class="v">${formatoDinero(o.saldo)}</span></div>
     </div>
 
     <div id="dt-acciones" class="tarjeta oculto">
@@ -918,7 +1047,7 @@ async function pantallaOrdenDetalle(id) {
 
 async function pantallaPendientes() {
   root.innerHTML = `
-    <h1>${ic('cloud-upload')} Guardado en este equipo</h1>
+    ${cabeceraPantalla(ic('cloud-upload') + ' Guardado en este equipo', 'Lo que se capturó sin conexión y espera enviarse al servidor')}
     <div class="grupo-botones" style="margin-bottom:14px;">
       <button id="pe-sincronizar" class="btn btn-verde">${ic('refresh-cw')} Intentar enviar todo ahora</button>
     </div>
@@ -1009,13 +1138,21 @@ async function pantallaClientes() {
   const s = Sesion.obtener();
   const puedeCrear = GESTOR_ROLES.includes(s.rol);
   root.innerHTML = `
-    <h1>${ic('users')} Clientes</h1>
-    <div class="buscador">
-      <input id="cl-buscar" placeholder="Nombre o teléfono">
-      ${puedeCrear ? '<button id="cl-nuevo" class="btn btn-verde btn-chico">+ Nuevo</button>' : ''}
-    </div>
+    ${cabeceraPantalla(ic('users') + ' Clientes', 'Gestión de clientes y su historial de compras', puedeCrear ? `<button id="cl-nuevo" class="btn btn-azul">${ic('plus')} Nuevo cliente</button>` : '')}
     <div id="cl-form" class="oculto"></div>
-    <div id="cl-lista"><div class="vacio">Cargando...</div></div>`;
+    <div class="kp-h">
+      ${kpiH('c1', 'users', '…', 'Total de clientes', 'cl-k-total')}
+      ${kpiH('c5', 'shield-check', '…', 'Clientes VIP', 'cl-k-vip')}
+      ${kpiH('c4', 'users', '…', 'Frecuentes', 'cl-k-frec')}
+      ${kpiH('c3', 'banknote', '…', 'Total en ventas', 'cl-k-total-gastado')}
+    </div>
+    <div class="tarjeta iv-filtros">
+      <div class="iv-filtros-fila fila-2">
+        <div class="buscador buscar-ic">${ic('search')}<input id="cl-buscar" placeholder="Buscar por nombre o teléfono..."></div>
+        <select id="cl-tipo" aria-label="Tipo de cliente"><option value="">Todos los tipos</option></select>
+      </div>
+      <div id="cl-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
   const cont = document.getElementById('cl-lista');
   let clientes = [];
@@ -1026,24 +1163,42 @@ async function pantallaClientes() {
     return;
   }
 
-  const dibujar = (lista) => {
-    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay clientes que coincidan.</div>'; return; }
-    cont.innerHTML = lista.slice(0, 60).map(c => `
-      <div class="orden-item" data-id="${c.idcliente}">
-        <div class="orden-cab">
-          <span class="orden-folio">${escapar(c.nombreCompleto)}</span>
-          <span class="pastilla" style="background:${c.tipoColor}22; color:${c.tipoColor};">${escapar(c.tipoClienteDisplay)}</span>
-        </div>
-        <div class="orden-cliente">${escapar(c.telefono || 'Sin teléfono')}</div>
-      </div>`).join('');
-    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/cliente/' + el.dataset.id));
-  };
-  dibujar(clientes);
+  const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
+  poner('cl-k-total', clientes.length);
+  poner('cl-k-vip', clientes.filter(c => c.tipoClienteDisplay === 'VIP').length);
+  poner('cl-k-frec', clientes.filter(c => c.tipoClienteDisplay === 'Frecuente').length);
+  poner('cl-k-total-gastado', formatoDinero(clientes.reduce((sum, c) => sum + Number(c.totalGastado || 0), 0)));
+  const selTipo = document.getElementById('cl-tipo');
+  [...new Set(clientes.map(c => c.tipoClienteDisplay).filter(Boolean))].forEach(t => selTipo.insertAdjacentHTML('beforeend', `<option value="${escapar(t)}">${escapar(t)}</option>`));
 
-  document.getElementById('cl-buscar').addEventListener('input', e => {
-    const q = e.target.value.trim().toLowerCase();
-    dibujar(!q ? clientes : clientes.filter(c => (c.nombreCompleto || '').toLowerCase().includes(q) || (c.telefono || '').includes(q)));
-  });
+  const dibujar = () => {
+    const q = quitarAcentos(document.getElementById('cl-buscar').value.trim()).toLowerCase();
+    const tipo = selTipo.value;
+    const lista = clientes.filter(c => (!tipo || c.tipoClienteDisplay === tipo) &&
+      (!q || quitarAcentos(c.nombreCompleto || '').toLowerCase().includes(q) || (c.telefono || '').includes(q)));
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay clientes que coincidan.</div>'; return; }
+    const recorte = lista.slice(0, 100);
+    cont.innerHTML = `
+      <div class="tabla-cont"><table class="tabla">
+        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Correo</th><th>Compras</th><th>Total gastado</th><th>Puntos</th><th>Tipo</th></tr></thead>
+        <tbody>${recorte.map(c => `
+          <tr data-id="${c.idcliente}">
+            <td class="tabla-nombre">${escapar(c.nombreCompleto)}</td><td>${escapar(c.telefono || '—')}</td><td>${escapar(c.correo || '—')}</td>
+            <td>${c.totalCompras ?? 0}</td><td class="tabla-precio">${formatoDinero(c.totalGastado)}</td><td>${c.puntos ?? 0}</td>
+            <td>${pastillaColor(c.tipoClienteDisplay, c.tipoColor)}</td>
+          </tr>`).join('')}</tbody>
+      </table></div>
+      <div class="inv-tarjetas">${recorte.map(c => `
+        <div class="orden-item" data-id="${c.idcliente}">
+          <div class="orden-cab"><span class="orden-folio">${escapar(c.nombreCompleto)}</span>${pastillaColor(c.tipoClienteDisplay, c.tipoColor)}</div>
+          <div class="orden-cliente">${escapar(c.telefono || 'Sin teléfono')}</div>
+        </div>`).join('')}</div>
+      ${lista.length > recorte.length ? `<div class="ayuda" style="margin-top:8px;">Mostrando ${recorte.length} de ${lista.length}: escribe arriba para buscar al que necesitas.</div>` : ''}`;
+    cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/cliente/' + el.dataset.id));
+  };
+  dibujar();
+  document.getElementById('cl-buscar').addEventListener('input', dibujar);
+  selTipo.addEventListener('change', dibujar);
 
   if (puedeCrear) {
     document.getElementById('cl-nuevo').onclick = () => {
@@ -1103,15 +1258,18 @@ async function pantallaClienteDetalle(id) {
   }
 
   root.innerHTML = `
-    <h1>${escapar(c.nombreCompleto)}</h1>
+    <button class="enlace" onclick="navegar('#/clientes')" style="margin-bottom:6px;">${ic('arrow-left')} Volver a clientes</button>
+    ${cabeceraPantalla(escapar(c.nombreCompleto), escapar(c.telefono || 'Sin teléfono'), pastillaColor(c.tipoClienteDisplay, c.tipoColor))}
+    <div class="kp-h">
+      ${kpiH('c1', 'receipt', String(c.totalCompras ?? 0), 'Compras')}
+      ${kpiH('c3', 'banknote', formatoDinero(c.totalGastado), 'Total gastado')}
+      ${kpiH('c5', 'tags', String(c.puntos ?? 0), 'Puntos')}
+    </div>
     <div class="tarjeta">
-      <span class="pastilla" style="background:${c.tipoColor}22; color:${c.tipoColor};">${escapar(c.tipoClienteDisplay)}</span>
+      <h2>Datos del cliente</h2>
       <div class="detalle-fila"><span class="k">Teléfono</span><span class="v">${escapar(c.telefono || '—')}</span></div>
       <div class="detalle-fila"><span class="k">Correo</span><span class="v">${escapar(c.correo || '—')}</span></div>
       <div class="detalle-fila"><span class="k">Dirección</span><span class="v">${escapar(c.direccion || '—')}</span></div>
-      <div class="detalle-fila"><span class="k">Puntos</span><span class="v">${c.puntos ?? 0}</span></div>
-      <div class="detalle-fila"><span class="k">Compras</span><span class="v">${c.totalCompras ?? 0}</span></div>
-      <div class="detalle-fila"><span class="k">Total gastado</span><span class="v">${formatoDinero(c.totalGastado)}</span></div>
       <div class="detalle-fila"><span class="k">Cliente desde</span><span class="v">${formatoFecha(c.fechaRegistro)}</span></div>
     </div>
     <div id="cd-form"></div>
@@ -1139,38 +1297,63 @@ async function pantallaCxC() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver cuentas por cobrar.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('credit-card')} Cuentas por cobrar</h1>
-    <div id="cx-resumen"></div>
-    <div id="cx-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>`;
+    ${cabeceraPantalla(ic('credit-card') + ' Cuentas por cobrar', 'Control de créditos y pagos pendientes de los clientes')}
+    <div class="kp-h">
+      ${kpiH('c4', 'banknote', '…', 'Total pendiente', 'cx-k-pend')}
+      ${kpiH('c6', 'triangle-alert', '…', 'Total vencido', 'cx-k-venc')}
+      ${kpiH('c1', 'credit-card', '…', 'Cuentas activas', 'cx-k-n')}
+    </div>
+    <div class="tarjeta iv-filtros">
+      <div class="iv-filtros-fila fila-2">
+        <div class="buscador buscar-ic">${ic('search')}<input id="cx-buscar" placeholder="Buscar por cliente o factura..."></div>
+        <select id="cx-estado" aria-label="Estado"><option value="">Todos los estados</option></select>
+      </div>
+      <div id="cx-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
-  try {
-    const resumen = await api('GET', '/api/cuentas-por-cobrar/resumen');
-    document.getElementById('cx-resumen').innerHTML = `
-      <div class="fila">
-        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Pendiente</div><div style="font-size:18px; font-weight:700;">${formatoDinero(resumen.totalPendiente)}</div></div>
-        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Vencido</div><div style="font-size:18px; font-weight:700; color:var(--rojo);">${formatoDinero(resumen.totalVencido)}</div></div>
-        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Cuentas</div><div style="font-size:18px; font-weight:700;">${resumen.cuentasActivas}</div></div>
-      </div>`;
-  } catch { /* si falla el resumen, se sigue mostrando la lista */ }
+  const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  api('GET', '/api/cuentas-por-cobrar/resumen').then(r => {
+    poner('cx-k-pend', formatoDinero(r.totalPendiente));
+    poner('cx-k-venc', formatoDinero(r.totalVencido));
+    poner('cx-k-n', String(r.cuentasActivas));
+    const venc = document.getElementById('cx-k-venc'); if (venc && Number(r.totalVencido) > 0) venc.style.color = 'var(--rojo)';
+  }).catch(() => { poner('cx-k-pend', '—'); poner('cx-k-venc', '—'); poner('cx-k-n', '—'); });
 
   const cont = document.getElementById('cx-lista');
   try {
     const cuentas = await api('GET', '/api/cuentas-por-cobrar?soloActivas=true');
-    if (cuentas.length === 0) { cont.innerHTML = '<div class="vacio">No hay cuentas activas.</div>'; return; }
     cuentas.sort((a, b) => a.diasVencimiento - b.diasVencimiento);
-    cont.innerHTML = cuentas.map(c => `
-      <div class="orden-item" data-id="${c.idcuenta}">
-        <div class="orden-cab">
-          <span class="orden-folio">${escapar(c.noFactura)}</span>
-          <span class="pastilla" style="background:${c.estadoColor}22; color:${c.estadoColor};">${escapar(c.estadoDisplay)}</span>
-        </div>
-        <div class="orden-equipo">${escapar(c.nombreCliente)}</div>
-        <div class="orden-meta">
-          <span class="orden-fecha">${c.diasVencimiento < 0 ? Math.abs(c.diasVencimiento) + ' días vencida' : 'vence en ' + c.diasVencimiento + ' días'}</span>
-          <span style="font-weight:700;">${formatoDinero(c.saldoPendiente)}</span>
-        </div>
-      </div>`).join('');
-    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/cuenta/' + el.dataset.id));
+    const selEstado = document.getElementById('cx-estado');
+    [...new Set(cuentas.map(c => c.estadoDisplay))].forEach(e => selEstado.insertAdjacentHTML('beforeend', `<option value="${escapar(e)}">${escapar(e)}</option>`));
+    const dibujar = () => {
+      const q = quitarAcentos(document.getElementById('cx-buscar').value.trim()).toLowerCase();
+      const est = selEstado.value;
+      const lista = cuentas.filter(c => (!est || c.estadoDisplay === est) && (!q || quitarAcentos(`${c.noFactura} ${c.nombreCliente}`).toLowerCase().includes(q)));
+      if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay cuentas que mostrar.</div>'; return; }
+      cont.innerHTML = `
+        <div class="tabla-cont"><table class="tabla">
+          <thead><tr><th>No. factura</th><th>Cliente</th><th>Emisión</th><th>Vencimiento</th><th>Días</th><th>Monto total</th><th>Pagado</th><th>Saldo pendiente</th><th>Estado</th></tr></thead>
+          <tbody>${lista.map(c => `
+            <tr data-id="${c.idcuenta}">
+              <td>${escapar(c.noFactura)}</td><td class="tabla-nombre">${escapar(c.nombreCliente)}</td>
+              <td>${escapar(c.fechaEmision)}</td><td>${escapar(c.fechaVencimiento)}</td>
+              <td class="${c.diasVencimiento < 0 ? 'dias-neg' : 'dias-pos'}">${c.diasVencimiento > 0 ? '+' : ''}${c.diasVencimiento}</td>
+              <td>${formatoDinero(c.montoTotal)}</td><td class="monto-ok">${formatoDinero(c.montoPagado)}</td>
+              <td class="tabla-precio monto-rojo">${formatoDinero(c.saldoPendiente)}</td>
+              <td>${pastillaColor(c.estadoDisplay, c.estadoColor)}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>
+        <div class="inv-tarjetas">${lista.map(c => `
+          <div class="orden-item" data-id="${c.idcuenta}">
+            <div class="orden-cab"><span class="orden-folio">${escapar(c.noFactura)}</span>${pastillaColor(c.estadoDisplay, c.estadoColor)}</div>
+            <div class="orden-equipo">${escapar(c.nombreCliente)}</div>
+            <div class="orden-meta"><span class="orden-fecha">${textoDias(c.diasVencimiento)}</span><span style="font-weight:700;">${formatoDinero(c.saldoPendiente)}</span></div>
+          </div>`).join('')}</div>`;
+      cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/cuenta/' + el.dataset.id));
+    };
+    document.getElementById('cx-buscar').addEventListener('input', dibujar);
+    selEstado.addEventListener('change', dibujar);
+    dibujar();
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
   }
@@ -1191,15 +1374,18 @@ async function pantallaCuentaDetalle(id) {
   }
 
   root.innerHTML = `
-    <h1>${escapar(cuenta.noFactura)}</h1>
+    <button class="enlace" onclick="navegar('#/cxc')" style="margin-bottom:6px;">${ic('arrow-left')} Volver a cuentas por cobrar</button>
+    ${cabeceraPantalla(escapar(cuenta.noFactura), escapar(cuenta.nombreCliente), pastillaColor(cuenta.estadoDisplay, cuenta.estadoColor))}
+    <div class="kp-h">
+      ${kpiH('c1', 'banknote', formatoDinero(cuenta.montoTotal), 'Monto total')}
+      ${kpiH('c3', 'circle-check', formatoDinero(cuenta.montoPagado), 'Pagado')}
+      ${kpiH('c4', 'clock', formatoDinero(cuenta.saldoPendiente), 'Saldo pendiente')}
+    </div>
     <div class="tarjeta">
-      <span class="pastilla" style="background:${cuenta.estadoColor}22; color:${cuenta.estadoColor};">${escapar(cuenta.estadoDisplay)}</span>
+      <h2>Información de la cuenta</h2>
       <div class="detalle-fila"><span class="k">Cliente</span><span class="v">${escapar(cuenta.nombreCliente)}</span></div>
       <div class="detalle-fila"><span class="k">Emisión</span><span class="v">${cuenta.fechaEmision}</span></div>
       <div class="detalle-fila"><span class="k">Vencimiento</span><span class="v">${cuenta.fechaVencimiento}</span></div>
-      <div class="detalle-fila"><span class="k">Total</span><span class="v">${formatoDinero(cuenta.montoTotal)}</span></div>
-      <div class="detalle-fila"><span class="k">Pagado</span><span class="v">${formatoDinero(cuenta.montoPagado)}</span></div>
-      <div class="detalle-fila"><span class="k">Saldo</span><span class="v">${formatoDinero(cuenta.saldoPendiente)}</span></div>
       ${cuenta.observaciones ? `<div class="detalle-fila"><span class="k">Notas</span><span class="v">${escapar(cuenta.observaciones)}</span></div>` : ''}
     </div>
     ${cuenta.saldoPendiente > 0 ? `
@@ -1216,7 +1402,7 @@ async function pantallaCuentaDetalle(id) {
       </select>
       <label>Notas</label>
       <input id="ab-notas" placeholder="Opcional">
-      <button id="ab-btn" class="btn btn-verde">Registrar abono</button>
+      <button id="ab-btn" class="btn btn-verde btn-dinero">Registrar abono</button>
     </div>` : ''}
     <div class="tarjeta">
       <h2>Historial de pagos</h2>
@@ -1293,41 +1479,56 @@ async function pantallaCompras() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver compras.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('shopping-bag')} Compras y cuentas por pagar</h1>
-    <div id="cp-resumen"></div>
-    <button id="cp-nueva" class="btn btn-verde" style="margin-bottom:14px;">${ic('plus')} Registrar compra</button>
-    <div id="cp-lista"><div class="vacio">Cargando...</div></div>`;
+    ${cabeceraPantalla(ic('shopping-bag') + ' Compras y cuentas por pagar', 'Mercancía recibida de proveedores y lo que se les debe', `<button id="cp-nueva" class="btn btn-azul">${ic('plus')} Registrar compra</button>`)}
+    <div class="kp-h">
+      ${kpiH('c4', 'banknote', '…', 'Por pagar a proveedores', 'cp-k-pend')}
+      ${kpiH('c6', 'triangle-alert', '…', 'Vencido', 'cp-k-venc')}
+      ${kpiH('c1', 'shopping-bag', '…', 'Compras activas', 'cp-k-n')}
+    </div>
+    <div class="tarjeta iv-filtros">
+      <div class="buscador buscar-ic">${ic('search')}<input id="cp-buscar" placeholder="Buscar por proveedor, sucursal o folio..."></div>
+      <div id="cp-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
   document.getElementById('cp-nueva').onclick = () => navegar('#/compra-nueva');
-
-  try {
-    const resumen = await api('GET', '/api/compras/resumen');
-    document.getElementById('cp-resumen').innerHTML = `
-      <div class="fila">
-        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Por pagar</div><div style="font-size:18px; font-weight:700;">${formatoDinero(resumen.totalPendiente)}</div></div>
-        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Vencido</div><div style="font-size:18px; font-weight:700; color:var(--rojo);">${formatoDinero(resumen.totalVencido)}</div></div>
-        <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Compras</div><div style="font-size:18px; font-weight:700;">${resumen.comprasActivas}</div></div>
-      </div>`;
-  } catch { /* si falla el resumen, se sigue mostrando la lista */ }
+  const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  api('GET', '/api/compras/resumen').then(r => {
+    poner('cp-k-pend', formatoDinero(r.totalPendiente));
+    poner('cp-k-venc', formatoDinero(r.totalVencido));
+    poner('cp-k-n', String(r.comprasActivas));
+  }).catch(() => { poner('cp-k-pend', '—'); poner('cp-k-venc', '—'); poner('cp-k-n', '—'); });
 
   const cont = document.getElementById('cp-lista');
   try {
     const compras = await api('GET', '/api/compras?soloActivas=true');
-    if (compras.length === 0) { cont.innerHTML = '<div class="vacio">No hay compras pendientes de pago.</div>'; return; }
     compras.sort((a, b) => a.diasVencimiento - b.diasVencimiento);
-    cont.innerHTML = compras.map(c => `
-      <div class="orden-item" data-id="${c.idcompra}">
-        <div class="orden-cab">
-          <span class="orden-folio">${escapar(c.nombreProveedor)}</span>
-          <span class="pastilla" style="background:${c.estadoColor}22; color:${c.estadoColor};">${escapar(c.estadoDisplay)}</span>
-        </div>
-        <div class="orden-cliente">${escapar(c.nombreTienda)}${c.folioProveedor ? ' · folio ' + escapar(c.folioProveedor) : ''}</div>
-        <div class="orden-meta">
-          <span class="orden-fecha">${c.diasVencimiento < 0 ? Math.abs(c.diasVencimiento) + ' días vencida' : 'vence en ' + c.diasVencimiento + ' días'}</span>
-          <span style="font-weight:700;">${formatoDinero(c.saldoPendiente)}</span>
-        </div>
-      </div>`).join('');
-    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/compra/' + el.dataset.id));
+    const dibujar = () => {
+      const q = quitarAcentos(document.getElementById('cp-buscar').value.trim()).toLowerCase();
+      const lista = compras.filter(c => !q || quitarAcentos(`${c.nombreProveedor} ${c.nombreTienda} ${c.folioProveedor || ''}`).toLowerCase().includes(q));
+      if (lista.length === 0) { cont.innerHTML = `<div class="vacio">${compras.length === 0 ? 'No hay compras pendientes de pago.' : 'No hay compras que mostrar.'}</div>`; return; }
+      cont.innerHTML = `
+        <div class="tabla-cont"><table class="tabla">
+          <thead><tr><th>Proveedor</th><th>Sucursal</th><th>Folio</th><th>Vencimiento</th><th>Días</th><th>Monto total</th><th>Saldo pendiente</th><th>Estado</th></tr></thead>
+          <tbody>${lista.map(c => `
+            <tr data-id="${c.idcompra}">
+              <td class="tabla-nombre">${escapar(c.nombreProveedor)}</td><td>${escapar(c.nombreTienda)}</td><td>${escapar(c.folioProveedor || '—')}</td>
+              <td>${escapar(c.fechaVencimiento)}</td>
+              <td class="${c.diasVencimiento < 0 ? 'dias-neg' : 'dias-pos'}">${c.diasVencimiento > 0 ? '+' : ''}${c.diasVencimiento}</td>
+              <td>${formatoDinero(c.montoTotal)}</td>
+              <td class="tabla-precio monto-rojo">${formatoDinero(c.saldoPendiente)}</td>
+              <td>${pastillaColor(c.estadoDisplay, c.estadoColor)}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>
+        <div class="inv-tarjetas">${lista.map(c => `
+          <div class="orden-item" data-id="${c.idcompra}">
+            <div class="orden-cab"><span class="orden-folio">${escapar(c.nombreProveedor)}</span>${pastillaColor(c.estadoDisplay, c.estadoColor)}</div>
+            <div class="orden-cliente">${escapar(c.nombreTienda)}${c.folioProveedor ? ' · folio ' + escapar(c.folioProveedor) : ''}</div>
+            <div class="orden-meta"><span class="orden-fecha">${textoDias(c.diasVencimiento)}</span><span style="font-weight:700;">${formatoDinero(c.saldoPendiente)}</span></div>
+          </div>`).join('')}</div>`;
+      cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/compra/' + el.dataset.id));
+    };
+    document.getElementById('cp-buscar').addEventListener('input', dibujar);
+    dibujar();
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
   }
@@ -1346,16 +1547,19 @@ async function pantallaCompraDetalle(id) {
   }
 
   root.innerHTML = `
-    <h1>${escapar(compra.nombreProveedor)}</h1>
+    <button class="enlace" onclick="navegar('#/compras')" style="margin-bottom:6px;">${ic('arrow-left')} Volver a compras</button>
+    ${cabeceraPantalla(escapar(compra.nombreProveedor), escapar(compra.nombreTienda), pastillaColor(compra.estadoDisplay, compra.estadoColor))}
+    <div class="kp-h">
+      ${kpiH('c1', 'banknote', formatoDinero(compra.montoTotal), 'Monto total')}
+      ${kpiH('c3', 'circle-check', formatoDinero(compra.montoPagado), 'Pagado')}
+      ${kpiH('c4', 'clock', formatoDinero(compra.saldoPendiente), 'Saldo pendiente')}
+    </div>
     <div class="tarjeta">
-      <span class="pastilla" style="background:${compra.estadoColor}22; color:${compra.estadoColor};">${escapar(compra.estadoDisplay)}</span>
+      <h2>Información de la compra</h2>
       <div class="detalle-fila"><span class="k">Sucursal</span><span class="v">${escapar(compra.nombreTienda)}</span></div>
       ${compra.folioProveedor ? `<div class="detalle-fila"><span class="k">Folio del proveedor</span><span class="v">${escapar(compra.folioProveedor)}</span></div>` : ''}
       <div class="detalle-fila"><span class="k">Fecha</span><span class="v">${compra.fecha}</span></div>
       <div class="detalle-fila"><span class="k">Vencimiento</span><span class="v">${compra.fechaVencimiento}</span></div>
-      <div class="detalle-fila"><span class="k">Total</span><span class="v">${formatoDinero(compra.montoTotal)}</span></div>
-      <div class="detalle-fila"><span class="k">Pagado</span><span class="v">${formatoDinero(compra.montoPagado)}</span></div>
-      <div class="detalle-fila"><span class="k">Saldo</span><span class="v">${formatoDinero(compra.saldoPendiente)}</span></div>
       ${compra.registradoPor ? `<div class="detalle-fila"><span class="k">Registró</span><span class="v">${escapar(compra.registradoPor)}</span></div>` : ''}
       ${compra.observaciones ? `<div class="detalle-fila"><span class="k">Notas</span><span class="v">${escapar(compra.observaciones)}</span></div>` : ''}
     </div>
@@ -1379,7 +1583,7 @@ async function pantallaCompraDetalle(id) {
       </select>
       <label>Notas</label>
       <input id="pc-notas" placeholder="Opcional">
-      <button id="pc-btn" class="btn btn-verde">Registrar pago</button>
+      <button id="pc-btn" class="btn btn-verde btn-dinero">Registrar pago</button>
     </div>` : ''}
     <div class="tarjeta">
       <h2>Historial de pagos</h2>
@@ -1432,7 +1636,7 @@ async function pantallaCompraNueva() {
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para registrar compras.</div>'; return; }
   root.innerHTML = `
     <button class="enlace" id="cn-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
-    <h1>${ic('shopping-bag')} Registrar compra</h1>
+    ${cabeceraPantalla(ic('shopping-bag') + ' Registrar compra', 'Mercancía que llega de un proveedor')}
     <div class="tarjeta">
       <label class="obligatorio">Proveedor</label>
       <select id="cn-proveedor"><option>Cargando...</option></select>
@@ -1627,51 +1831,82 @@ async function pantallaGarantias() {
   const s = Sesion.obtener();
   if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver garantías.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('shield-check')} Garantías</h1>
-    <div class="buscador">
-      <input id="ga-folio" placeholder="Folio (GAR-000123)" autocapitalize="characters">
-      <button id="ga-buscar" class="btn btn-azul btn-chico">Buscar</button>
+    ${cabeceraPantalla(ic('shield-check') + ' Garantías', 'Reclamos de garantía y su viaje al proveedor')}
+    <div class="kp-h">
+      ${kpiH('c1', 'shield-check', '…', 'Abiertas', 'ga-k-abiertas')}
+      ${kpiH('c6', 'triangle-alert', '…', 'Vencidas', 'ga-k-venc')}
+      ${kpiH('c4', 'truck', '…', 'Con el proveedor', 'ga-k-prov')}
+      ${kpiH('c3', 'circle-check', '…', 'Listas para entregar', 'ga-k-lista')}
     </div>
-    <div id="ga-resultado"></div>
-    <div class="segmentado" style="margin-top:10px;">
-      <button id="ga-seg-abiertas" class="activo">Abiertas</button>
-      <button id="ga-seg-todas">Todas</button>
-    </div>
-    <div id="ga-lista"><div class="vacio">Cargando...</div></div>`;
+    <div class="tarjeta iv-filtros">
+      <div class="iv-filtros-fila fila-2">
+        <div class="buscador buscar-ic">${ic('search')}<input id="ga-folio" placeholder="Buscar por folio, producto, IMEI o cliente..." autocapitalize="characters"></div>
+        <div class="segmentado" style="margin:0;">
+          <button id="ga-seg-abiertas" class="activo">Abiertas</button>
+          <button id="ga-seg-todas">Todas</button>
+        </div>
+      </div>
+      <div id="ga-resultado"></div>
+      <div id="ga-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
-  const buscar = async () => {
-    const folio = document.getElementById('ga-folio').value.trim().toUpperCase();
-    const out = document.getElementById('ga-resultado');
-    if (!folio) return;
-    out.innerHTML = '<div class="vacio">Buscando...</div>';
-    try {
-      const g = await api('GET', '/api/garantias/folio/' + encodeURIComponent(folio));
-      out.innerHTML = itemGarantia(g);
-      out.querySelector('.orden-item').onclick = () => navegar('#/garantia/' + g.idgarantia);
-    } catch (err) {
-      out.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
-    }
-  };
-  document.getElementById('ga-buscar').onclick = buscar;
-  document.getElementById('ga-folio').addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
+  const cont = document.getElementById('ga-lista');
+  let todas = [];
+  try {
+    todas = await api('GET', '/api/garantias');
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    return;
+  }
+  const abierta = (g) => g.estado !== 11 && g.estado !== 8;
+  const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
+  const abiertas = todas.filter(abierta);
+  poner('ga-k-abiertas', abiertas.length);
+  poner('ga-k-venc', abiertas.filter(g => g.vencida).length);
+  poner('ga-k-prov', abiertas.filter(g => g.estadoDisplay === 'En el proveedor').length);
+  poner('ga-k-lista', abiertas.filter(g => g.estadoDisplay === 'Listo para entrega').length);
 
   const segAbiertas = document.getElementById('ga-seg-abiertas');
   const segTodas = document.getElementById('ga-seg-todas');
-  const cargarLista = async (soloAbiertas) => {
-    const cont = document.getElementById('ga-lista');
-    cont.innerHTML = '<div class="vacio">Cargando...</div>';
-    try {
-      const garantias = await api('GET', '/api/garantias' + (soloAbiertas ? '?soloAbiertas=true' : ''));
-      if (garantias.length === 0) { cont.innerHTML = '<div class="vacio">No hay garantías.</div>'; return; }
-      cont.innerHTML = garantias.map(itemGarantia).join('');
-      cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/garantia/' + el.dataset.id));
-    } catch (err) {
-      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
-    }
+  let soloAbiertas = true;
+  const dibujar = () => {
+    const q = quitarAcentos(document.getElementById('ga-folio').value.trim()).toLowerCase();
+    const lista = (soloAbiertas ? abiertas : todas).filter(g => !q || quitarAcentos(`${g.folio} ${g.nombreProducto} ${g.imei || ''} ${g.nombreContacto || ''} ${g.telefonoContacto || ''}`).toLowerCase().includes(q));
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay garantías que mostrar.</div>'; return; }
+    cont.innerHTML = `
+      <div class="tabla-cont"><table class="tabla">
+        <thead><tr><th>Folio</th><th>Sucursal</th><th>Producto</th><th>IMEI / Serie</th><th>Cliente</th><th>Límite</th><th>Días</th><th>Estado</th></tr></thead>
+        <tbody>${lista.map(g => `
+          <tr data-id="${g.idgarantia}">
+            <td>${escapar(g.folio)}</td><td>${escapar(g.nombreTienda)}</td>
+            <td class="tabla-nombre celda-corta" title="${escapar(g.nombreProducto)}">${escapar(g.nombreProducto)}</td>
+            <td>${escapar(g.imei || '—')}</td><td>${escapar(g.nombreContacto || '—')}</td>
+            <td>${escapar(g.fechaLimiteSolucion || '—')}</td>
+            <td class="${g.diasRestantes != null && g.diasRestantes < 0 ? 'dias-neg' : ''}">${g.diasRestantes != null ? (g.diasRestantes < 0 ? 'vencida (' + Math.abs(g.diasRestantes) + ')' : g.diasRestantes + ' días') : '—'}</td>
+            <td>${pastillaGarantia(g)}</td>
+          </tr>`).join('')}</tbody>
+      </table></div>
+      <div class="inv-tarjetas">${lista.map(itemGarantia).join('')}</div>`;
+    cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/garantia/' + el.dataset.id));
   };
-  segAbiertas.onclick = () => { segAbiertas.classList.add('activo'); segTodas.classList.remove('activo'); cargarLista(true); };
-  segTodas.onclick = () => { segTodas.classList.add('activo'); segAbiertas.classList.remove('activo'); cargarLista(false); };
-  cargarLista(true);
+  const inputBuscar = document.getElementById('ga-folio');
+  inputBuscar.addEventListener('input', dibujar);
+  // Enter con un folio que no está en la lista (otra sucursal o ya cerrada): se busca directo en el servidor
+  inputBuscar.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    const folio = inputBuscar.value.trim().toUpperCase();
+    if (!/^GAR-\d+$/.test(folio) || todas.some(g => g.folio === folio)) return;
+    const out = document.getElementById('ga-resultado');
+    try {
+      const g = await api('GET', '/api/garantias/folio/' + encodeURIComponent(folio));
+      navegar('#/garantia/' + g.idgarantia);
+    } catch (err) {
+      out.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  });
+  segAbiertas.onclick = () => { soloAbiertas = true; segAbiertas.classList.add('activo'); segTodas.classList.remove('activo'); dibujar(); };
+  segTodas.onclick = () => { soloAbiertas = false; segTodas.classList.add('activo'); segAbiertas.classList.remove('activo'); dibujar(); };
+  dibujar();
 }
 
 function itemGarantia(g) {
@@ -1703,12 +1938,10 @@ async function pantallaGarantiaDetalle(id) {
   }
 
   root.innerHTML = `
-    <h1>${escapar(g.folio)}</h1>
+    <button class="enlace" onclick="navegar('#/garantias')" style="margin-bottom:6px;">${ic('arrow-left')} Volver a garantías</button>
+    ${cabeceraPantalla(escapar(g.folio), `${escapar(g.nombreProducto)} · ingresó ${formatoFecha(g.fechaIngreso)}`, pastillaGarantia(g))}
     <div class="tarjeta">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-        ${pastillaGarantia(g)}
-        <span class="orden-fecha">${formatoFecha(g.fechaIngreso)}</span>
-      </div>
+      <h2>Información de la garantía</h2>
       <div class="detalle-fila"><span class="k">Producto</span><span class="v">${escapar(g.nombreProducto)}</span></div>
       <div class="detalle-fila"><span class="k">IMEI/Serie</span><span class="v">${escapar(g.imei || '—')}</span></div>
       <div class="detalle-fila"><span class="k">Contacto</span><span class="v">${escapar(g.nombreContacto || '—')}</span></div>
@@ -1777,7 +2010,7 @@ async function pantallaReportes() {
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
   const veCaja = SUPERIOR.includes(s.rol);
   root.innerHTML = `
-    <h1>${ic('chart-column')} Reportes</h1>
+    ${cabeceraPantalla(ic('chart-column') + ' Reportes', 'Ventas, resumen gerencial, productos rezagados y caja')}
     <div class="segmentado">
       <button id="rp-tab-ventas" class="activo">Ventas</button>
       <button id="rp-tab-gerencial">Gerencial</button>
@@ -1857,13 +2090,13 @@ async function pantallaReportes() {
       const completadas = ventas.filter(v => v.descripcionEstado !== 'Cancelada');
       const total = completadas.reduce((sum, v) => sum + Number(v.total || 0), 0);
       resumenEl.innerHTML = `
-        <div class="fila">
-          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Ventas</div><div style="font-size:18px; font-weight:700;">${completadas.length}</div></div>
-          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Total</div><div style="font-size:18px; font-weight:700;">${formatoDinero(total)}</div></div>
-          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Ticket prom.</div><div style="font-size:18px; font-weight:700;">${formatoDinero(completadas.length ? total / completadas.length : 0)}</div></div>
+        <div class="kp-h">
+          ${kpiH('c3', 'banknote', formatoDinero(total), 'Total de ventas')}
+          ${kpiH('c1', 'receipt', String(completadas.length), 'Transacciones')}
+          ${kpiH('c4', 'trending-up', formatoDinero(completadas.length ? total / completadas.length : 0), 'Ticket promedio')}
         </div>`;
-      if (ventas.length === 0) { listaEl.innerHTML = '<div class="vacio">Sin ventas en este periodo.</div>'; return; }
-      listaEl.innerHTML = ventas.slice(0, 60).map(v => `
+      if (ventas.length === 0) { listaEl.innerHTML = '<div class="tarjeta"><h2>Detalle de ventas</h2><div class="vacio">Sin ventas en este periodo.</div></div>'; return; }
+      listaEl.innerHTML = '<div class="tarjeta"><h2>Detalle de ventas</h2>' + ventas.slice(0, 60).map(v => `
         <div class="orden-item">
           <div class="orden-cab">
             <span class="orden-folio">${v.folioLocal || ('Venta #' + v.idventa)}</span>
@@ -1874,7 +2107,7 @@ async function pantallaReportes() {
             <span class="orden-fecha">${formatoFecha(v.fechaVenta)} · ${escapar(v.nombreVendedor || '')}</span>
             <span style="font-weight:700;">${formatoDinero(v.total)}</span>
           </div>
-        </div>`).join('');
+        </div>`).join('') + '</div>';
     } catch (err) {
       resumenEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }
@@ -2140,7 +2373,7 @@ async function pantallaInventarioFisico(param) {
   if (param === 'historial') return pantallaInventarioFisicoHistorial(s);
 
   root.innerHTML = `
-    <h1>${ic('scan-barcode')} Inventario físico</h1>
+    ${cabeceraPantalla(ic('scan-barcode') + ' Inventario físico', 'Conteo de existencias por secciones y revisión de diferencias')}
     <div id="if-tienda"></div>
     <div id="if-cuerpo"><div class="vacio">Cargando...</div></div>`;
 
@@ -2301,7 +2534,7 @@ function dibujarInventarioCatalogando(cont, a, codti) {
 
 async function pantallaInventarioFisicoHistorial(s) {
   root.innerHTML = `
-    <h1>${ic('history')} Historial de inventario físico</h1>
+    ${cabeceraPantalla(ic('history') + ' Historial de inventario físico', 'Auditorías anteriores')}
     <div id="ifh-tienda"></div>
     <div id="ifh-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
 
@@ -2366,7 +2599,7 @@ function sugerirPeriodoNomina() {
 async function pantallaNomina() {
   const s = Sesion.obtener();
   if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
-  root.innerHTML = `<h1>${ic('banknote')} Nómina</h1><div id="nm-cuerpo"><div class="vacio">Cargando...</div></div>`;
+  root.innerHTML = `${cabeceraPantalla(ic('banknote') + ' Nómina', 'Períodos, percepciones y pagos del personal')}<div id="nm-cuerpo"><div class="vacio">Cargando...</div></div>`;
   cargarNomina();
 }
 
@@ -2453,7 +2686,7 @@ async function dibujarPeriodoActivo(cont, p) {
 async function pantallaNominaHistorial() {
   const s = Sesion.obtener();
   if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
-  root.innerHTML = `<h1>${ic('history')} Historial de nómina</h1><div id="nmh-lista"><div class="vacio">Cargando...</div></div>`;
+  root.innerHTML = `${cabeceraPantalla(ic('history') + ' Historial de nómina', 'Períodos de pago anteriores')}<div id="nmh-lista"><div class="vacio">Cargando...</div></div>`;
   const listaEl = document.getElementById('nmh-lista');
   try {
     const lista = await api('GET', '/api/nomina/periodos');
@@ -2477,7 +2710,7 @@ async function pantallaNominaHistorial() {
 async function pantallaNominaDetalle(iddetalle) {
   const s = Sesion.obtener();
   if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
-  root.innerHTML = `<h1>${ic('banknote')} Línea de nómina</h1><div id="nmd-cuerpo"><div class="vacio">Cargando...</div></div>`;
+  root.innerHTML = `${cabeceraPantalla(ic('banknote') + ' Línea de nómina', 'Percepciones, deducciones y pago de un empleado')}<div id="nmd-cuerpo"><div class="vacio">Cargando...</div></div>`;
   cargarNominaDetalle(iddetalle, s);
 }
 
@@ -2563,7 +2796,7 @@ async function cargarNominaDetalle(iddetalle, s) {
     };
 
     const cajaForm = document.getElementById('nmd-pagar-form');
-    cajaForm.innerHTML = `<div id="nmd-tienda"></div><div id="nmd-caja" style="margin-top:6px;"></div><button id="nmd-pagar" class="btn btn-verde" style="margin-top:8px;">${ic('banknote')} Pagar</button>`;
+    cajaForm.innerHTML = `<div id="nmd-tienda"></div><div id="nmd-caja" style="margin-top:6px;"></div><button id="nmd-pagar" class="btn btn-verde btn-dinero" style="margin-top:8px;">${ic('banknote')} Pagar</button>`;
     let idCajaElegida = null;
     const cargarCajas = async (codti) => {
       const cajas = await api('GET', `/api/cajas/tienda/${codti}`);
@@ -2605,28 +2838,51 @@ const TIPO_ICONO = { CELULAR: ic('smartphone'), TABLET: ic('smartphone'), ACCESO
 async function pantallaInventario() {
   const s = Sesion.obtener();
   bajoStockCache.expira = 0; // se refresca el badge del menú la próxima vez que se dibuje, por si aquí cambia el stock
+  const verCosto = GESTOR_ROLES.includes(s.rol);
   root.innerHTML = `
-    <h1>${ic('package')} Inventario</h1>
-    <div id="iv-tienda"></div>
-    <div class="buscador">
-      <input id="iv-buscar" placeholder="Nombre, código, marca o modelo">
+    ${cabeceraPantalla(ic('package') + ' Inventario', 'Control de productos y stock', SUPERIOR.includes(s.rol) ? `
+      <button id="iv-catalogos" class="btn btn-gris">${ic('tags')} Catálogos</button>
+      <button id="iv-nuevo" class="btn btn-azul">${ic('plus')} Nuevo producto</button>` : '')}
+    ${SUPERIOR.includes(s.rol) ? '<div id="iv-form" class="oculto"></div>' : ''}
+    <div class="kp-h" id="iv-kpis">
+      ${kpiH('c1', 'package', '…', 'Total de productos', 'iv-k-total')}
+      ${verCosto ? kpiH('c3', 'banknote', '…', 'Valor del inventario (al costo)', 'iv-k-valor') : ''}
+      ${kpiH('c4', 'triangle-alert', '…', 'Con stock bajo', 'iv-k-bajo')}
     </div>
-    <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
-      <input type="checkbox" id="iv-bajo-stock" style="width:auto;"> Solo bajo stock
-    </label>
-    ${SUPERIOR.includes(s.rol) ? `
-      <div class="grupo-botones" style="margin: 10px 0;">
-        <button id="iv-nuevo" class="btn btn-verde">${ic('plus')} Nuevo producto</button>
-        <button id="iv-catalogos" class="btn btn-gris">${ic('tags')} Catálogos</button>
+    <div class="tarjeta iv-filtros">
+      <div id="iv-tienda"></div>
+      <div class="iv-filtros-fila">
+        <div class="buscador buscar-ic">${ic('search')}<input id="iv-buscar" placeholder="Nombre, código, marca o modelo"></div>
+        <select id="iv-cat" aria-label="Categoría"><option value="">Todas las categorías</option></select>
+        <label class="casilla-chica"><input type="checkbox" id="iv-bajo-stock"> Solo bajo stock</label>
       </div>
-      <div id="iv-form" class="oculto"></div>` : ''}
-    <div id="iv-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
+      <div id="iv-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
   let codti = s.codti;
   let productosInv = [];
   const refrescarListaInventario = () => {
     const q = document.getElementById('iv-buscar').value.trim();
-    dibujarInventario(document.getElementById('iv-lista'), filtrarProductos(productosInv, q));
+    const cat = document.getElementById('iv-cat').value;
+    const soloBajo = document.getElementById('iv-bajo-stock').checked;
+    let lista = filtrarProductos(productosInv, q);
+    if (cat) lista = lista.filter(p => (p.categoriaPrincipal || p.nombreCategoria) === cat);
+    if (soloBajo) lista = lista.filter(p => p.bajoStock);
+    dibujarInventario(document.getElementById('iv-lista'), lista, verCosto);
+  };
+  const llenarCategorias = () => {
+    const sel = document.getElementById('iv-cat');
+    const actual = sel.value;
+    const nombres = [...new Set(productosInv.map(p => p.categoriaPrincipal || p.nombreCategoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+    sel.innerHTML = '<option value="">Todas las categorías</option>' + nombres.map(n => `<option value="${escapar(n)}">${escapar(n)}</option>`).join('');
+    sel.value = nombres.includes(actual) ? actual : '';
+  };
+  const ponerKpis = () => {
+    const con = productosInv.filter(p => p.tipo !== 'SERVICIO');
+    document.getElementById('iv-k-total').textContent = String(productosInv.length);
+    document.getElementById('iv-k-bajo').textContent = String(productosInv.filter(p => p.bajoStock).length);
+    const valor = document.getElementById('iv-k-valor');
+    if (valor) valor.textContent = formatoDinero(con.reduce((sum, p) => sum + Number(p.stock || 0) * Number(p.preciopro || 0), 0));
   };
   const contTienda = document.getElementById('iv-tienda');
   const cargar = async () => {
@@ -2634,8 +2890,9 @@ async function pantallaInventario() {
     const cont = document.getElementById('iv-lista');
     cont.innerHTML = '<div class="vacio">Cargando...</div>';
     try {
-      const soloBajo = document.getElementById('iv-bajo-stock').checked;
-      productosInv = await api('GET', `/api/productos/tienda/${codti}${soloBajo ? '/bajo-stock' : ''}`);
+      productosInv = await api('GET', `/api/productos/tienda/${codti}`);
+      llenarCategorias();
+      ponerKpis();
       refrescarListaInventario();
     } catch (err) {
       cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
@@ -2659,7 +2916,8 @@ async function pantallaInventario() {
   }
 
   document.getElementById('iv-buscar').addEventListener('input', refrescarListaInventario);
-  document.getElementById('iv-bajo-stock').addEventListener('change', cargar);
+  document.getElementById('iv-bajo-stock').addEventListener('change', refrescarListaInventario);
+  document.getElementById('iv-cat').addEventListener('change', refrescarListaInventario);
   cargar();
 
   if (SUPERIOR.includes(s.rol)) {
@@ -3011,12 +3269,30 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
 }
 
 const INVENTARIO_MAX_TARJETAS = 100;
-function dibujarInventario(cont, productos) {
+function dibujarInventario(cont, productos, verCosto) {
   if (productos.length === 0) { cont.innerHTML = '<div class="vacio">No hay productos que mostrar.</div>'; return; }
   const aviso = productos.length > INVENTARIO_MAX_TARJETAS
     ? `<div class="ayuda" style="margin:6px 0;">Mostrando ${INVENTARIO_MAX_TARJETAS} de ${productos.length} productos: escribe arriba para buscar el que necesitas.</div>` : '';
-  cont.innerHTML = aviso + productos.slice(0, INVENTARIO_MAX_TARJETAS).map(p => {
-    return `
+  const lista = productos.slice(0, INVENTARIO_MAX_TARJETAS);
+  const claveStock = (p) => Number(p.stock) <= 0 ? 'rojo' : (p.bajoStock ? 'ambar' : 'verde');
+  const tabla = `
+    <div class="tabla-cont">
+      <table class="tabla">
+        <thead><tr><th>Código</th><th>Nombre</th><th>Categoría</th>${verCosto ? '<th>Costo</th>' : ''}<th>Precio</th><th>Stock</th><th>Proveedor</th></tr></thead>
+        <tbody>${lista.map(p => `
+          <tr data-codti="${p.codti}~${escapar(p.codpro)}">
+            <td>${escapar(p.codpro)}</td>
+            <td class="tabla-nombre">${escapar(p.nombreProductoMaster)}</td>
+            <td>${escapar(p.categoriaPrincipal || p.nombreCategoria || '')}</td>
+            ${verCosto ? `<td>${formatoDinero(p.preciopro)}</td>` : ''}
+            <td class="tabla-precio">${formatoDinero(p.preciopub)}</td>
+            <td>${p.tipo === 'SERVICIO' ? '—' : `<span class="stock-pill ${claveStock(p)}">${Number(p.stock)}</span>`}</td>
+            <td>${escapar(p.proveedor?.nombreCorto || '—')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  const tarjetas = '<div class="inv-tarjetas">' + lista.map(p => `
     <div class="orden-item" data-codti="${p.codti}~${escapar(p.codpro)}">
       <div class="orden-cab">
         <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
@@ -3027,9 +3303,9 @@ function dibujarInventario(cont, productos) {
         <span class="orden-fecha">${formatoDinero(p.preciopub)}</span>
         <span style="font-weight:700;">${p.tipo === 'SERVICIO' ? '' : 'Stock: ' + Number(p.stock)}</span>
       </div>
-    </div>`;
-  }).join('');
-  cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/producto/' + el.dataset.codti));
+    </div>`).join('') + '</div>';
+  cont.innerHTML = aviso + tabla + tarjetas;
+  cont.querySelectorAll('[data-codti]').forEach(el => el.onclick = () => navegar('#/producto/' + el.dataset.codti));
 }
 
 async function pantallaProductoDetalle(param) {
@@ -3049,37 +3325,45 @@ async function pantallaProductoDetalle(param) {
 
   const puedeEditar = GESTOR_ROLES.includes(s.rol);      // ajustar stock, ver costos y movimientos
   const puedeEditarDatos = SUPERIOR.includes(s.rol);   // cambiar precios y datos del artículo: vista aparte
+  const rutaCategoria = [p.categoriaPrincipal, p.subcategoria1, p.subcategoria2].filter(Boolean).join(' › ') || p.nombreCategoria || '';
   root.innerHTML = `
-    <h1>${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</h1>
+    <button class="enlace" id="pd-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver a inventario</button>
+    ${cabeceraPantalla(`${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}`, `${escapar(p.codpro)}${rutaCategoria ? ' · ' + escapar(rutaCategoria) : ''}`,
+      (p.bajoStock ? '<span class="pastilla error">' + ic('triangle-alert') + ' Bajo stock</span>' : '') +
+      (puedeEditarDatos ? `<button id="pd-editar" class="btn btn-azul">${ic('pencil')} Editar producto</button>` : ''))}
+    <div class="kp-h">
+      ${p.tipo !== 'SERVICIO' ? kpiH(p.bajoStock ? 'c4' : 'c3', 'package', String(Number(p.stock)), 'En existencia' + (Number(p.stockMinimo) > 0 ? ' (mínimo ' + Number(p.stockMinimo) + ')' : '')) : ''}
+      ${kpiH('c1', 'banknote', formatoDinero(p.preciopub), 'Precio de venta')}
+      ${puedeEditar ? kpiH('c5', 'tags', formatoDinero(p.preciopro), 'Precio de compra') : ''}
+      ${p.diasGarantia ? kpiH('c2', 'shield-check', p.diasGarantia + ' días', 'Garantía') : ''}
+    </div>
+    <div class="det-grid">
+    <div class="det-izq">
     <div class="tarjeta">
-      ${p.bajoStock ? '<span class="pastilla error">' + ic('triangle-alert') + ' Bajo stock</span>' : ''}
+      <h2>Información del producto</h2>
       <div class="detalle-fila"><span class="k">Código</span><span class="v">${escapar(p.codpro)}</span></div>
       ${!p.categoriaPrincipal && p.marca ? `<div class="detalle-fila"><span class="k">Marca / Modelo</span><span class="v">${escapar(p.marca)} ${escapar(p.modelo)}</span></div>` : ''}
       <div class="detalle-fila"><span class="k">Categoría</span><span class="v">${escapar([p.categoriaPrincipal, p.subcategoria1, p.subcategoria2].filter(Boolean).join(' › ') || p.nombreCategoria || '—')}</span></div>
       ${p.descripcion ? `<div class="detalle-fila"><span class="k">Descripción</span><span class="v">${escapar(p.descripcion)}</span></div>` : ''}
       ${p.compatibilidad ? `<div class="detalle-fila"><span class="k">Compatibilidad</span><span class="v">${escapar(p.compatibilidad)}</span></div>` : ''}
-      ${p.tipo !== 'SERVICIO' ? `<div class="detalle-fila"><span class="k">Stock</span><span class="v">${Number(p.stock)}${Number(p.stockMinimo) > 0 ? ' (mínimo ' + Number(p.stockMinimo) + ')' : ''}</span></div>` : ''}
-      ${puedeEditar ? `<div class="detalle-fila"><span class="k">Precio compra</span><span class="v">${formatoDinero(p.preciopro)}</span></div>` : ''}
-      <div class="detalle-fila"><span class="k">Precio venta</span><span class="v">${formatoDinero(p.preciopub)}</span></div>
-      ${p.diasGarantia ? `<div class="detalle-fila"><span class="k">Garantía</span><span class="v">${p.diasGarantia} días</span></div>` : ''}
       ${p.proveedor ? `<div class="detalle-fila"><span class="k">Proveedor</span><span class="v">${escapar(p.proveedor.nombreCorto || p.proveedor.nombreFiscal || '')}</span></div>` : ''}
       ${p.nombreProducto ? `<div class="detalle-fila"><span class="k">Descripción</span><span class="v">${escapar(p.nombreProducto)}</span></div>` : ''}
       ${(p.colorArticulo || p.color) ? `<div class="detalle-fila"><span class="k">Color</span><span class="v">${escapar(p.colorArticulo || p.color.nombre)}</span></div>` : ''}
     </div>
 
+    ${puedeEditar ? `
+    <div id="pd-historial-cont" class="tarjeta">
+      <h2>Últimos movimientos</h2>
+      <div id="pd-historial"><div class="vacio">Cargando...</div></div>
+    </div>` : ''}
+    </div>
+    <div class="det-der">
     ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
     <div class="tarjeta">
       <h2>Unidades disponibles (${p.imeisDisponibles.length})</h2>
       ${p.imeisDisponibles.map(u => `
         <div class="detalle-fila"><span class="k">${escapar(u.imei)} · ${escapar(u.condicion)}</span><span class="v">${formatoDinero(u.precioVenta)}</span></div>
       `).join('')}
-    </div>` : ''}
-
-    ${puedeEditarDatos ? `
-    <div class="tarjeta">
-      <h2>Datos y precios</h2>
-      <div class="ayuda">Nombre, categoría, precios, garantía, compatibilidad y stock mínimo se cambian aquí; el punto de venta solo cobra lo que diga Inventario.</div>
-      <button id="pd-editar" class="btn btn-azul">${ic('pencil')} Editar producto</button>
     </div>` : ''}
     ${puedeEditar ? `
     ${p.tipo === 'ACCESORIO' ? `
@@ -3096,12 +3380,11 @@ async function pantallaProductoDetalle(param) {
       <label class="obligatorio">Motivo</label>
       <input id="pd-comentario" placeholder="Ej. conteo físico, mercancía dañada...">
       <button id="pd-guardar-stock" class="btn btn-verde">Registrar movimiento</button>
-    </div>` : ''}
-    <div id="pd-historial-cont" class="tarjeta">
-      <h2>Últimos movimientos</h2>
-      <div id="pd-historial"><div class="vacio">Cargando...</div></div>
-    </div>` : ''}`;
+    </div>` : ''}` : ''}
+    </div>
+    </div>`;
 
+  document.getElementById('pd-volver').onclick = () => navegar('#/inventario');
   if (puedeEditarDatos) {
     document.getElementById('pd-editar').onclick = () => navegar(`#/producto-editar/${encodeURIComponent(codti)}~${encodeURIComponent(codpro)}`);
   }
@@ -3171,13 +3454,11 @@ async function pantallaProductoEditar(param) {
 
   root.innerHTML = `
     <button class="enlace" id="pe-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver al producto</button>
-    <h1>${ic('pencil')} Editar producto</h1>
-    <div class="ayuda" style="margin:-8px 0 10px 0;">${escapar(p.nombreProductoMaster)} · código <strong>${escapar(p.codpro)}</strong> (el código no cambia)</div>
-    <div class="grupo-botones" style="margin-bottom:14px;">
-      <button class="btn btn-gris btn-chico" onclick="navegar('#/auditoria/producto-master~${p.idProductoMaster}')">${ic('history')} Historial del artículo</button>
-      <button class="btn btn-gris btn-chico" onclick="navegar('#/auditoria/producto~${p.idproducto}')">${ic('history')} Historial de esta sucursal</button>
-    </div>
+    ${cabeceraPantalla(ic('pencil') + ' Editar producto', `${escapar(p.nombreProductoMaster)} · código <strong>${escapar(p.codpro)}</strong> (el código no cambia)`, `
+      <button class="btn btn-gris" onclick="navegar('#/auditoria/producto-master~${p.idProductoMaster}')">${ic('history')} Historial del artículo</button>
+      <button class="btn btn-gris" onclick="navegar('#/auditoria/producto~${p.idproducto}')">${ic('history')} Historial de esta sucursal</button>`)}
 
+    <div class="dos-cols">
     <div class="tarjeta">
       <h2>Datos del artículo</h2>
       <div class="ayuda">Se aplican en <strong>todas las sucursales</strong>.</div>
@@ -3244,7 +3525,8 @@ async function pantallaProductoEditar(param) {
             ${u.tienePrecioPropio ? '<button class="btn btn-gris btn-chico ue-quitar">Volver al precio del modelo</button>' : ''}
           </div>
         </div>`).join('')}
-    </div>` : ''}`;
+    </div>` : ''}
+    </div>`;
 
   document.getElementById('pe-volver').onclick = () => navegar(volver);
   const errorDe = (err) => err.network ? 'Sin conexión con el servidor.' : err.message;
@@ -3393,16 +3675,17 @@ async function pantallaCaja() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver caja.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('receipt')} Caja</h1>
-    <div id="cj-tienda"></div>
-    <div id="cj-caja"></div>
-    <div id="cj-saldo"></div>
-    <div class="grupo-botones" style="margin: 10px 0;">
-      <button id="cj-nuevo" class="btn btn-verde">+ Nuevo movimiento</button>
+    ${cabeceraPantalla(ic('receipt') + ' Caja', 'Saldo y movimientos de efectivo', `<button id="cj-nuevo" class="btn btn-azul">${ic('plus')} Nuevo movimiento</button>`)}
+    <div class="tarjeta iv-filtros">
+      <div id="cj-tienda"></div>
+      <div id="cj-caja"></div>
     </div>
     <div id="cj-form" class="oculto"></div>
-    <h2>Movimientos de hoy</h2>
-    <div id="cj-lista"><div class="vacio">Cargando...</div></div>`;
+    <div id="cj-saldo"></div>
+    <div class="tarjeta">
+      <h2>Movimientos de hoy</h2>
+      <div id="cj-lista"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
   let codti = s.codti;
   let idCaja = null;
@@ -3424,7 +3707,7 @@ async function pantallaCaja() {
         idCaja = cajas[0].idCaja;
       }
       if (SUPERIOR.includes(s.rol)) {
-        html += `<button id="cj-nueva-caja" class="btn btn-azul btn-chico" style="margin-top:8px;">+ Nueva caja</button><div id="cj-caja-form" class="oculto"></div>`;
+        html += `<button id="cj-nueva-caja" class="btn btn-gris btn-chico" style="margin-top:8px;">+ Nueva caja</button><div id="cj-caja-form" class="oculto"></div>`;
       }
       contCaja.innerHTML = html;
       if (cajas.length > 1) {
@@ -3472,21 +3755,33 @@ async function pantallaCaja() {
     try {
       const saldo = await api('GET', `/api/cajas/${idCaja}/saldo`);
       contSaldo.innerHTML = `
-        <div class="fila">
-          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Entradas</div><div style="font-size:16px; font-weight:700; color:var(--verde);">${formatoDinero(saldo.totalEntradas)}</div></div>
-          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Salidas</div><div style="font-size:16px; font-weight:700; color:var(--rojo);">${formatoDinero(saldo.totalSalidas)}</div></div>
-          <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Saldo</div><div style="font-size:16px; font-weight:700;">${formatoDinero(saldo.saldo)}</div></div>
+        <div class="kp-h">
+          ${kpiH('c3', 'banknote', formatoDinero(saldo.saldo), 'Saldo en caja')}
+          ${kpiH('c1', 'trending-up', formatoDinero(saldo.totalEntradas), 'Entradas')}
+          ${kpiH('c4', 'circle-dollar-sign', formatoDinero(saldo.totalSalidas), 'Salidas')}
+          ${kpiH('c5', 'receipt', '…', 'Movimientos de hoy', 'cj-k-movs')}
         </div>`;
     } catch (err) {
       contSaldo.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }
     try {
       const movs = await api('GET', `/api/cajas/${idCaja}/movimientos`);
-      contLista.innerHTML = movs.length === 0 ? '<div class="vacio">Sin movimientos hoy.</div>' : movs.map(m => `
-        <div class="historial-item">
-          <div class="historial-comentario">${m.tipo === 1 ? ic('plus') : ic('minus')} ${escapar(m.nombreMotivo)} · ${formatoDinero(m.monto)}</div>
-          <div class="historial-meta">${escapar(m.nombreEncargado)} · ${formatoFecha(m.fechaMov)}${m.observaciones ? ' · ' + escapar(m.observaciones) : ''}</div>
-        </div>`).join('');
+      const kMovs = document.getElementById('cj-k-movs'); if (kMovs) kMovs.textContent = String(movs.length);
+      contLista.innerHTML = movs.length === 0 ? '<div class="vacio">Sin movimientos hoy.</div>' : `
+        <div class="tabla-cont"><table class="tabla">
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Motivo</th><th>Monto</th><th>Usuario</th><th>Nota</th></tr></thead>
+          <tbody>${movs.map(m => `
+            <tr><td>${formatoFecha(m.fechaMov)}</td>
+            <td><span class="pastilla ${m.tipo === 1 ? 'lista' : 'cancelada'}">${m.tipo === 1 ? 'Entrada' : 'Salida'}</span></td>
+            <td class="tabla-nombre">${escapar(m.nombreMotivo)}</td>
+            <td class="tabla-precio ${m.tipo === 1 ? 'monto-ok' : 'monto-rojo'}">${formatoDinero(m.monto)}</td>
+            <td>${escapar(m.nombreEncargado)}</td><td>${escapar(m.observaciones || '')}</td></tr>`).join('')}</tbody>
+        </table></div>
+        <div class="inv-tarjetas">${movs.map(m => `
+          <div class="historial-item">
+            <div class="historial-comentario">${m.tipo === 1 ? ic('plus') : ic('minus')} ${escapar(m.nombreMotivo)} · ${formatoDinero(m.monto)}</div>
+            <div class="historial-meta">${escapar(m.nombreEncargado)} · ${formatoFecha(m.fechaMov)}${m.observaciones ? ' · ' + escapar(m.observaciones) : ''}</div>
+          </div>`).join('')}</div>`;
     } catch (err) {
       contLista.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }
@@ -3498,7 +3793,7 @@ async function pantallaCaja() {
       <label class="obligatorio">Sucursal</label>
       <div class="fila">
         <select id="cj-codti"><option>Cargando...</option></select>
-        <button id="cj-nueva-sucursal" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+        <button id="cj-nueva-sucursal" class="btn btn-gris btn-chico" style="flex:0 0 auto;">+ Nueva</button>
       </div>
       <div id="cj-sucursal-form" class="oculto"></div>`;
     try {
@@ -3621,9 +3916,7 @@ async function pantallaDescuentos() {
   const s = Sesion.obtener();
   if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador puede ver los descuentos.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('tags')} Descuentos</h1>
-    <div class="ayuda" style="margin:-8px 0 14px 0;">El sistema los aplica solo al cobrar; nadie los captura a mano en el punto de venta.</div>
-    <button id="ds-nueva" class="btn btn-verde" style="margin-bottom:14px;">${ic('plus')} Nueva regla</button>
+    ${cabeceraPantalla(ic('tags') + ' Descuentos', 'El sistema los aplica solo al cobrar; nadie los captura a mano en el punto de venta', `<button id="ds-nueva" class="btn btn-azul">${ic('plus')} Nueva regla</button>`)}
     <div id="ds-form" class="oculto"></div>
     <div id="ds-lista"><div class="vacio">Cargando...</div></div>`;
 
@@ -3810,7 +4103,7 @@ async function pantallaAuditoria(param) {
   const [entidad, id] = param.split('~');
   root.innerHTML = `
     <button class="enlace" id="au-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
-    <h1>${ic('history')} Historial de cambios</h1>
+    ${cabeceraPantalla(ic('history') + ' Historial de cambios', 'Quién cambió qué y cuándo')}
     <div class="ayuda" style="margin:-8px 0 14px 0;">${escapar(AUDITORIA_ENTIDAD_NOMBRE[entidad] || entidad)} · #${escapar(id)}</div>
     <div id="au-lista"><div class="vacio">Cargando...</div></div>`;
   document.getElementById('au-volver').onclick = () => history.back();
@@ -3847,13 +4140,21 @@ async function pantallaEmpleados() {
   const s = Sesion.obtener();
   if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver empleados.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('briefcase')} Empleados</h1>
-    <div class="buscador">
-      <input id="em-buscar" placeholder="Nombre o usuario">
-      <button id="em-nuevo" class="btn btn-verde btn-chico">+ Nuevo</button>
-    </div>
+    ${cabeceraPantalla(ic('briefcase') + ' Empleados', 'Personal, sucursales y roles de acceso', `<button id="em-nuevo" class="btn btn-azul">${ic('plus')} Nuevo empleado</button>`)}
     <div id="em-form" class="oculto"></div>
-    <div id="em-lista"><div class="vacio">Cargando...</div></div>`;
+    <div class="kp-h">
+      ${kpiH('c1', 'briefcase', '…', 'Empleados activos', 'em-k-total')}
+      ${kpiH('c5', 'shield-check', '…', 'Administradores', 'em-k-admin')}
+      ${kpiH('c4', 'users', '…', 'Encargados de tienda', 'em-k-enc')}
+      ${kpiH('c3', 'wrench', '…', 'Vendedores y técnicos', 'em-k-vt')}
+    </div>
+    <div class="tarjeta iv-filtros">
+      <div class="iv-filtros-fila fila-2">
+        <div class="buscador buscar-ic">${ic('search')}<input id="em-buscar" placeholder="Buscar por nombre o usuario..."></div>
+        <select id="em-rol" aria-label="Rol"><option value="">Todos los roles</option></select>
+      </div>
+      <div id="em-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
   const cont = document.getElementById('em-lista');
   let empleados = [];
@@ -3864,24 +4165,39 @@ async function pantallaEmpleados() {
     return;
   }
 
-  const dibujar = (lista) => {
-    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay empleados que coincidan.</div>'; return; }
-    cont.innerHTML = lista.map(u => `
-      <div class="orden-item" data-id="${u.idusuario}">
-        <div class="orden-cab">
-          <span class="orden-folio">${escapar(u.nombreCompleto)}</span>
-          <span class="pastilla recibida">${escapar(ROL_ETIQUETA[u.rol] || u.rol)}</span>
-        </div>
-        <div class="orden-cliente">@${escapar(u.username)} · ${escapar(u.nombreTienda || 'Sin sucursal')}${u.tecnicoEncargado ? ' · Técnico encargado' : ''}</div>
-      </div>`).join('');
-    cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/empleado/' + el.dataset.id));
-  };
-  dibujar(empleados);
+  const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
+  poner('em-k-total', empleados.length);
+  poner('em-k-admin', empleados.filter(u => u.rol === 'ROOT' || u.rol === 'ADMIN').length);
+  poner('em-k-enc', empleados.filter(u => u.rol === 'ENCARGADO_TIENDA').length);
+  poner('em-k-vt', empleados.filter(u => u.rol === 'VENDEDOR' || u.rol === 'TECNICO').length);
+  const selRol = document.getElementById('em-rol');
+  [...new Set(empleados.map(u => u.rol))].forEach(r => selRol.insertAdjacentHTML('beforeend', `<option value="${escapar(r)}">${escapar(ROL_ETIQUETA[r] || r)}</option>`));
 
-  document.getElementById('em-buscar').addEventListener('input', e => {
-    const q = e.target.value.trim().toLowerCase();
-    dibujar(!q ? empleados : empleados.filter(u => (u.nombreCompleto || '').toLowerCase().includes(q) || (u.username || '').toLowerCase().includes(q)));
-  });
+  const dibujar = () => {
+    const q = quitarAcentos(document.getElementById('em-buscar').value.trim()).toLowerCase();
+    const rol = selRol.value;
+    const lista = empleados.filter(u => (!rol || u.rol === rol) && (!q || quitarAcentos(`${u.nombreCompleto || ''} ${u.username || ''}`).toLowerCase().includes(q)));
+    if (lista.length === 0) { cont.innerHTML = '<div class="vacio">No hay empleados que coincidan.</div>'; return; }
+    cont.innerHTML = `
+      <div class="tabla-cont"><table class="tabla">
+        <thead><tr><th>Nombre</th><th>Usuario</th><th>Sucursal</th><th>Rol</th><th>Notas</th></tr></thead>
+        <tbody>${lista.map(u => `
+          <tr data-id="${u.idusuario}">
+            <td class="tabla-nombre">${escapar(u.nombreCompleto)}</td><td>@${escapar(u.username)}</td><td>${escapar(u.nombreTienda || 'Sin sucursal')}</td>
+            <td><span class="pastilla recibida">${escapar(ROL_ETIQUETA[u.rol] || u.rol)}</span></td>
+            <td>${u.tecnicoEncargado ? 'Técnico encargado' : ''}</td>
+          </tr>`).join('')}</tbody>
+      </table></div>
+      <div class="inv-tarjetas">${lista.map(u => `
+        <div class="orden-item" data-id="${u.idusuario}">
+          <div class="orden-cab"><span class="orden-folio">${escapar(u.nombreCompleto)}</span><span class="pastilla recibida">${escapar(ROL_ETIQUETA[u.rol] || u.rol)}</span></div>
+          <div class="orden-cliente">@${escapar(u.username)} · ${escapar(u.nombreTienda || 'Sin sucursal')}${u.tecnicoEncargado ? ' · Técnico encargado' : ''}</div>
+        </div>`).join('')}</div>`;
+    cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/empleado/' + el.dataset.id));
+  };
+  dibujar();
+  document.getElementById('em-buscar').addEventListener('input', dibujar);
+  selRol.addEventListener('change', dibujar);
 
   document.getElementById('em-nuevo').onclick = () => {
     const cont2 = document.getElementById('em-form');
@@ -3984,7 +4300,7 @@ async function pantallaEmpleadoDetalle(id) {
   }
 
   root.innerHTML = `
-    <h1>${escapar(u.nombreCompleto)}</h1>
+    ${cabeceraPantalla(escapar(u.nombreCompleto), '@' + escapar(u.username))}
     <div class="tarjeta">
       <span class="pastilla recibida">${escapar(ROL_ETIQUETA[u.rol] || u.rol)}</span>
       <div class="detalle-fila"><span class="k">Usuario</span><span class="v">@${escapar(u.username)}</span></div>
@@ -4210,7 +4526,7 @@ async function pantallaDescansos() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver esta sección.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('calendar')} Descansos</h1>
+    ${cabeceraPantalla(ic('calendar') + ' Descansos', 'Descansos y vacaciones del personal')}
     <div id="ds-tienda"></div>
     <div class="tarjeta">
       <h2 style="margin-top:0;">Saldo por empleado</h2>
@@ -4263,7 +4579,7 @@ async function pantallaComisiones() {
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
 
   root.innerHTML = `
-    <h1>${ic('percent')} Comisiones</h1>
+    ${cabeceraPantalla(ic('percent') + ' Comisiones', 'Comisiones por ventas del período')}
     <div class="tarjeta">
       <label>Mes</label>
       <input type="month" id="cm-mes" value="${mesActual}">
@@ -4333,7 +4649,7 @@ async function cargarListaComisiones(tipo, anio, mes, cont) {
         <span class="v">${formatoDinero(c.comision)}
           ${c.pagada
             ? ' <span class="pastilla lista">' + ic('circle-check') + ' Pagada ' + (c.fechaPago || '') + '</span>'
-            : ` <button class="btn btn-verde btn-chico cm-pagar" data-idx="${i}">Marcar pagada</button>`}</span>
+            : ` <button class="btn btn-verde btn-dinero btn-chico cm-pagar" data-idx="${i}">Marcar pagada</button>`}</span>
       </div>`).join('');
     cont.querySelectorAll('.cm-pagar').forEach(btn => {
       btn.onclick = async () => {
@@ -4433,23 +4749,26 @@ async function pantallaPOS() {
   posCarrito = [];
 
   root.innerHTML = `
-    <h1>${ic('shopping-cart')} Punto de venta</h1>
+    ${cabeceraPantalla(ic('shopping-cart') + ' Punto de venta', `Vendedor: ${escapar(s.nombreCompleto || s.username)} · ${new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}`)}
     <div class="pos-grid">
     <div class="pos-izq">
-    <div class="buscador">
-      <input id="pv-buscar" placeholder="Buscar producto...">
+    <div class="tarjeta pos-catalogo">
+      <h2 class="h2-ic">${ic('package')} Catálogo</h2>
+      <div class="buscador buscar-ic">${ic('search')}<input id="pv-buscar" placeholder="Buscar producto..."></div>
+      <div id="pv-chips" class="chips"></div>
+      <div id="pv-resultados"></div>
     </div>
-    <div id="pv-chips" class="chips"></div>
-    <div id="pv-resultados"></div>
     </div>
 
     <div class="pos-der">
-    <h2 style="margin-top:16px;">Carrito</h2>
-    <div id="pv-carrito"><div class="vacio">Agrega productos arriba.</div></div>
-    <div id="pv-total" class="barra-total"></div>
+    <div class="tarjeta pos-carrito">
+      <div class="lista-cab"><h2 class="h2-ic">${ic('shopping-cart')} Carrito de compra</h2><span class="pill-items" id="pv-items">0 items</span></div>
+      <div id="pv-carrito"><div class="vacio">Agrega productos desde el catálogo.</div></div>
+      <div id="pv-total" class="barra-total"></div>
+    </div>
 
     <div class="tarjeta">
-      <h2 style="margin-top:0;">Cliente</h2>
+      <h2 class="h2-ic" style="margin-top:0;">${ic('users')} Cliente</h2>
       <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
         <input type="checkbox" id="pv-con-cliente" style="width:auto;"> Registrar cliente (si no, venta de mostrador)
       </label>
@@ -4457,7 +4776,7 @@ async function pantallaPOS() {
     </div>
 
     <div class="tarjeta">
-      <h2 style="margin-top:0;">Pago</h2>
+      <h2 class="h2-ic" style="margin-top:0;">${ic('credit-card')} Método de pago</h2>
       <label class="obligatorio">Método</label>
       <select id="pv-metodo">
         <option value="1">Efectivo</option>
@@ -4472,7 +4791,7 @@ async function pantallaPOS() {
       </div>
       <label>Observaciones</label>
       <input id="pv-obs" placeholder="Opcional">
-      <button id="pv-cobrar" class="btn btn-verde btn-grande">${ic('banknote')} Cobrar</button>
+      <button id="pv-cobrar" class="btn btn-verde btn-dinero btn-grande">${ic('banknote')} Cobrar</button>
     </div>
     </div>
     </div>`;
@@ -4514,13 +4833,15 @@ async function pantallaPOS() {
   };
   const mostrarResultados = () => {
     const q = inputBuscar.value.trim();
-    if (q.length < 2 && !categoriaSel) { contResultados.innerHTML = ''; return; }
+    // En celular el carrito queda debajo del catálogo: no se llena la pantalla hasta que se busque o se elija una categoría
+    if (q.length < 2 && !categoriaSel && window.innerWidth < 900) { contResultados.innerHTML = ''; return; }
     let lista = q.length >= 2 ? filtrarProductos(productos, q) : productos;
     if (categoriaSel) lista = lista.filter(p => (p.categoriaPrincipal || p.nombreCategoria) === categoriaSel);
     if (q.length < 2) lista = lista.filter(hayExistencia).sort((a, b) => a.nombreProductoMaster.localeCompare(b.nombreProductoMaster, 'es'));
-    dibujarResultadosPOS(contResultados, lista.slice(0, 30));
+    dibujarResultadosPOS(contResultados, lista.slice(0, 40));
   };
   dibujarChips();
+  mostrarResultados();
   inputBuscar.addEventListener('input', mostrarResultados);
 
   // Cliente
@@ -4589,17 +4910,18 @@ function dibujarResultadosPOS(cont, productos) {
   cont.innerHTML = productos.map(p => {
     const conDescuento = p.precioFinal != null && Number(p.descuentoAplicado) > 0;
     return `
-    <div class="orden-item" data-codpro="${escapar(p.codpro)}">
-      <div class="orden-cab">
-        <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
-        <span style="font-weight:700; white-space:nowrap; text-align:right;">
-          ${conDescuento ? `<span class="ayuda" style="text-decoration:line-through; display:block; font-weight:400;">${formatoDinero(p.preciopub)}</span>` : ''}
-          <span style="color:${conDescuento ? 'var(--verde)' : 'inherit'};">${formatoDinero(conDescuento ? p.precioFinal : p.preciopub)}</span>${p.tipo !== 'CELULAR' ? ' <span class="pv-mas">' + ic('plus') + '</span>' : ''}
-        </span>
+    <div class="orden-item pos-fila" data-codpro="${escapar(p.codpro)}">
+      <span class="pos-ic tipo-${escapar((p.tipo || '').toLowerCase())}">${TIPO_ICONO[p.tipo] || ic('package')}</span>
+      <div class="pos-fila-cuerpo">
+        <div class="orden-folio">${escapar(p.nombreProductoMaster)}</div>
+        <div class="orden-cliente">${escapar(p.codpro)}${p.tipo !== 'SERVICIO' ? ' · Stock: ' + Number(p.stock) : ''}${conDescuento ? ' · ' + ic('tags') + ' con descuento' : ''}</div>
       </div>
-      <div class="orden-cliente">${escapar(p.codpro)}${p.tipo !== 'SERVICIO' ? ' · Stock: ' + Number(p.stock) : ''}${conDescuento ? ' · ' + ic('tags') + ' con descuento' : ''}</div>
+      <span class="pos-precio">
+        ${conDescuento ? `<span class="ayuda" style="text-decoration:line-through; display:block; font-weight:400;">${formatoDinero(p.preciopub)}</span>` : ''}
+        <span style="color:${conDescuento ? 'var(--verde)' : 'inherit'};">${formatoDinero(conDescuento ? p.precioFinal : p.preciopub)}</span>${p.tipo !== 'CELULAR' ? ' <span class="pv-mas">' + ic('plus') + '</span>' : ''}
+      </span>
       ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
-        <div class="grupo-botones" style="margin-top:8px;">
+        <div class="grupo-botones pos-imeis">
           ${p.imeisDisponibles.map(u => `<button class="btn btn-azul btn-chico pv-agregar-imei" data-imei="${escapar(u.imei)}">${escapar(u.imei)} · ${formatoDinero(u.precioVenta)}</button>`).join('')}
         </div>` : ''}
     </div>`;
@@ -4635,7 +4957,7 @@ function actualizarCarritoPOS() {
   const cont = document.getElementById('pv-carrito');
   const contTotal = document.getElementById('pv-total');
   if (!cont) return;
-  if (posCarrito.length === 0) { cont.innerHTML = '<div class="vacio">Agrega productos arriba.</div>'; }
+  if (posCarrito.length === 0) { cont.innerHTML = '<div class="vacio">Agrega productos desde el catálogo.</div>'; }
   else {
     cont.innerHTML = posCarrito.map((i, idx) => `
       <div class="orden-item">
@@ -4662,6 +4984,8 @@ function actualizarCarritoPOS() {
   }
   const total = posCarrito.reduce((sum, i) => sum + i.cantidad * i.precioUnitarioFinal, 0);
   const piezas = posCarrito.reduce((sum, i) => sum + i.cantidad, 0);
+  const pill = document.getElementById('pv-items');
+  if (pill) pill.textContent = `${piezas} ${piezas === 1 ? 'item' : 'items'}`;
   contTotal.innerHTML = `<span class="bt-detalle">${piezas} ${piezas === 1 ? 'artículo' : 'artículos'}</span><span class="bt-total"><small>Total</small> ${formatoDinero(total)}</span>`;
   actualizarCambioPOS();
 }
@@ -4743,7 +5067,13 @@ async function pantallaDevoluciones() {
   if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
 
   root.innerHTML = `
-    <h1>${ic('undo-2')} Devoluciones</h1>
+    ${cabeceraPantalla(ic('undo-2') + ' Devoluciones', 'Reembolsos de productos vendidos (el cambio por otro producto se hace en JSystem)')}
+    <div class="kp-h" id="dv-kpis">
+      ${kpiH('c4', 'clock', '…', 'Pendientes de aprobar', 'dv-k-pend')}
+      ${kpiH('c3', 'circle-check', '…', 'Procesadas', 'dv-k-proc')}
+      ${kpiH('c1', 'undo-2', '…', 'Monto devuelto (procesadas)', 'dv-k-monto')}
+      ${kpiH('c6', 'circle-x', '…', 'Rechazadas', 'dv-k-rech')}
+    </div>
     <div class="tarjeta">
       <h2 style="margin-top:0;">Solicitar devolución</h2>
       <label class="obligatorio">ID de venta</label>
@@ -4755,12 +5085,15 @@ async function pantallaDevoluciones() {
       <div class="ayuda">Solo reembolso. Para cambiar por otro producto, usa JSystem en la tienda.</div>
     </div>
 
-    <h2 style="margin-top:16px;">Historial</h2>
-    <div class="segmentado">
-      <button id="dv-seg-pendientes" class="activo">Pendientes</button>
-      <button id="dv-seg-todas">Todas</button>
-    </div>
-    <div id="dv-lista"><div class="vacio">Cargando...</div></div>`;
+    <div class="tarjeta">
+      <div class="lista-cab"><h2>Historial</h2>
+        <div class="segmentado" style="margin:0;">
+          <button id="dv-seg-pendientes" class="activo">Pendientes</button>
+          <button id="dv-seg-todas">Todas</button>
+        </div>
+      </div>
+      <div id="dv-lista"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
   document.getElementById('dv-consultar').onclick = () => consultarVentaDevolucion();
   document.getElementById('dv-idventa').addEventListener('keydown', e => { if (e.key === 'Enter') consultarVentaDevolucion(); });
@@ -4865,7 +5198,14 @@ async function pantallaDevoluciones() {
     const cont = document.getElementById('dv-lista');
     cont.innerHTML = '<div class="vacio">Cargando...</div>';
     try {
-      const lista = await api('GET', '/api/devoluciones' + (soloPendientes ? '?estado=1' : ''));
+      const todas = await api('GET', '/api/devoluciones');
+      const cuenta = (e) => todas.filter(d => d.estadoDisplay === e);
+      const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      poner('dv-k-pend', String(cuenta('Pendiente').length));
+      poner('dv-k-proc', String(cuenta('Procesada').length));
+      poner('dv-k-rech', String(cuenta('Rechazada').length));
+      poner('dv-k-monto', formatoDinero(cuenta('Procesada').reduce((sum, d) => sum + Number(d.totalDevuelto || 0), 0)));
+      const lista = soloPendientes ? cuenta('Pendiente') : todas;
       if (lista.length === 0) { cont.innerHTML = '<div class="vacio">Sin devoluciones.</div>'; return; }
       cont.innerHTML = lista.map(d => `
         <div class="orden-item" data-id="${d.iddevolucion}">
@@ -4901,7 +5241,7 @@ async function pantallaDevolucionDetalle(id) {
   }
 
   root.innerHTML = `
-    <h1>${ic('undo-2')} ${escapar(d.folio)}</h1>
+    ${cabeceraPantalla(ic('undo-2') + ' ' + escapar(d.folio), 'Detalle de la devolución')}
     <div class="tarjeta">
       <div class="orden-cab">
         ${pastillaDevolucion(d.estadoDisplay)}
@@ -5003,18 +5343,25 @@ async function pantallaTraspasos() {
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
 
   root.innerHTML = `
-    <h1>${ic('truck')} Traspasos</h1>
-    <div id="tr-tienda"></div>
-    <div class="grupo-botones" style="margin:10px 0;">
-      <button id="tr-nuevo-envio" class="btn btn-verde">${ic('cloud-upload')} Enviar mercancía</button>
-      <button id="tr-nueva-solicitud" class="btn btn-azul">${ic('inbox')} Pedir mercancía</button>
+    ${cabeceraPantalla(ic('truck') + ' Traspasos', 'Mercancía que se envía y se pide entre sucursales', `
+      <button id="tr-faltantes" class="btn btn-gris">${ic('triangle-alert')} Faltantes por resolver <span id="tr-falt-n"></span></button>
+      <button id="tr-nueva-solicitud" class="btn btn-gris">${ic('inbox')} Pedir mercancía</button>
+      <button id="tr-nuevo-envio" class="btn btn-azul">${ic('cloud-upload')} Enviar mercancía</button>`)}
+    <div class="kp-h">
+      ${kpiH('c4', 'clock', '…', 'Por atender', 'tr-k-pend')}
+      ${kpiH('c6', 'triangle-alert', '…', 'Faltantes por resolver', 'tr-k-falt')}
+      ${kpiH('c1', 'truck', '…', 'Traspasos de la sucursal', 'tr-k-total')}
     </div>
-    <button id="tr-faltantes" class="btn btn-gris" style="margin-bottom:10px;">${ic('triangle-alert')} Faltantes por resolver <span id="tr-falt-n"></span></button>
-    <div class="segmentado">
-      <button id="tr-seg-pend" class="activo">Por atender</button>
-      <button id="tr-seg-todos">Todos</button>
-    </div>
-    <div id="tr-lista"><div class="vacio">Cargando...</div></div>`;
+    <div class="tarjeta iv-filtros">
+      <div class="iv-filtros-fila fila-2">
+        <div id="tr-tienda"></div>
+        <div class="segmentado" style="margin:0;">
+          <button id="tr-seg-pend" class="activo">Por atender</button>
+          <button id="tr-seg-todos">Todos</button>
+        </div>
+      </div>
+      <div id="tr-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>
+    </div>`;
 
   let codti = await dibujarSelectorSucursal(document.getElementById('tr-tienda'), s, (c) => { codti = c; cargar(); });
   let soloPendientes = true;
@@ -5031,28 +5378,45 @@ async function pantallaTraspasos() {
     const cont = document.getElementById('tr-lista');
     cont.innerHTML = '<div class="vacio">Cargando...</div>';
     try {
-      const lista = await api('GET', `/api/traspasos/tienda/${codti}` + (soloPendientes ? '/pendientes' : ''));
+      const [pendientes, todos] = await Promise.all([
+        api('GET', `/api/traspasos/tienda/${codti}/pendientes`),
+        api('GET', `/api/traspasos/tienda/${codti}`),
+      ]);
+      const lista = soloPendientes ? pendientes : todos;
+      const ponerK = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
+      ponerK('tr-k-pend', pendientes.length);
+      if (todos) ponerK('tr-k-total', todos.length);
       if (lista.length === 0) {
         cont.innerHTML = `<div class="vacio">${soloPendientes ? 'No tienes traspasos por atender.' : 'Sin traspasos.'}</div>`;
       } else {
-        cont.innerHTML = lista.map(t => {
-          const porMi = t.activo && t.codtiDestino === codti
-            ? (t.tipo === 1 && t.estado === 1 ? ic('package') + ' Por recibir' : (t.tipo === 2 && (t.estado === 1 || t.estado === 3) ? ic('clipboard-pen') + ' Por resolver' : ''))
-            : '';
-          return `
-          <div class="orden-item" data-id="${t.idtraspaso}">
-            <div class="orden-cab">
-              <span class="orden-folio">#${t.idtraspaso} · ${escapar(t.tipoDisplay)}</span>
-              ${pastillaTraspaso(t)}
-            </div>
-            <div class="orden-equipo">${escapar(t.nombreTiendaOrigen)} → ${escapar(t.nombreTiendaDestino)}</div>
-            <div class="orden-meta">
-              <span class="orden-fecha">${formatoFecha(t.fechaCreacion)}</span>
-              <span>${(t.lineas || []).length} producto(s)${porMi ? ' · <strong>' + porMi + '</strong>' : ''}</span>
-            </div>
-          </div>`;
-        }).join('');
-        cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => navegar('#/traspaso/' + el.dataset.id));
+        const porMiDe = (t) => t.activo && t.codtiDestino === codti
+          ? (t.tipo === 1 && t.estado === 1 ? ic('package') + ' Por recibir' : (t.tipo === 2 && (t.estado === 1 || t.estado === 3) ? ic('clipboard-pen') + ' Por resolver' : ''))
+          : '';
+        cont.innerHTML = `
+          <div class="tabla-cont"><table class="tabla">
+            <thead><tr><th>Traspaso</th><th>Fecha</th><th>Origen</th><th>Destino</th><th>Productos</th><th>Pendiente</th><th>Estado</th></tr></thead>
+            <tbody>${lista.map(t => `
+              <tr data-id="${t.idtraspaso}">
+                <td>#${t.idtraspaso} · ${escapar(t.tipoDisplay)}</td><td>${formatoFecha(t.fechaCreacion)}</td>
+                <td>${escapar(t.nombreTiendaOrigen)}</td><td>${escapar(t.nombreTiendaDestino)}</td>
+                <td>${(t.lineas || []).length}</td><td><strong>${porMiDe(t)}</strong></td><td>${pastillaTraspaso(t)}</td>
+              </tr>`).join('')}</tbody>
+          </table></div>
+          <div class="inv-tarjetas">${lista.map(t => {
+            const porMi = porMiDe(t);
+            return `
+            <div class="orden-item" data-id="${t.idtraspaso}">
+              <div class="orden-cab">
+                <span class="orden-folio">#${t.idtraspaso} · ${escapar(t.tipoDisplay)}</span>
+                ${pastillaTraspaso(t)}
+              </div>
+              <div class="orden-equipo">${escapar(t.nombreTiendaOrigen)} → ${escapar(t.nombreTiendaDestino)}</div>
+              <div class="orden-meta">
+                <span class="orden-fecha">${formatoFecha(t.fechaCreacion)}</span>
+                <span>${(t.lineas || []).length} producto(s)${porMi ? ' · <strong>' + porMi + '</strong>' : ''}</span>
+              </div>
+            </div>`; }).join('')}</div>`;
+        cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/traspaso/' + el.dataset.id));
       }
     } catch (err) {
       cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
@@ -5060,6 +5424,8 @@ async function pantallaTraspasos() {
     api('GET', `/api/traspasos/faltantes?codti=${codti}`).then(f => {
       const n = document.getElementById('tr-falt-n');
       if (n) n.textContent = f.length > 0 ? `(${f.length})` : '';
+      const k = document.getElementById('tr-k-falt');
+      if (k) k.textContent = String(f.length);
     }).catch(() => {});
   }
   cargar();
@@ -5090,7 +5456,7 @@ async function pantallaTraspasoDetalle(id) {
   const lineas = t.lineas || [];
 
   root.innerHTML = `
-    <h1>${ic('truck')} Traspaso #${t.idtraspaso}</h1>
+    ${cabeceraPantalla(ic('truck') + ' Traspaso #' + t.idtraspaso, 'Mercancía que se mueve entre sucursales')}
     <div class="tarjeta">
       <div class="orden-cab">${pastillaTraspaso(t)}<span class="ayuda">${escapar(t.tipoDisplay)}</span></div>
       <div class="ayuda" style="margin-top:6px;">${escapar(t.nombreTiendaOrigen)} → ${escapar(t.nombreTiendaDestino)}</div>
@@ -5246,7 +5612,7 @@ async function pantallaTraspasoNuevo(tipo) {
   const esEnvio = tipo !== 'solicitud';
 
   root.innerHTML = `
-    <h1>${esEnvio ? ic('cloud-upload') + ' Enviar mercancía' : ic('inbox') + ' Pedir mercancía'}</h1>
+    ${cabeceraPantalla(esEnvio ? ic('cloud-upload') + ' Enviar mercancía' : ic('inbox') + ' Pedir mercancía', esEnvio ? 'Manda productos a otra sucursal' : 'Pide productos a otra sucursal')}
     <div id="tn-tienda"></div>
     <label class="obligatorio" style="margin-top:8px;">${esEnvio ? 'Enviar a' : 'Pedir a'}</label>
     <select id="tn-otra"><option>Cargando...</option></select>
@@ -5376,7 +5742,7 @@ async function pantallaFaltantes() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('triangle-alert')} Faltantes</h1>
+    ${cabeceraPantalla(ic('triangle-alert') + ' Faltantes', 'Mercancía que no llegó completa en un traspaso')}
     <div class="ayuda">Mercancía que salió de una tienda y no llegó completa a la otra. Cada faltante se resuelve: llegó tarde, regresó al origen o se da de baja.</div>
     <div id="fa-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>
     <button class="btn btn-gris" onclick="navegar('#/traspasos')" style="margin-top:10px;">Volver</button>`;
@@ -5455,7 +5821,7 @@ setInterval(actualizarBadgeNotificaciones, 45000);
 
 async function pantallaNotificaciones() {
   root.innerHTML = `
-    <h1>${ic('bell')} Notificaciones</h1>
+    ${cabeceraPantalla(ic('bell') + ' Notificaciones', 'Avisos del sistema para ti')}
     <div class="segmentado">
       <button id="nt-seg-pendientes" class="activo">Pendientes</button>
       <button id="nt-seg-todas">Todas</button>
@@ -5515,7 +5881,7 @@ async function pantallaNotificaciones() {
 
 function pantallaAjustes() {
   root.innerHTML = `
-    <h1>${ic('settings')} Ajustes</h1>
+    ${cabeceraPantalla(ic('settings') + ' Ajustes', 'Tu contraseña y el logo del negocio')}
     <div class="tarjeta">
       <h2 style="margin-top:0;">Cambiar mi contraseña</h2>
       <label class="obligatorio">Contraseña actual</label>
@@ -5605,7 +5971,7 @@ async function pantallaCatalogos() {
   const s = Sesion.obtener();
   if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los catálogos solo los administra un administrador.</div>'; return; }
   root.innerHTML = `
-    <h1>${ic('tags')} Catálogos</h1>
+    ${cabeceraPantalla(ic('tags') + ' Catálogos', 'Categorías, descripciones, colores y proveedores con los que se registran los artículos')}
     <div class="segmentado">
       <button id="ct-seg-articulos" class="activo">Artículos</button>
       <button id="ct-seg-secciones">Secciones</button>
