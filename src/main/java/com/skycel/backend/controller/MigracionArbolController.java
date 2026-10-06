@@ -39,6 +39,28 @@ public class MigracionArbolController {
         return migracionArbolService.aplicar();
     }
 
+    @Operation(summary = "Plan: primera parte de la descripción de accesorios a la subcategoría 2",
+            description = "Muestra qué artículos pasarían a una subcategoría 2 nueva o existente. No guarda nada. minimo = artículos mínimos para crear una subcategoría.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/subcategoria2-desde-descripcion/plan")
+    @PreAuthorize("hasRole('ROOT')")
+    public MigracionArbolResultadoDTO planSubcategoria2(@RequestParam(defaultValue = "2") int minimo) {
+        return migracionArbolService.planearSubcategoria2DesdeDescripcion(minimo);
+    }
+
+    @Operation(summary = "Primera parte de la descripción de accesorios a la subcategoría 2", description = "Requiere confirmar=true.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/subcategoria2-desde-descripcion/aplicar")
+    @PreAuthorize("hasRole('ROOT')")
+    public MigracionArbolResultadoDTO aplicarSubcategoria2(@RequestParam(defaultValue = "2") int minimo,
+                                                           @RequestParam(defaultValue = "false") boolean confirmar) {
+        if (!confirmar) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Esta operación modifica el catálogo. Respalda la base de datos y vuelve a llamar con confirmar=true.");
+        }
+        return migracionArbolService.aplicarSubcategoria2DesdeDescripcion(minimo);
+    }
+
     @Operation(summary = "Plan: separar el color de la descripción", description = "Muestra qué artículos migrados pasarían a llevar el color como dato propio. No guarda nada.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/separar-color/plan")

@@ -134,6 +134,96 @@ public class MigracionArbolService {
         return resultado;
     }
 
+    /** Plan de pasar la primera parte de la descripción de los accesorios a la subcategoría 2 (solo lee: deshace la transacción). */
+    @Transactional
+    public MigracionArbolResultadoDTO planearSubcategoria2DesdeDescripcion(int minimo) {
+        MigracionArbolResultadoDTO r = subcategoria2DesdeDescripcion(minimo);
+        TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        r.setAplicado(false);
+        return r;
+    }
+
+    @Transactional
+    public MigracionArbolResultadoDTO aplicarSubcategoria2DesdeDescripcion(int minimo) {
+        MigracionArbolResultadoDTO r = subcategoria2DesdeDescripcion(minimo);
+        r.setAplicado(true);
+        return r;
+    }
+
+    /**
+     * En accesorios la subcategoría 2 casi siempre está vacía y la descripción trae una primera parte que agrupa
+     * ("de Pared Iphone Tipo C 20w", "Antigolpe Samsung A15"). Esa primera parte pasa a ser la subcategoría 2 y el resto queda
+     * como descripción: Accesorios > Adaptador > Pared > "Iphone Tipo C 20w". Solo se crean subcategorías con al menos
+     * {@code minimo} artículos, y no se toca a los que ya tienen subcategoría 2 ni a los de nombre puesto a mano.
+     */
+    private MigracionArbolResultadoDTO subcategoria2DesdeDescripcion(int minimo) {
+        MigracionArbolResultadoDTO resultado = new MigracionArbolResultadoDTO();
+        entityManager.setFlushMode(jakarta.persistence.FlushModeType.COMMIT);
+        List<Categoria> todas = new ArrayList<>(categoriaRepository.findAll());
+        Set<String> nombresActivos = new HashSet<>();
+        Map<Short, List<ProductoMaster>> porSub1 = new LinkedHashMap<>();
+        for (ProductoMaster m : productoMasterRepository.findByActivoTrue()) {
+            nombresActivos.add(m.getNombreBase() == null ? "" : m.getNombreBase().trim().toLowerCase());
+            Categoria c = m.getCategoria();
+            if (c == null || c.nivel() != 2 || c.raiz().getTipo() != TipoProducto.ACCESORIO) continue;
+            if (m.getNombreProducto() == null || m.getNombreProducto().isBlank()) continue;
+            if (!m.nombreCompleto().equalsIgnoreCase(m.getNombreBase())) continue; // nombre puesto a mano: no se toca
+            porSub1.computeIfAbsent(c.getIdcat(), k -> new ArrayList<>()).add(m);
+        }
+        int sinUso = 0;
+        for (List<ProductoMaster> masters : porSub1.values()) {
+            Categoria sub1 = masters.get(0).getCategoria();
+            Map<String, com.skycel.backend.domain.util.AgrupadorDescripciones.Asignacion> grupos =
+                    com.skycel.backend.domain.util.AgrupadorDescripciones.agrupar(
+                            masters.stream().map(ProductoMaster::getNombreProducto).distinct().toList(), minimo);
+            Map<String, Categoria> sub2PorNombre = new HashMap<>();
+            for (ProductoMaster m : masters) {
+                var asignacion = grupos.get(m.getNombreProducto());
+                if (asignacion == null) continue;
+                String clave = asignacion.subcategoria().toLowerCase();
+                Categoria sub2 = sub2PorNombre.get(clave);
+                if (sub2 == null) {
+                    sub2 = todas.stream().filter(c -> c.getCategoriaSuperior() != null
+                            && c.getCategoriaSuperior().getIdcat().equals(sub1.getIdcat())
+                            && c.getNombre().equalsIgnoreCase(asignacion.subcategoria())).findFirst().orElse(null);
+                    if (sub2 == null) {
+                        sub2 = categoriaRepository.saveAndFlush(Categoria.builder().nombre(asignacion.subcategoria())
+                                .tipo(sub1.getTipo()).categoriaSuperior(sub1).incluirEnNombre(true).activo(true).build());
+                        todas.add(sub2);
+                        resultado.getCategoriasCreadas().add("'" + sub2.getNombre() + "' bajo '" + sub1.getNombre() + "'");
+                    }
+                    sub2PorNombre.put(clave, sub2);
+                }
+                String antes = m.getNombreBase();
+                String descAnterior = m.getNombreProducto();
+                var descAnteriorObj = m.getDescripcion();
+                m.setCategoria(sub2);
+                m.setNombreProducto(asignacion.resto());
+                m.setDescripcion(asignacion.resto() == null ? null : descripcionService.obtenerOCrear(sub2, asignacion.resto()));
+                String despues = m.nombreCompleto();
+                String claveDespues = despues.trim().toLowerCase();
+                if (!despues.equalsIgnoreCase(antes) && nombresActivos.contains(claveDespues)) {
+                    resultado.getAdvertencias().add("No se movió '" + antes + "': el nombre nuevo '" + despues + "' ya lo tiene otro artículo.");
+                    m.setCategoria(sub1);
+                    m.setNombreProducto(descAnterior);
+                    m.setDescripcion(descAnteriorObj);
+                    continue;
+                }
+                nombresActivos.remove(antes.trim().toLowerCase());
+                nombresActivos.add(claveDespues);
+                m.setNombreBase(despues);
+                productoMasterRepository.save(m);
+                resultado.getLineas().add(new Linea(m.getIdprodmaster(), antes, despues,
+                        sub1.getNombre() + " > " + sub2.getNombre() + " > " + (asignacion.resto() == null ? "(sin descripción)" : asignacion.resto()),
+                        "SUBCATEGORIA_2", 0));
+                resultado.setMigrados(resultado.getMigrados() + 1);
+            }
+            sinUso += descripcionService.desactivarSinUso(sub1.getIdcat());
+        }
+        resultado.setDescripcionesCatalogadas(sinUso); // aquí: descripciones de la subcategoría 1 que quedaron sin uso y se desactivaron
+        return resultado;
+    }
+
     /** Una pasada de migración: guarda el estado (categorías conocidas, principales resueltas) mientras recorre los artículos. */
     private class Corrida {
         private final MigracionArbolResultadoDTO resultado = new MigracionArbolResultadoDTO();

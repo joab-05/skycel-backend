@@ -107,6 +107,20 @@ public class DescripcionService {
         return toDto(d);
     }
 
+    /** Desactiva las descripciones de la categoría que ya no usa ningún artículo (quedan fuera de la lista de elección). */
+    @Transactional
+    public int desactivarSinUso(Short idCategoria) {
+        int n = 0;
+        for (DescripcionProducto d : descripcionRepository.findByCategoria_IdcatAndActivoTrueOrderByNombreAsc(idCategoria)) {
+            if (productoMasterRepository.findByDescripcion_Iddescripcion(d.getIddescripcion()).isEmpty()) {
+                d.setActivo(false);
+                descripcionRepository.save(d);
+                n++;
+            }
+        }
+        return n;
+    }
+
     private DescripcionResponseDTO toDto(DescripcionProducto d) {
         return new DescripcionResponseDTO(d.getIddescripcion(), d.getCategoria().getIdcat(), d.getNombre());
     }
