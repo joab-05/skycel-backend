@@ -48,6 +48,14 @@ public class ConfiguracionNegocio {
     @Column(name = "dias_devolucion", nullable = false)
     private Integer diasDevolucion;
 
+    /** Logo del negocio, ya normalizado (PNG de hasta 512 px). null = se usa el ícono por omisión de cada aplicación. */
+    @Column(name = "logo", columnDefinition = "MEDIUMBLOB")
+    private byte[] logo;
+
+    /** Cambia cada vez que se sube o se quita el logo: sirve a los clientes para renovar su copia. */
+    @Column(name = "logo_version")
+    private Long logoVersion;
+
     @UpdateTimestamp
     @Column(name = "fecha_actualizacion")
     private LocalDateTime fechaActualizacion;

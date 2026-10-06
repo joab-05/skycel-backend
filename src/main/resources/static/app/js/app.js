@@ -216,7 +216,7 @@ async function dibujarSidebar() {
       </button>`;
   }).join('');
   sidebar.innerHTML = `
-    <div class="sidebar-marca" id="sidebar-inicio"><span class="logo">${ic('smartphone')}</span> Skycel</div>
+    <div class="sidebar-marca" id="sidebar-inicio"><span class="logo ${LOGO.tiene ? 'con-imagen' : ''}">${logoHtml()}</span> Skycel</div>
     <div class="sidebar-items">${filas}</div>`;
   sidebar.querySelectorAll('button[data-h]').forEach(b => b.onclick = () => navegar(b.dataset.h));
   document.getElementById('sidebar-inicio').onclick = () => navegar('#/menu');
@@ -294,13 +294,48 @@ async function render() {
 window.addEventListener('hashchange', render);
 window.navegar = navegar;
 
+// ── Logo del negocio ──────────────────────────────────────────────────────
+// El administrador sube un logo en Ajustes; se guarda en el servidor y se ve en el acceso, el encabezado y el menú.
+// Sin logo (o sin conexión para traerlo) se usa el ícono de siempre.
+
+const LOGO = (() => {
+  try { return JSON.parse(localStorage.getItem('skycel_logo')) || { tiene: false, version: 0 }; } catch { return { tiene: false, version: 0 }; }
+})();
+
+async function cargarLogo() {
+  try {
+    const r = await fetch('/api/configuracion/logo/info', { signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined });
+    if (r.ok) {
+      const j = await r.json();
+      LOGO.tiene = !!j.tiene;
+      LOGO.version = j.version || 0;
+      try { localStorage.setItem('skycel_logo', JSON.stringify(LOGO)); } catch { /* sin almacenamiento */ }
+    }
+  } catch { /* sin conexión: se queda con lo último que se supo */ }
+}
+
+/** El logo (imagen) o, si no hay, el ícono por omisión. Si la imagen no carga, vuelve al ícono. */
+function logoHtml() {
+  return LOGO.tiene
+    ? `<img class="logo-img" src="/api/configuracion/logo?v=${LOGO.version}" alt="Logo" onerror="this.parentNode.classList.remove('con-imagen'); this.outerHTML = ic('smartphone');">`
+    : ic('smartphone');
+}
+
+/** Pone el logo en los lugares fijos de la página (encabezado, menú lateral y acceso). */
+function aplicarLogoEnPantalla() {
+  document.querySelectorAll('#encabezado .logo, .sidebar-marca .logo, .login-logo').forEach(el => {
+    el.classList.toggle('con-imagen', LOGO.tiene);
+    el.innerHTML = logoHtml();
+  });
+}
+
 // ── Login ─────────────────────────────────────────────────────────────────
 
 function pantallaLogin() {
   root.innerHTML = `
     <div class="pantalla-centrada">
       <div class="login-marca">
-        <div class="login-logo">${ic('smartphone')}</div>
+        <div class="login-logo ${LOGO.tiene ? 'con-imagen' : ''}">${logoHtml()}</div>
         <h1>Skycel</h1>
         <div class="ayuda">Punto de venta e inventario</div>
       </div>
@@ -5491,7 +5526,52 @@ function pantallaAjustes() {
       <input id="aj-confirmar" type="password" autocomplete="new-password">
       <div class="ayuda">Al menos 8 caracteres.</div>
       <button id="aj-guardar" class="btn btn-verde">Guardar</button>
-    </div>`;
+    </div>
+    ${SUPERIOR.includes(Sesion.obtener().rol) ? `
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Logo del negocio</h2>
+      <div class="logo-vista"><div id="aj-logo-prev" class="logo-previa ${LOGO.tiene ? 'con-imagen' : ''}">${logoHtml()}</div></div>
+      <div class="ayuda">Imagen PNG o JPEG de hasta 2 MB (mejor cuadrada y con fondo transparente). Se ve en el acceso, el encabezado y el menú de la web y en JSystem.</div>
+      <input id="aj-logo-archivo" type="file" accept="image/png,image/jpeg" class="oculto">
+      <div class="grupo-botones">
+        <button id="aj-logo-cambiar" class="btn btn-azul btn-chico">${ic('cloud-upload')} Cambiar logo</button>
+        <button id="aj-logo-quitar" class="btn btn-gris btn-chico" ${LOGO.tiene ? '' : 'disabled'}>Quitar logo</button>
+      </div>
+    </div>` : ''}`;
+
+  if (SUPERIOR.includes(Sesion.obtener().rol)) {
+    const archivo = document.getElementById('aj-logo-archivo');
+    const refrescar = async () => {
+      await cargarLogo();
+      aplicarLogoEnPantalla();
+      const prev = document.getElementById('aj-logo-prev');
+      prev.classList.toggle('con-imagen', LOGO.tiene);
+      prev.innerHTML = logoHtml();
+      document.getElementById('aj-logo-quitar').disabled = !LOGO.tiene;
+    };
+    document.getElementById('aj-logo-cambiar').onclick = () => archivo.click();
+    archivo.onchange = async () => {
+      const f = archivo.files[0];
+      archivo.value = '';
+      if (!f) return;
+      if (!/^image\/(png|jpeg)$/.test(f.type)) { mostrarMensaje(root, 'Elige una imagen PNG o JPEG.', 'error'); return; }
+      if (f.size > 2 * 1024 * 1024) { mostrarMensaje(root, 'La imagen pesa más de 2 MB. Elige una más ligera.', 'error'); return; }
+      try {
+        const r = await fetch('/api/configuracion/logo', { method: 'PUT', headers: { 'Content-Type': f.type, Authorization: 'Bearer ' + Sesion.obtener().token }, body: f });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.title || j.message || 'No se pudo guardar el logo.'); }
+        await refrescar();
+        mostrarMensaje(root, 'Logo actualizado.', 'ok');
+      } catch (err) { mostrarMensaje(root, err.message === 'Failed to fetch' ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+    };
+    document.getElementById('aj-logo-quitar').onclick = async () => {
+      if (!confirm('¿Quitar el logo? Se volverá a ver el ícono de siempre.')) return;
+      try {
+        await api('DELETE', '/api/configuracion/logo');
+        await refrescar();
+        mostrarMensaje(root, 'Logo quitado.', 'ok');
+      } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+    };
+  }
 
   document.getElementById('aj-guardar').onclick = async (e) => {
     const actual = document.getElementById('aj-actual').value;
@@ -5881,6 +5961,8 @@ async function pantallaCatalogos() {
 // ── Arranque ──────────────────────────────────────────────────────────────
 
 Net.iniciar();
+aplicarLogoEnPantalla();            // con lo último que se supo (sirve sin conexión)
+cargarLogo().then(aplicarLogoEnPantalla);
 render();
 actualizarBadgeNotificaciones();
 

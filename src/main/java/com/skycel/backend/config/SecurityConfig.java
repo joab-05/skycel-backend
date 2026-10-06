@@ -51,6 +51,8 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)       // Opcional: para errores 403
                 )
             .authorizeHttpRequests(auth -> auth
+                // El logo del negocio se lee sin iniciar sesión (lo muestra la pantalla de acceso); cambiarlo sí exige ADMIN/ROOT
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/configuracion/logo", "/api/configuracion/logo/info").permitAll()
                 .requestMatchers(
                         "/api/auth/**",
                         "/v3/api-docs/**",
