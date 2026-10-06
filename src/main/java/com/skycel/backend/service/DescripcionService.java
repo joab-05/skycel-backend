@@ -107,6 +107,20 @@ public class DescripcionService {
         return toDto(d);
     }
 
+    /** Elimina (de forma lógica) una descripción que ya no sirve; solo si ningún artículo activo la usa. */
+    @Transactional
+    public void eliminar(Integer id) {
+        DescripcionProducto d = descripcionRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Descripción no encontrada: " + id));
+        long usan = productoMasterRepository.countByDescripcion_IddescripcionAndActivoTrue(id);
+        if (usan > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "No se puede eliminar '" + d.getNombre() + "': la usan " + usan
+                    + " artículo(s) activo(s). Cámbialos de descripción antes.");
+        }
+        d.setActivo(false);
+        descripcionRepository.save(d);
+    }
+
     /** Desactiva las descripciones de la categoría que ya no usa ningún artículo (quedan fuera de la lista de elección). */
     @Transactional
     public int desactivarSinUso(Short idCategoria) {

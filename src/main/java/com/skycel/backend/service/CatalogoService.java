@@ -41,6 +41,8 @@ public class CatalogoService {
     private final TiendaRepository tiendaRepository;
     private final CatalogoMapper catalogoMapper;
     private final CategoriaService categoriaService;
+    private final ProductoRepository productoRepository;
+    private final ProductoMasterRepository productoMasterRepository;
 
     // ==========================================
     // === LECTURAS (Solo activos) + CACHE    ===
@@ -125,6 +127,34 @@ public class CatalogoService {
     @Transactional
     public CategoriaResponseDTO actualizarCategoria(Short id, CategoriaRequestDTO dto) {
         return categoriaService.actualizar(id, dto);
+    }
+
+    /** Elimina (de forma lógica) un color que ya no sirve; solo si ningún producto o artículo activo lo usa. */
+    @CacheEvict(value = "coloresCache", allEntries = true)
+    @Transactional
+    public void eliminarColor(Short id) {
+        Color c = colorRepository.findById(id).orElseThrow(() -> new RecursoNoEncontradoException("Color", id));
+        long usan = productoRepository.countByColor_IdcolorAndActivoTrue(id) + productoMasterRepository.countByColor_IdcolorAndActivoTrue(id);
+        if (usan > 0) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                    "No se puede eliminar el color '" + c.getNombre() + "': lo usan " + usan + " producto(s) o artículo(s) activo(s).");
+        }
+        c.setActivo(false);
+        colorRepository.save(c);
+    }
+
+    /** Elimina (de forma lógica) un proveedor que ya no sirve; solo si ningún producto activo lo usa. */
+    @CacheEvict(value = "proveedoresCache", allEntries = true)
+    @Transactional
+    public void eliminarProveedor(Short id) {
+        Proveedor p = proveedorRepository.findById(id).orElseThrow(() -> new RecursoNoEncontradoException("Proveedor", id));
+        long usan = productoRepository.countByProveedor_IdproveedorAndActivoTrue(id);
+        if (usan > 0) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                    "No se puede eliminar al proveedor '" + p.getNombreCorto() + "': lo usan " + usan + " producto(s) activo(s).");
+        }
+        p.setActivo(false);
+        proveedorRepository.save(p);
     }
 
     @CacheEvict(value = "coloresCache", allEntries = true)

@@ -31,6 +31,7 @@ public class CategoriaService {
 
     private final CategoriaRepository categoriaRepository;
     private final ProductoMasterRepository productoMasterRepository;
+    private final DescripcionService descripcionService;
 
     /** Lista plana de las categorías activas (sin armar el árbol de subcategorías); con tipoFiltro, solo las de ese tipo. */
     @Transactional(readOnly = true)
@@ -59,17 +60,24 @@ public class CategoriaService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Las categorías llegan hasta " + Categoria.NIVELES_MAX + " niveles (principal, subcategoría 1 y subcategoría 2); '"
                                 + padre.getNombre() + "' ya es el último.");
-            if (categoriaRepository.existsByNombreIgnoreCaseAndCategoriaSuperiorIdcat(nombre, padre.getIdcat()))
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Ya existe una subcategoría '" + nombre + "' bajo '" + padre.getNombre() + "'.");
+            java.util.Optional<Categoria> igual = categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat(nombre, padre.getIdcat());
+            if (igual.isPresent()) {
+                if (Boolean.TRUE.equals(igual.get().getActivo()))
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Ya existe una subcategoría '" + nombre + "' bajo '" + padre.getNombre() + "'.");
+                return reactivar(igual.get(), dto);   // se había eliminado: vuelve con su historial en lugar de duplicarse
+            }
             tipo = padre.getTipo();
         } else {
             if (dto.getTipo() == null || dto.getTipo().isBlank())
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El tipo (comportamiento) de la categoría principal es obligatorio.");
-            if (categoriaRepository.existsByNombreIgnoreCaseAndCategoriaSuperiorIsNull(nombre))
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Ya existe una categoría raíz llamada '" + nombre + "'.");
+            java.util.Optional<Categoria> igual = categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIsNull(nombre);
+            if (igual.isPresent()) {
+                if (Boolean.TRUE.equals(igual.get().getActivo()))
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una categoría raíz llamada '" + nombre + "'.");
+                return reactivar(igual.get(), dto);
+            }
             tipo = parseTipo(dto.getTipo());
         }
 
@@ -164,6 +172,42 @@ public class CategoriaService {
             }
         }
         return toDto(guardada);
+    }
+
+    /**
+     * Elimina (de forma lógica) una categoría que ya no sirve: desaparece de las listas pero conserva su historial.
+     * Solo si no tiene subcategorías activas ni artículos activos; si no, dice cuántos la usan.
+     */
+    @org.springframework.cache.annotation.CacheEvict(value = "categoriasCache", allEntries = true)
+    @Transactional
+    public void eliminar(Short id) {
+        Categoria c = categoriaRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Categoría no encontrada: " + id));
+        long hijas = categoriaRepository.countByCategoriaSuperiorIdcatAndActivoTrue(id);
+        if (hijas > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "No se puede eliminar '" + c.getNombre() + "': tiene " + hijas
+                    + " subcategoría(s). Elimina primero esas.");
+        }
+        long articulos = productoMasterRepository.countByCategoria_IdcatAndActivoTrue(id);
+        if (articulos > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "No se puede eliminar '" + c.getNombre() + "': la usan " + articulos
+                    + " artículo(s) activo(s). Cámbialos de categoría o desactívalos antes.");
+        }
+        c.setActivo(false);
+        categoriaRepository.save(c);
+        descripcionService.desactivarSinUso(id);   // sus descripciones ya no las usa nadie: salen de las listas
+    }
+
+    private CategoriaResponseDTO reactivar(Categoria c, CategoriaRequestDTO dto) {
+        c.setActivo(true);
+        if (dto.getIncluirEnNombre() != null) c.setIncluirEnNombre(dto.getIncluirEnNombre());
+        String codigo = normalizarCodigo(dto.getCodigo());
+        if (codigo != null && !codigo.equalsIgnoreCase(c.getCodigo())) {
+            if (categoriaRepository.existsByCodigoIgnoreCaseAndIdcatNot(codigo, c.getIdcat()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe otra categoría con el código '" + codigo + "'.");
+            c.setCodigo(codigo);
+        }
+        return toDto(categoriaRepository.save(c));
     }
 
     /** Ids de la categoría y de todas sus descendientes. */

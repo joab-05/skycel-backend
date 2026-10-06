@@ -117,6 +117,42 @@ class DescripcionServiceTest {
     }
 
     @Test
+    void elimina_de_forma_logica_una_descripcion_que_nadie_usa() {
+        DescripcionProducto d = existente(7, "A16");
+        when(descripcionRepository.findById(7)).thenReturn(java.util.Optional.of(d));
+        when(productoMasterRepository.countByDescripcion_IddescripcionAndActivoTrue(7)).thenReturn(0L);
+        service.eliminar(7);
+        assertThat(d.getActivo()).isFalse();
+        verify(descripcionRepository).save(d);
+    }
+
+    @Test
+    void no_elimina_una_descripcion_que_usan_articulos_activos() {
+        DescripcionProducto d = existente(7, "A16");
+        when(descripcionRepository.findById(7)).thenReturn(java.util.Optional.of(d));
+        when(productoMasterRepository.countByDescripcion_IddescripcionAndActivoTrue(7)).thenReturn(5L);
+        assertThatThrownBy(() -> service.eliminar(7))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(e.getReason()).contains("5 artículo");
+                });
+        assertThat(d.getActivo()).isTrue();
+    }
+
+    @Test
+    void desactivarSinUso_solo_toca_las_descripciones_que_ningun_articulo_usa() {
+        DescripcionProducto libre = existente(7, "A16");
+        DescripcionProducto usada = existente(8, "A17");
+        when(descripcionRepository.findByCategoria_IdcatAndActivoTrueOrderByNombreAsc((short) 3)).thenReturn(List.of(libre, usada));
+        when(productoMasterRepository.findByDescripcion_Iddescripcion(7)).thenReturn(List.of());
+        when(productoMasterRepository.findByDescripcion_Iddescripcion(8)).thenReturn(List.of(ProductoMaster.builder().idprodmaster(1).build()));
+
+        assertThat(service.desactivarSinUso((short) 3)).isEqualTo(1);
+        assertThat(libre.getActivo()).isFalse();
+        assertThat(usada.getActivo()).isTrue();
+    }
+
+    @Test
     void renombrar_no_deja_repetir_otra_descripcion_de_la_categoria() {
         DescripcionProducto d = existente(7, "A16");
         DescripcionProducto otra = existente(8, "A17");

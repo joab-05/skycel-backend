@@ -17,6 +17,12 @@ public interface ProductoMasterRepository extends JpaRepository<ProductoMaster, 
     
     List<ProductoMaster> findByCategoria_IdcatAndActivoTrue(Short idcat);
 
+    long countByCategoria_IdcatAndActivoTrue(Short idcat);
+
+    long countByDescripcion_IddescripcionAndActivoTrue(Integer iddescripcion);
+
+    long countByColor_IdcolorAndActivoTrue(Short idcolor);
+
     /** Los artículos que usan esa descripción del catálogo. */
     List<ProductoMaster> findByDescripcion_Iddescripcion(Integer iddescripcion);
 

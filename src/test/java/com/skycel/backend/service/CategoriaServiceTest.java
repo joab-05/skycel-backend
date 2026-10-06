@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +31,7 @@ class CategoriaServiceTest {
 
     @Mock private CategoriaRepository categoriaRepository;
     @Mock private ProductoMasterRepository productoMasterRepository;
+    @Mock private DescripcionService descripcionService;
     @InjectMocks private CategoriaService service;
 
     private Categoria equipos;
@@ -103,6 +105,60 @@ class CategoriaServiceTest {
 
         assertThat(armado.getNombreBase()).isEqualTo("Celular Samsung Galaxy A16 Verde");
         assertThat(manual.getNombreBase()).isEqualTo("Galaxy S24 Ultra (nombre propio)");
+    }
+
+    @Test
+    void elimina_de_forma_logica_una_categoria_sin_hijas_ni_articulos_y_limpia_sus_descripciones() {
+        when(categoriaRepository.countByCategoriaSuperiorIdcatAndActivoTrue((short) 3)).thenReturn(0L);
+        when(productoMasterRepository.countByCategoria_IdcatAndActivoTrue((short) 3)).thenReturn(0L);
+
+        service.eliminar((short) 3);
+
+        assertThat(samsung.getActivo()).isFalse();
+        verify(categoriaRepository).save(samsung);
+        verify(descripcionService).desactivarSinUso((short) 3);
+    }
+
+    @Test
+    void no_elimina_una_categoria_con_subcategorias_activas() {
+        when(categoriaRepository.countByCategoriaSuperiorIdcatAndActivoTrue((short) 2)).thenReturn(4L);
+        assertThatThrownBy(() -> service.eliminar((short) 2))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(e.getReason()).contains("4 subcategoría");
+                });
+        assertThat(celular.getActivo()).isTrue();
+    }
+
+    @Test
+    void no_elimina_una_categoria_que_usan_articulos_activos_y_dice_cuantos() {
+        when(categoriaRepository.countByCategoriaSuperiorIdcatAndActivoTrue((short) 3)).thenReturn(0L);
+        when(productoMasterRepository.countByCategoria_IdcatAndActivoTrue((short) 3)).thenReturn(12L);
+        assertThatThrownBy(() -> service.eliminar((short) 3))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(e.getReason()).contains("12 artículo");
+                });
+        assertThat(samsung.getActivo()).isTrue();
+    }
+
+    @Test
+    void crear_con_el_nombre_de_una_categoria_eliminada_la_reactiva_en_vez_de_duplicarla() {
+        Categoria eliminada = Categoria.builder().idcat((short) 9).nombre("Tablet").codigo("TAB").tipo(TipoProducto.CELULAR)
+                .categoriaSuperior(equipos).incluirEnNombre(true).activo(false).build();
+        when(categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat("Tablet", (short) 1)).thenReturn(Optional.of(eliminada));
+
+        CategoriaResponseDTO r = service.crear(dto("Tablet", null, (short) 1));
+
+        assertThat(r.getIdcat()).isEqualTo((short) 9);
+        assertThat(eliminada.getActivo()).isTrue();
+    }
+
+    @Test
+    void crear_con_el_nombre_de_una_categoria_vigente_sigue_siendo_conflicto() {
+        when(categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat("Celular", (short) 1)).thenReturn(Optional.of(celular));
+        assertThatThrownBy(() -> service.crear(dto("Celular", null, (short) 1)))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
     }
 
     @Test

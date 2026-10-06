@@ -45,6 +45,24 @@ public class CatalogoController {
         return ResponseEntityBuilder.ok(catalogoService.obtenerTodosProveedores(), "proveedores");
     }
 
+    @Operation(summary = "Eliminar un color que ya no sirve", description = "Solo si ningún producto o artículo activo lo usa. Es lógica.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/colores/{id}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<java.util.Map<String, String>> eliminarColor(@PathVariable Short id) {
+        catalogoService.eliminarColor(id);
+        return ResponseEntity.ok(java.util.Map.of("mensaje", "Color eliminado."));
+    }
+
+    @Operation(summary = "Eliminar un proveedor que ya no sirve", description = "Solo si ningún producto activo lo usa. Es lógica.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/proveedores/{id}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<java.util.Map<String, String>> eliminarProveedor(@PathVariable Short id) {
+        catalogoService.eliminarProveedor(id);
+        return ResponseEntity.ok(java.util.Map.of("mensaje", "Proveedor eliminado."));
+    }
+
     @Operation(summary = "Actualizar proveedor")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/proveedores/{id}")

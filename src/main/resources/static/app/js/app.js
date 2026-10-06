@@ -2788,6 +2788,7 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       <div class="fila">
         <select id="np-descripcion"><option value="">(sin descripción)</option></select>
         <button id="np-nueva-descripcion" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+        <button id="np-eliminar-descripcion" class="btn btn-rojo btn-chico" style="flex:0 0 auto;" title="Eliminar la descripción elegida">${ic('trash-2')}</button>
       </div>
       <div id="np-descripcion-form" class="oculto"></div>
       <label>Color <span class="ayuda" style="display:inline;">(opcional)</span></label>
@@ -2899,6 +2900,17 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
   document.getElementById('np-nueva-descripcion').onclick = () => {
     const hoja = sub2Actual() || sub1Actual();
     if (hoja) formularioNuevaDescripcion(contDescripcion, hoja, (d) => { llenarDescripciones(d.id); mostrarMensaje(root, `Descripción "${d.nombre}" lista para elegir.`, 'ok'); });
+  };
+
+  document.getElementById('np-eliminar-descripcion').onclick = async () => {
+    const d = descripcionActual();
+    if (!d) { mostrarMensaje(root, 'Elige primero la descripción que quieres eliminar.', 'error'); return; }
+    if (!confirm(`¿Eliminar la descripción "${d.nombre}"? Solo se puede si ningún artículo la usa.`)) return;
+    try {
+      await api('DELETE', '/api/descripciones/' + d.id);
+      mostrarMensaje(root, 'Descripción eliminada.', 'ok');
+      llenarDescripciones();
+    } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
   };
 
   document.getElementById('np-nueva-principal').onclick = () =>
@@ -3144,6 +3156,7 @@ async function pantallaProductoEditar(param) {
         <div class="fila">
           <select id="pe-descripcion"><option value="">(sin descripción)</option></select>
           <button id="pe-nueva-descripcion" class="btn btn-azul btn-chico" style="flex:0 0 auto;">+ Nueva</button>
+          <button id="pe-eliminar-descripcion" class="btn btn-rojo btn-chico" style="flex:0 0 auto;" title="Eliminar la descripción elegida">${ic('trash-2')}</button>
         </div>
         <div id="pe-descripcion-form" class="oculto"></div>
         <label>Color <span class="ayuda" style="display:inline;">(opcional)</span></label>
@@ -3231,6 +3244,16 @@ async function pantallaProductoEditar(param) {
     selSub2.onchange = () => llenarDescripciones();
     selDescripcion.onchange = vistaPrevia;
     selColorArt.onchange = vistaPrevia;
+    document.getElementById('pe-eliminar-descripcion').onclick = async () => {
+      const d = descripciones.find(x => x.id === Number(selDescripcion.value));
+      if (!d) { mostrarMensaje(root, 'Elige primero la descripción que quieres eliminar.', 'error'); return; }
+      if (!confirm(`¿Eliminar la descripción "${d.nombre}"? Solo se puede si ningún artículo la usa.`)) return;
+      try {
+        await api('DELETE', '/api/descripciones/' + d.id);
+        mostrarMensaje(root, 'Descripción eliminada.', 'ok');
+        llenarDescripciones();
+      } catch (err) { mostrarMensaje(root, errorDe(err), 'error'); }
+    };
     document.getElementById('pe-nueva-descripcion').onclick = () => {
       formularioNuevaDescripcion(document.getElementById('pe-descripcion-form'), { idcat: hojaActual(), nombre: rutaDeCategoria(categorias, hojaActual()).slice(-1)[0]?.nombre || '' },
         (d) => { llenarDescripciones(d.id); mostrarMensaje(root, `Descripción "${d.nombre}" lista para elegir.`, 'ok'); });
@@ -5559,6 +5582,7 @@ async function pantallaCatalogos() {
           </span>
           <span class="v">
             <button class="btn btn-gris btn-chico ct-editar" data-id="${c.idcat}">${ic('pencil')}</button>
+            <button class="btn btn-rojo btn-chico ct-eliminar" data-id="${c.idcat}" title="Eliminar">${ic('trash-2')}</button>
             ${nivel < 3 ? `<button class="btn btn-azul btn-chico ct-agregar" data-id="${c.idcat}">+ Sub</button>` : ''}
           </span>
         </div>
@@ -5573,6 +5597,19 @@ async function pantallaCatalogos() {
       </div>`;
     const contForm = document.getElementById('ct-cat-form');
     const recargar = () => dibujarCategorias(cont);
+    cont.querySelectorAll('.ct-eliminar').forEach(b => b.onclick = async () => {
+      const c = categorias.find(x => x.idcat === Number(b.dataset.id));
+      if (!confirm(`¿Eliminar "${c.nombre}"? Solo se puede si no tiene subcategorías ni artículos. Desaparece de las listas pero conserva su historial.`)) return;
+      b.disabled = true;
+      try {
+        await api('DELETE', '/api/categorias/' + c.idcat);
+        mostrarMensaje(root, `"${c.nombre}" eliminada.`, 'ok');
+        recargar();
+      } catch (err) {
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+        b.disabled = false;
+      }
+    });
     document.getElementById('ct-cat-nueva').onclick = () => formularioNuevaCategoria(contForm, 1, null, recargar);
     cont.querySelectorAll('.ct-agregar').forEach(b => b.onclick = () => {
       const padre = categorias.find(c => c.idcat === Number(b.dataset.id));
@@ -5633,7 +5670,16 @@ async function pantallaCatalogos() {
         </div>
         <h2>Colores registrados</h2>
         ${colores.length === 0 ? '<div class="vacio">Sin colores.</div>'
-          : colores.map(c => `<span class="pastilla" style="margin:0 6px 6px 0; display:inline-block; background:var(--gris-claro); color:var(--texto);">${escapar(c.nombre)}</span>`).join('')}`;
+          : colores.map(c => `<span class="pastilla" style="margin:0 6px 6px 0; display:inline-block; background:var(--gris-claro); color:var(--texto);">${escapar(c.nombre)}
+              <button class="ct-color-eliminar" data-id="${c.id}" data-nombre="${escapar(c.nombre)}" title="Eliminar" style="border:0; background:none; cursor:pointer; color:#dc2626; font-weight:700; padding:0 0 0 6px;">✕</button></span>`).join('')}`;
+      cont.querySelectorAll('.ct-color-eliminar').forEach(b => b.onclick = async () => {
+        if (!confirm(`¿Eliminar el color "${b.dataset.nombre}"? Solo se puede si ningún producto ni artículo lo usa.`)) return;
+        try {
+          await api('DELETE', '/api/catalogos/colores/' + b.dataset.id);
+          mostrarMensaje(root, `Color "${b.dataset.nombre}" eliminado.`, 'ok');
+          dibujarColores(cont);
+        } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+      });
       document.getElementById('ct-color-guardar').onclick = async (e) => {
         const nombre = document.getElementById('ct-color-nombre').value.trim();
         if (!nombre) { mostrarMensaje(root, 'Indica el nombre del color.', 'error'); return; }
@@ -5718,9 +5764,18 @@ async function pantallaCatalogos() {
         <h2>Proveedores registrados</h2>
         ${proveedores.length === 0 ? '<div class="vacio">Sin proveedores.</div>' : proveedores.map(p => `
           <div class="orden-item">
-            <div class="orden-cab"><span class="orden-folio">${escapar(p.nombreCorto)}</span></div>
+            <div class="orden-cab"><span class="orden-folio">${escapar(p.nombreCorto)}</span>
+              <button class="btn btn-rojo btn-chico ct-prov-eliminar" data-id="${p.id}" data-nombre="${escapar(p.nombreCorto)}" title="Eliminar">${ic('trash-2')}</button></div>
             ${p.telefono || p.rfcTaxid ? `<div class="orden-equipo">${[p.telefono, p.rfcTaxid].filter(Boolean).map(escapar).join(' · ')}</div>` : ''}
           </div>`).join('')}`;
+      cont.querySelectorAll('.ct-prov-eliminar').forEach(b => b.onclick = async () => {
+        if (!confirm(`¿Eliminar al proveedor "${b.dataset.nombre}"? Solo se puede si ningún producto activo lo usa.`)) return;
+        try {
+          await api('DELETE', '/api/catalogos/proveedores/' + b.dataset.id);
+          mostrarMensaje(root, `Proveedor "${b.dataset.nombre}" eliminado.`, 'ok');
+          dibujarProveedores(cont);
+        } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+      });
       document.getElementById('ct-prov-guardar').onclick = async (e) => {
         const nombreCorto = document.getElementById('ct-prov-corto').value.trim();
         if (!nombreCorto) { mostrarMensaje(root, 'Indica el nombre corto del proveedor.', 'error'); return; }

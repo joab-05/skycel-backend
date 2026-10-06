@@ -42,6 +42,12 @@ public interface CategoriaRepository extends JpaRepository<Categoria, Short> {
     @Query("SELECT c.idcat FROM Categoria c WHERE c.categoriaSuperior.idcat = :parentId")
     List<Short> findIdsByCategoriaSuperiorId(@Param("parentId") Short parentId);
 
+    long countByCategoriaSuperiorIdcatAndActivoTrue(Short idCategoriaSuperior);
+
+    java.util.Optional<Categoria> findByNombreIgnoreCaseAndCategoriaSuperiorIdcat(String nombre, Short idCategoriaSuperior);
+
+    java.util.Optional<Categoria> findByNombreIgnoreCaseAndCategoriaSuperiorIsNull(String nombre);
+
     // El código corto es el prefijo de los códigos de artículo y su contador va por categoría: no puede repetirse.
     boolean existsByCodigoIgnoreCase(String codigo);
 

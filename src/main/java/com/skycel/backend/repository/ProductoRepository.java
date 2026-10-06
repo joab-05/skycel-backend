@@ -18,6 +18,10 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     Optional<Producto> findByCodproAndTienda_Codti(String codpro, Integer codti);
 
+    long countByColor_IdcolorAndActivoTrue(Short idcolor);
+
+    long countByProveedor_IdproveedorAndActivoTrue(Short idproveedor);
+
     /** Códigos de artículo que empiezan con ese prefijo ("CEL" → CEL-000001...). */
     @Query("SELECT p.codpro FROM Producto p WHERE p.codpro LIKE CONCAT(:prefijo, '-%')")
     List<String> codigosConPrefijo(@Param("prefijo") String prefijo);

@@ -39,6 +39,16 @@ public class CategoriaController {
         return ResponseEntity.status(HttpStatus.CREATED).body(categoriaService.crear(request));
     }
 
+    @Operation(summary = "Eliminar una categoría que ya no sirve",
+            description = "Solo si no tiene subcategorías ni artículos activos. Es lógica: conserva el historial y se reactiva si se vuelve a crear con el mismo nombre.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<java.util.Map<String, String>> eliminar(@PathVariable Short id) {
+        categoriaService.eliminar(id);
+        return ResponseEntity.ok(java.util.Map.of("mensaje", "Categoría eliminada."));
+    }
+
     @Operation(summary = "Actualizar nombre, código corto o categoría superior")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/{id}")
