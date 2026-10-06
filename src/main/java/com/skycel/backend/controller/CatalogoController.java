@@ -45,6 +45,15 @@ public class CatalogoController {
         return ResponseEntityBuilder.ok(catalogoService.obtenerTodosProveedores(), "proveedores");
     }
 
+    @Operation(summary = "Cambiar el nombre de un color", description = "Renombra también los artículos que lo llevan en su nombre.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PutMapping("/colores/{id}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<StandardApiResponse<CatalogoSimpleResponseDTO>> actualizarColor(@PathVariable Short id,
+                                                                                         @Valid @RequestBody CatalogoSimpleRequestDTO request) {
+        return ResponseEntityBuilder.updated(catalogoService.actualizarColor(id, request), "color");
+    }
+
     @Operation(summary = "Eliminar un color que ya no sirve", description = "Solo si ningún producto o artículo activo lo usa. Es lógica.")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/colores/{id}")

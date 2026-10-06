@@ -110,6 +110,9 @@ public class CatalogoService {
         Proveedor proveedor = proveedorRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Proveedor", id));
         catalogoMapper.updateProveedorFromDto(dto, proveedor);
+        if (proveedor.getNombreFiscal() == null || proveedor.getNombreFiscal().isBlank()) {
+            proveedor.setNombreFiscal(proveedor.getNombreCorto());   // la razón social es obligatoria en la base: sin ella se usa el nombre corto
+        }
         return catalogoMapper.toProveedorResponse(proveedorRepository.save(proveedor));
     }
 
@@ -127,6 +130,36 @@ public class CatalogoService {
     @Transactional
     public CategoriaResponseDTO actualizarCategoria(Short id, CategoriaRequestDTO dto) {
         return categoriaService.actualizar(id, dto);
+    }
+
+    /**
+     * Cambia el nombre de un color. Los artículos que lo llevan en su nombre completo (categorías + descripción + color) se
+     * renombran con él, salvo los de nombre puesto a mano.
+     */
+    @CacheEvict(value = "coloresCache", allEntries = true)
+    @Transactional
+    public CatalogoSimpleResponseDTO actualizarColor(Short id, CatalogoSimpleRequestDTO dto) {
+        Color c = colorRepository.findById(id).orElseThrow(() -> new RecursoNoEncontradoException("Color", id));
+        String nombre = dto.getNombre().trim().replaceAll("\\s+", " ");
+        if (nombre.isEmpty()) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "El nombre no puede quedar vacío.");
+        for (Color otro : colorRepository.findAll()) {
+            if (!otro.getIdcolor().equals(id) && Boolean.TRUE.equals(otro.getActivo()) && otro.getNombre().equalsIgnoreCase(nombre)) {
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                        "Ya existe el color '" + otro.getNombre() + "'.");
+            }
+        }
+        java.util.List<com.skycel.backend.domain.entity.ProductoMaster> usan = productoMasterRepository.findByColor_Idcolor(id);
+        java.util.Map<Integer, Boolean> armado = new java.util.HashMap<>();
+        for (com.skycel.backend.domain.entity.ProductoMaster m : usan) armado.put(m.getIdprodmaster(), m.nombreCompleto().equalsIgnoreCase(m.getNombreBase()));
+        c.setNombre(nombre);
+        colorRepository.save(c);
+        for (com.skycel.backend.domain.entity.ProductoMaster m : usan) {
+            if (Boolean.TRUE.equals(armado.get(m.getIdprodmaster()))) {
+                m.setNombreBase(m.nombreCompleto());
+                productoMasterRepository.save(m);
+            }
+        }
+        return catalogoMapper.toColorResponse(c);
     }
 
     /** Elimina (de forma lógica) un color que ya no sirve; solo si ningún producto o artículo activo lo usa. */

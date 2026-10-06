@@ -5517,8 +5517,9 @@ function pantallaAjustes() {
   };
 }
 
-// ── Catálogos (colores, secciones, proveedores) ─────────────────────────────
-// Usa /api/catalogos/*, que ya existía en el backend sin ninguna pantalla.
+// ── Catálogos: editor en cascada ─────────────────────────────────────────────
+// Se elige un nivel y se despliega el siguiente; cada selector trae su lápiz (editar), "+" (agregar) y papelera (eliminar):
+// Categoría principal → Subcategoría 1 → Subcategoría 2 → Descripción. Aparte, Color y Proveedor.
 
 async function pantallaCatalogos() {
   const s = Sesion.obtener();
@@ -5526,178 +5527,309 @@ async function pantallaCatalogos() {
   root.innerHTML = `
     <h1>${ic('tags')} Catálogos</h1>
     <div class="segmentado">
-      <button id="ct-seg-categorias" class="activo">Categorías</button>
-      <button id="ct-seg-colores">Colores</button>
+      <button id="ct-seg-articulos" class="activo">Artículos</button>
       <button id="ct-seg-secciones">Secciones</button>
-      <button id="ct-seg-proveedores">Proveedores</button>
     </div>
     <div id="ct-contenido"><div class="vacio">Cargando...</div></div>`;
 
-  let pestana = 'categorias';
-  const segs = {
-    categorias: document.getElementById('ct-seg-categorias'),
-    colores: document.getElementById('ct-seg-colores'),
-    secciones: document.getElementById('ct-seg-secciones'),
-    proveedores: document.getElementById('ct-seg-proveedores'),
-  };
+  let pestana = 'articulos';
+  const segs = { articulos: document.getElementById('ct-seg-articulos'), secciones: document.getElementById('ct-seg-secciones') };
   const activar = (p) => {
     pestana = p;
     Object.entries(segs).forEach(([k, el]) => el.classList.toggle('activo', k === p));
     dibujar();
   };
-  segs.categorias.onclick = () => activar('categorias');
-  segs.colores.onclick = () => activar('colores');
+  segs.articulos.onclick = () => activar('articulos');
   segs.secciones.onclick = () => activar('secciones');
-  segs.proveedores.onclick = () => activar('proveedores');
 
-  async function dibujar() {
+  function dibujar() {
     const cont = document.getElementById('ct-contenido');
     cont.innerHTML = '<div class="vacio">Cargando...</div>';
-    if (pestana === 'categorias') return dibujarCategorias(cont);
-    if (pestana === 'colores') return dibujarColores(cont);
-    if (pestana === 'secciones') return dibujarSecciones(cont);
-    return dibujarProveedores(cont);
+    return pestana === 'articulos' ? dibujarCascada(cont) : dibujarSecciones(cont);
   }
 
-  // Árbol de categorías: ver, crear subcategorías y editar nombre, código corto y si entra en el nombre del producto.
-  async function dibujarCategorias(cont) {
-    let categorias;
+  async function dibujarCascada(cont) {
+    const est = { cats: [], principal: null, sub1: null, sub2: null, descs: [], desc: null,
+                  colores: [], color: null, provs: [], prov: null, editor: null };
+    const errorDe = (err) => err.network ? 'Sin conexión con el servidor.' : err.message;
+    const ORDEN = ['principal', 'sub1', 'sub2', 'desc'];
+    const NIVEL = { principal: 1, sub1: 2, sub2: 3 };
+    const hojaId = () => est.sub2 || est.sub1;
+    const porNombre = (a, b) => a.nombre.localeCompare(b.nombre, 'es');
+    const hijos = (idPadre) => hijosDeCategoria(est.cats, idPadre).slice().sort(idPadre == null ? (a, b) => a.idcat - b.idcat : porNombre);
+    const cat = (id) => est.cats.find(c => c.idcat === id) || null;
+    const cargarCats = async () => { est.cats = await cargarCategorias(); };
+    const cargarDescs = async () => { est.descs = hojaId() ? await cargarDescripciones(hojaId()) : []; };
+    const cargarColores = async () => { est.colores = await api('GET', '/api/catalogos/colores'); };
+    const cargarProvs = async () => { est.provs = await api('GET', '/api/catalogos/proveedores'); };
+    const reiniciarDesde = (clave) => { const i = ORDEN.indexOf(clave); if (i >= 0) ORDEN.slice(i + 1).forEach(k => { est[k] = null; }); };
+
     try {
-      categorias = await cargarCategorias();
+      await Promise.all([cargarCats(), cargarColores(), cargarProvs()]);
     } catch (err) {
-      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+      cont.innerHTML = `<div class="mensaje error">${escapar(errorDe(err))}</div>`;
       return;
     }
-    const tipoTexto = { CELULAR: 'con IMEI o serie', TABLET: 'con IMEI o serie', ACCESORIO: 'por piezas', SERVICIO: 'servicio, sin inventario' };
-    const fila = (c) => {
-      const nivel = c.nivel || 1;
-      const hijos = hijosDeCategoria(categorias, c.idcat);
-      return `
-        <div class="detalle-fila" style="padding-left:${(nivel - 1) * 18}px; align-items:center;">
-          <span class="k" style="font-weight:${nivel === 1 ? 700 : 500};">
-            ${escapar(c.nombre)}
-            ${nivel === 1 ? `<span class="pastilla" style="margin-left:6px;">${tipoTexto[c.tipo] || escapar(c.tipo)}</span>` : ''}
-            ${c.codigo ? `<span class="ayuda" style="display:inline; margin-left:6px;">${escapar(c.codigo)}</span>` : ''}
-            ${nivel >= 2 && c.incluirEnNombre === false ? '<span class="ayuda" style="display:inline; margin-left:6px;">no entra en el nombre</span>' : ''}
-          </span>
-          <span class="v">
-            <button class="btn btn-gris btn-chico ct-editar" data-id="${c.idcat}">${ic('pencil')}</button>
-            <button class="btn btn-rojo btn-chico ct-eliminar" data-id="${c.idcat}" title="Eliminar">${ic('trash-2')}</button>
-            ${nivel < 3 ? `<button class="btn btn-azul btn-chico ct-agregar" data-id="${c.idcat}">+ Sub</button>` : ''}
-          </span>
+
+    // ── Filas ──
+    const filasArbol = () => [
+      { clave: 'principal', num: 1, etiqueta: 'Categoría principal', ayuda: 'Define el comportamiento: equipos con IMEI, accesorios o servicios.',
+        items: hijos(null).map(c => [c.idcat, c.nombre]), valor: est.principal, bloqueado: false, vacio: 'Elige la categoría principal...' },
+      { clave: 'sub1', num: 2, etiqueta: 'Subcategoría 1', ayuda: 'El tipo de artículo (Celular, Cargador...). Su código corto inicia el código del artículo.',
+        items: est.principal ? hijos(est.principal).map(c => [c.idcat, c.nombre + (c.codigo ? '  ·  ' + c.codigo : '')]) : [], valor: est.sub1, bloqueado: !est.principal, vacio: 'Elige la subcategoría 1...' },
+      { clave: 'sub2', num: 3, etiqueta: 'Subcategoría 2', ayuda: 'Opcional: marca, tipo de carga, material...',
+        items: est.sub1 ? hijos(est.sub1).map(c => [c.idcat, c.nombre]) : [], valor: est.sub2, bloqueado: !est.sub1, vacio: '(ninguna)' },
+      { clave: 'desc', num: 4, etiqueta: 'Descripción', ayuda: hojaId() ? `Las descripciones de «${cat(hojaId()).nombre}». Se eligen al registrar y se reutilizan con cualquier color.` : 'Elige antes la subcategoría 1.',
+        items: est.descs.map(d => [d.id, d.nombre]), valor: est.desc, bloqueado: !hojaId(), vacio: '(elige una descripción)' },
+    ];
+    const filasExtra = () => [
+      { clave: 'color', icono: 'tags', etiqueta: 'Color', ayuda: 'Se elige al registrar el artículo; va al final de su nombre.',
+        items: est.colores.slice().sort(porNombre).map(c => [c.id, c.nombre]), valor: est.color, bloqueado: false, vacio: '(elige un color)' },
+      { clave: 'prov', icono: 'truck', etiqueta: 'Proveedor', ayuda: 'Quién surte el artículo (obligatorio al registrar).',
+        items: est.provs.slice().sort((a, b) => (a.nombreCorto || '').localeCompare(b.nombreCorto || '', 'es')).map(p => [p.id, p.nombreCorto]), valor: est.prov, bloqueado: false, vacio: '(elige un proveedor)' },
+    ];
+
+    const htmlFila = (f) => `
+      <div class="cat-nivel ${f.bloqueado ? 'bloqueado' : ''}">
+        ${f.num ? `<div class="cat-num">${f.num}</div>` : `<div class="cat-icono">${ic(f.icono)}</div>`}
+        <div class="cat-cuerpo">
+          <label>${f.etiqueta}</label>
+          <div class="cat-ctrl">
+            <select data-clave="${f.clave}" ${f.bloqueado ? 'disabled' : ''}>
+              <option value="">${escapar(f.vacio)}</option>
+              ${f.items.map(([id, txt]) => `<option value="${id}" ${f.valor === id ? 'selected' : ''}>${escapar(txt)}</option>`).join('')}
+            </select>
+            <div class="cat-acciones">
+              <button class="cat-btn" data-act="editar" data-clave="${f.clave}" title="Editar" ${f.valor == null ? 'disabled' : ''}>${ic('pencil')}</button>
+              <button class="cat-btn azul" data-act="agregar" data-clave="${f.clave}" title="Agregar" ${f.bloqueado ? 'disabled' : ''}>${ic('plus')}</button>
+              <button class="cat-btn rojo" data-act="eliminar" data-clave="${f.clave}" title="Eliminar" ${f.valor == null ? 'disabled' : ''}>${ic('trash-2')}</button>
+            </div>
+          </div>
+          <div class="cat-aviso">${escapar(f.ayuda)}</div>
+          <div id="ed-${f.clave}"></div>
         </div>
-        ${hijos.map(fila).join('')}`;
-    };
-    cont.innerHTML = `
-      <div class="ayuda" style="margin-bottom:8px;">El producto cuelga de la última categoría que uses. Su nombre se arma con las categorías marcadas y el nombre del producto; la subcategoría 1 define el prefijo del código (CEL-000001).</div>
-      <button id="ct-cat-nueva" class="btn btn-verde btn-chico">+ Categoría principal</button>
-      <div id="ct-cat-form" class="oculto" style="margin-top:8px;"></div>
-      <div class="tarjeta" style="margin-top:10px;">
-        ${hijosDeCategoria(categorias, null).map(fila).join('') || '<div class="vacio">Sin categorías.</div>'}
       </div>`;
-    const contForm = document.getElementById('ct-cat-form');
-    const recargar = () => dibujarCategorias(cont);
-    cont.querySelectorAll('.ct-eliminar').forEach(b => b.onclick = async () => {
-      const c = categorias.find(x => x.idcat === Number(b.dataset.id));
-      if (!confirm(`¿Eliminar "${c.nombre}"? Solo se puede si no tiene subcategorías ni artículos. Desaparece de las listas pero conserva su historial.`)) return;
-      b.disabled = true;
-      try {
-        await api('DELETE', '/api/categorias/' + c.idcat);
-        mostrarMensaje(root, `"${c.nombre}" eliminada.`, 'ok');
-        recargar();
-      } catch (err) {
-        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
-        b.disabled = false;
-      }
-    });
-    document.getElementById('ct-cat-nueva').onclick = () => formularioNuevaCategoria(contForm, 1, null, recargar);
-    cont.querySelectorAll('.ct-agregar').forEach(b => b.onclick = () => {
-      const padre = categorias.find(c => c.idcat === Number(b.dataset.id));
-      formularioNuevaCategoria(contForm, (padre.nivel || 1) + 1, padre, recargar);
-      contForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
-    cont.querySelectorAll('.ct-editar').forEach(b => b.onclick = () => {
-      const c = categorias.find(x => x.idcat === Number(b.dataset.id));
-      const nivel = c.nivel || 1;
-      contForm.classList.remove('oculto');
-      contForm.innerHTML = `
-        <div class="tarjeta" style="background:var(--gris-claro);">
-          <h2 style="margin-top:0;">Editar "${escapar(c.nombre)}"</h2>
-          <label class="obligatorio">Nombre</label>
-          <input id="ce-nombre" maxlength="50" value="${escapar(c.nombre)}">
-          ${nivel === 2 ? `<label>Código corto</label><input id="ce-codigo" maxlength="10" value="${escapar(c.codigo || '')}">` : ''}
-          ${nivel >= 2 ? `<label class="casilla"><input type="checkbox" id="ce-incluir" ${c.incluirEnNombre !== false ? 'checked' : ''}> Su nombre forma parte del nombre del producto</label>` : ''}
-          <div class="ayuda">Al cambiar el nombre o esta opción se actualizan los nombres de los productos que cuelgan de aquí (los que tienen un nombre propio no se tocan).</div>
-          <div class="grupo-botones">
-            <button id="ce-guardar" class="btn btn-azul btn-chico">Guardar</button>
-            <button id="ce-cancelar" class="btn btn-gris btn-chico">Cancelar</button>
-          </div>
-        </div>`;
-      contForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      document.getElementById('ce-cancelar').onclick = () => { contForm.classList.add('oculto'); contForm.innerHTML = ''; };
-      document.getElementById('ce-guardar').onclick = async (e) => {
-        const nombreCat = document.getElementById('ce-nombre').value.trim();
-        if (!nombreCat) { mostrarMensaje(root, 'Indica el nombre.', 'error'); return; }
-        const cuerpo = { nombreCat, idCategoriaSuperior: c.idCategoriaSuperior ?? null };
-        if (nivel === 1) cuerpo.tipo = c.tipo;
-        if (nivel === 2) cuerpo.codigo = document.getElementById('ce-codigo').value.trim();
-        if (nivel >= 2) cuerpo.incluirEnNombre = document.getElementById('ce-incluir').checked;
-        e.target.disabled = true;
-        try {
-          await api('PUT', '/api/categorias/' + c.idcat, cuerpo);
-          mostrarMensaje(root, 'Categoría actualizada.', 'ok');
-          recargar();
-        } catch (err) {
-          mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
-          e.target.disabled = false;
-        }
-      };
-    });
-  }
 
+    const migas = () => {
+      const partes = [];
+      const poner = (txt, cls) => partes.push(`<span class="cat-miga ${cls}"><i></i>${escapar(txt)}</span>`);
+      if (est.principal) poner(cat(est.principal).nombre, 'n1');
+      if (est.sub1) poner(cat(est.sub1).nombre, 'n2');
+      if (est.sub2) poner(cat(est.sub2).nombre, 'n3');
+      const d = est.descs.find(x => x.id === est.desc); if (d) poner(d.nombre, 'n4');
+      const c = est.colores.find(x => x.id === est.color); if (c) poner(c.nombre, 'nc');
+      if (partes.length === 0) return '<span class="cat-migas-vacio">Elige un nivel para empezar: se irán desplegando los siguientes.</span>';
+      return partes.join(`<span class="cat-sep">${ic('chevron-right')}</span>`);
+    };
 
-  async function dibujarColores(cont) {
-    try {
-      const colores = await api('GET', '/api/catalogos/colores');
-      cont.innerHTML = `
-        <div class="tarjeta">
-          <h2 style="margin-top:0;">Nuevo color</h2>
+    // ── Editor en línea (nuevo / editar) ──
+    const htmlEditor = (clave) => {
+      const ed = est.editor;
+      const nuevo = ed.modo === 'nuevo';
+      const titulo = (txt) => `<h3>${nuevo ? 'Nuevo' : 'Editar'} · ${txt}</h3>`;
+      let campos = '';
+      if (NIVEL[clave]) {
+        const nivel = NIVEL[clave];
+        const actual = nuevo ? null : cat(est[clave]);
+        campos = titulo(['categoría principal', 'subcategoría 1', 'subcategoría 2'][nivel - 1]) + `
           <label class="obligatorio">Nombre</label>
+          <input id="ed-nombre" maxlength="50" value="${escapar(actual?.nombre || '')}" placeholder="${nivel === 1 ? 'Ej. Accesorios' : nivel === 2 ? 'Ej. Cargador, Celular, Reparación' : 'Ej. Samsung, Pared'}">
+          ${nivel === 1 && nuevo ? `<label class="obligatorio">Comportamiento</label>
+            <select id="ed-tipo">${TIPOS_PRINCIPAL.map(t => `<option value="${t.valor}">${t.texto}</option>`).join('')}</select>` : ''}
+          ${nivel === 2 ? `<label ${nuevo ? 'class="obligatorio"' : ''}>Código corto</label>
+            <input id="ed-codigo" maxlength="10" value="${escapar(actual?.codigo || '')}" placeholder="Ej. CAR → CAR-000001">` : ''}
+          ${nivel >= 2 ? `<label class="casilla"><input type="checkbox" id="ed-incluir" ${actual ? (actual.incluirEnNombre !== false ? 'checked' : '') : 'checked'}> Su nombre forma parte del nombre del producto</label>` : ''}
+          ${!nuevo ? '<div class="ayuda">Al cambiar el nombre se actualizan los nombres de los artículos que cuelgan de aquí.</div>' : ''}`;
+      } else if (clave === 'desc') {
+        const actual = nuevo ? null : est.descs.find(d => d.id === est.desc);
+        campos = titulo(`descripción en «${escapar(cat(hojaId()).nombre)}»`) + `
+          <label class="obligatorio">Descripción</label>
+          <input id="ed-nombre" maxlength="120" value="${escapar(actual?.nombre || '')}" placeholder="Ej. Iphone Tipo C 20W (sin el color)">
+          ${!nuevo ? '<div class="ayuda">Los artículos que la usan se renombran con el nuevo texto.</div>' : ''}`;
+      } else if (clave === 'color') {
+        const actual = nuevo ? null : est.colores.find(c => c.id === est.color);
+        campos = titulo('color') + `
+          <label class="obligatorio">Nombre</label>
+          <input id="ed-nombre" maxlength="30" value="${escapar(actual?.nombre || '')}" placeholder="Ej. Verde menta">
+          ${!nuevo ? '<div class="ayuda">Los artículos de este color se renombran con el nuevo nombre.</div>' : ''}`;
+      } else if (clave === 'prov') {
+        const p = nuevo ? null : est.provs.find(x => x.id === est.prov);
+        campos = titulo('proveedor') + `
+          <label class="obligatorio">Nombre corto</label>
+          <input id="ed-nombre" maxlength="50" value="${escapar(p?.nombreCorto || '')}" placeholder="Ej. Mayorista Movil MX">
+          <label>Razón social</label><input id="ed-fiscal" maxlength="150" value="${escapar(p?.nombreFiscal && p.nombreFiscal !== p.nombreCorto ? p.nombreFiscal : '')}" placeholder="Opcional">
           <div class="fila">
-            <input id="ct-color-nombre" placeholder="Ej. Verde menta">
-            <button id="ct-color-guardar" class="btn btn-verde btn-chico" style="flex:0 0 auto;">Guardar</button>
+            <div><label>RFC</label><input id="ed-rfc" maxlength="20" value="${escapar(p?.rfcTaxid || '')}" placeholder="Opcional"></div>
+            <div><label>Teléfono</label><input id="ed-tel" maxlength="20" inputmode="tel" value="${escapar(p?.telefono || '')}" placeholder="Opcional"></div>
           </div>
-        </div>
-        <h2>Colores registrados</h2>
-        ${colores.length === 0 ? '<div class="vacio">Sin colores.</div>'
-          : colores.map(c => `<span class="pastilla" style="margin:0 6px 6px 0; display:inline-block; background:var(--gris-claro); color:var(--texto);">${escapar(c.nombre)}
-              <button class="ct-color-eliminar" data-id="${c.id}" data-nombre="${escapar(c.nombre)}" title="Eliminar" style="border:0; background:none; cursor:pointer; color:#dc2626; font-weight:700; padding:0 0 0 6px;">✕</button></span>`).join('')}`;
-      cont.querySelectorAll('.ct-color-eliminar').forEach(b => b.onclick = async () => {
-        if (!confirm(`¿Eliminar el color "${b.dataset.nombre}"? Solo se puede si ningún producto ni artículo lo usa.`)) return;
-        try {
-          await api('DELETE', '/api/catalogos/colores/' + b.dataset.id);
-          mostrarMensaje(root, `Color "${b.dataset.nombre}" eliminado.`, 'ok');
-          dibujarColores(cont);
-        } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
-      });
-      document.getElementById('ct-color-guardar').onclick = async (e) => {
-        const nombre = document.getElementById('ct-color-nombre').value.trim();
-        if (!nombre) { mostrarMensaje(root, 'Indica el nombre del color.', 'error'); return; }
-        e.target.disabled = true;
-        try {
-          await api('POST', '/api/catalogos/colores', { nombre });
-          mostrarMensaje(root, `Color "${nombre}" creado.`, 'ok');
-          dibujarColores(cont);
-        } catch (err) {
-          mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
-          e.target.disabled = false;
+          <label>Días de crédito</label><input id="ed-credito" type="number" inputmode="numeric" min="0" value="${p?.diasCredito ?? ''}" placeholder="Opcional">`;
+      }
+      return `<div class="cat-editor">${campos}
+        <div class="grupo-botones">
+          <button id="ed-guardar" class="btn btn-azul btn-chico">${ic('check')} Guardar</button>
+          <button id="ed-cancelar" class="btn btn-gris btn-chico">Cancelar</button>
+        </div></div>`;
+    };
+
+    async function guardar() {
+      const { clave, modo } = est.editor;
+      const nuevo = modo === 'nuevo';
+      const val = (id) => (document.getElementById(id)?.value || '').trim();
+      const btn = document.getElementById('ed-guardar');
+      const nombre = val('ed-nombre');
+      if (!nombre) { mostrarMensaje(root, 'Escribe el nombre.', 'error'); return; }
+      btn.disabled = true;
+      try {
+        let aviso = 'Guardado.';
+        if (NIVEL[clave]) {
+          const nivel = NIVEL[clave];
+          const cuerpo = { nombreCat: nombre };
+          if (nivel === 1) cuerpo.tipo = nuevo ? val('ed-tipo') : cat(est.principal).tipo;
+          if (nivel === 2) {
+            cuerpo.codigo = val('ed-codigo');
+            if (nuevo && !cuerpo.codigo) { mostrarMensaje(root, 'Indica el código corto.', 'error'); btn.disabled = false; return; }
+          }
+          if (nivel >= 2) cuerpo.incluirEnNombre = document.getElementById('ed-incluir').checked;
+          if (nuevo) {
+            cuerpo.idCategoriaSuperior = nivel === 1 ? null : (nivel === 2 ? est.principal : est.sub1);
+            const n = await api('POST', '/api/categorias', cuerpo);
+            await cargarCats();
+            reiniciarDesde(clave);
+            est[clave] = n.idcat;
+            aviso = `«${n.nombre}» creada.`;
+          } else {
+            const c = cat(est[clave]);
+            cuerpo.idCategoriaSuperior = c.idCategoriaSuperior ?? null;
+            await api('PUT', '/api/categorias/' + c.idcat, cuerpo);
+            await cargarCats();
+            aviso = 'Categoría actualizada.';
+          }
+          await cargarDescs();
+          if (!est.descs.some(d => d.id === est.desc)) est.desc = null;
+        } else if (clave === 'desc') {
+          if (nuevo) {
+            const d = await api('POST', '/api/descripciones', { idCategoria: hojaId(), nombre });
+            await cargarDescs();
+            est.desc = d.id;
+            aviso = `«${d.nombre}» lista para elegir.`;
+          } else {
+            await api('PUT', '/api/descripciones/' + est.desc, { nombre });
+            await cargarDescs();
+            aviso = 'Descripción actualizada.';
+          }
+        } else if (clave === 'color') {
+          if (nuevo) {
+            const c = await api('POST', '/api/catalogos/colores', { nombre });
+            await cargarColores();
+            est.color = c?.id ?? est.colores.find(x => x.nombre.toLowerCase() === nombre.toLowerCase())?.id ?? null;
+            aviso = `Color «${nombre}» creado.`;
+          } else {
+            await api('PUT', '/api/catalogos/colores/' + est.color, { nombre });
+            await cargarColores();
+            aviso = 'Color actualizado.';
+          }
+        } else if (clave === 'prov') {
+          const previo = nuevo ? null : est.provs.find(x => x.id === est.prov);
+          const cuerpo = {
+            nombreCorto: nombre,
+            nombreFiscal: val('ed-fiscal') || null,
+            rfcTaxid: val('ed-rfc') || null,
+            telefono: val('ed-tel') || null,
+            diasCredito: val('ed-credito') === '' ? null : Number(val('ed-credito')),
+            emailContacto: previo?.emailContacto ?? null,
+            nombreContacto: previo?.nombreContacto ?? null,
+            categoria: previo?.categoria ?? null,
+            condicionesGarantia: previo?.condicionesGarantia ?? null,
+          };
+          if (nuevo) {
+            const p = await api('POST', '/api/catalogos/proveedores', cuerpo);
+            await cargarProvs();
+            est.prov = p?.id ?? est.provs.find(x => (x.nombreCorto || '').toLowerCase() === nombre.toLowerCase())?.id ?? null;
+            aviso = `Proveedor «${nombre}» creado.`;
+          } else {
+            await api('PUT', '/api/catalogos/proveedores/' + est.prov, cuerpo);
+            await cargarProvs();
+            aviso = 'Proveedor actualizado.';
+          }
         }
-      };
-    } catch (err) {
-      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+        est.editor = null;
+        mostrarMensaje(root, aviso, 'ok');
+        render();
+      } catch (err) {
+        mostrarMensaje(root, errorDe(err), 'error');
+        btn.disabled = false;
+      }
     }
+
+    async function eliminar(clave) {
+      const rotulo = {
+        principal: () => cat(est.principal)?.nombre, sub1: () => cat(est.sub1)?.nombre, sub2: () => cat(est.sub2)?.nombre,
+        desc: () => est.descs.find(d => d.id === est.desc)?.nombre, color: () => est.colores.find(c => c.id === est.color)?.nombre,
+        prov: () => est.provs.find(p => p.id === est.prov)?.nombreCorto,
+      }[clave]();
+      if (!confirm(`¿Eliminar "${rotulo}"? Solo se puede si ningún artículo activo lo usa. Desaparece de las listas pero conserva su historial.`)) return;
+      try {
+        if (NIVEL[clave]) {
+          await api('DELETE', '/api/categorias/' + est[clave]);
+          await cargarCats();
+          reiniciarDesde(clave);
+          est[clave] = null;
+          await cargarDescs();
+        } else if (clave === 'desc') {
+          await api('DELETE', '/api/descripciones/' + est.desc);
+          est.desc = null;
+          await cargarDescs();
+        } else if (clave === 'color') {
+          await api('DELETE', '/api/catalogos/colores/' + est.color);
+          est.color = null;
+          await cargarColores();
+        } else if (clave === 'prov') {
+          await api('DELETE', '/api/catalogos/proveedores/' + est.prov);
+          est.prov = null;
+          await cargarProvs();
+        }
+        est.editor = null;
+        mostrarMensaje(root, `«${rotulo}» eliminado.`, 'ok');
+        render();
+      } catch (err) { mostrarMensaje(root, errorDe(err), 'error'); }
+    }
+
+    function render() {
+      cont.innerHTML = `
+        <div class="cat-migas">${migas()}</div>
+        <div class="cat-titulo-seccion">Categorías y descripción</div>
+        <div class="cat-bloque cat-pasos">${filasArbol().map(htmlFila).join('')}</div>
+        <div class="cat-titulo-seccion">Color y proveedor</div>
+        <div class="cat-bloque">${filasExtra().map(htmlFila).join('')}</div>`;
+
+      cont.querySelectorAll('select[data-clave]').forEach(sel => sel.onchange = async () => {
+        const clave = sel.dataset.clave;
+        est[clave] = sel.value ? Number(sel.value) : null;
+        reiniciarDesde(clave);
+        est.editor = null;
+        if (NIVEL[clave]) await cargarDescs();
+        render();
+      });
+      cont.querySelectorAll('.cat-btn').forEach(b => b.onclick = () => {
+        const clave = b.dataset.clave;
+        if (b.dataset.act === 'eliminar') { eliminar(clave); return; }
+        est.editor = { clave, modo: b.dataset.act === 'agregar' ? 'nuevo' : 'editar' };
+        render();
+      });
+      if (est.editor) {
+        const lugar = document.getElementById('ed-' + est.editor.clave);
+        lugar.innerHTML = htmlEditor(est.editor.clave);
+        document.getElementById('ed-guardar').onclick = guardar;
+        document.getElementById('ed-cancelar').onclick = () => { est.editor = null; render(); };
+        const campo = document.getElementById('ed-nombre');
+        campo.addEventListener('keydown', (e) => { if (e.key === 'Enter') guardar(); });
+        campo.focus();
+      }
+    }
+    render();
   }
 
+  // ── Secciones (sin cambios) ──
   async function dibujarSecciones(cont) {
     try {
       const [secciones, tiendas] = await Promise.all([
@@ -5738,63 +5870,6 @@ async function pantallaCatalogos() {
         };
       };
       render();
-    } catch (err) {
-      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
-    }
-  }
-
-  async function dibujarProveedores(cont) {
-    try {
-      const proveedores = await api('GET', '/api/catalogos/proveedores');
-      cont.innerHTML = `
-        <div class="tarjeta">
-          <h2 style="margin-top:0;">Nuevo proveedor</h2>
-          <label class="obligatorio">Nombre corto</label>
-          <input id="ct-prov-corto" placeholder="Ej. Mayorista Movil MX">
-          <label>Razón social</label>
-          <input id="ct-prov-fiscal" placeholder="Opcional">
-          <label>RFC / Tax ID</label>
-          <input id="ct-prov-rfc" placeholder="Opcional">
-          <label>Teléfono</label>
-          <input id="ct-prov-tel" inputmode="tel" placeholder="Opcional">
-          <label>Días de crédito</label>
-          <input id="ct-prov-credito" type="number" inputmode="numeric" min="0" placeholder="Opcional">
-          <button id="ct-prov-guardar" class="btn btn-verde">Guardar proveedor</button>
-        </div>
-        <h2>Proveedores registrados</h2>
-        ${proveedores.length === 0 ? '<div class="vacio">Sin proveedores.</div>' : proveedores.map(p => `
-          <div class="orden-item">
-            <div class="orden-cab"><span class="orden-folio">${escapar(p.nombreCorto)}</span>
-              <button class="btn btn-rojo btn-chico ct-prov-eliminar" data-id="${p.id}" data-nombre="${escapar(p.nombreCorto)}" title="Eliminar">${ic('trash-2')}</button></div>
-            ${p.telefono || p.rfcTaxid ? `<div class="orden-equipo">${[p.telefono, p.rfcTaxid].filter(Boolean).map(escapar).join(' · ')}</div>` : ''}
-          </div>`).join('')}`;
-      cont.querySelectorAll('.ct-prov-eliminar').forEach(b => b.onclick = async () => {
-        if (!confirm(`¿Eliminar al proveedor "${b.dataset.nombre}"? Solo se puede si ningún producto activo lo usa.`)) return;
-        try {
-          await api('DELETE', '/api/catalogos/proveedores/' + b.dataset.id);
-          mostrarMensaje(root, `Proveedor "${b.dataset.nombre}" eliminado.`, 'ok');
-          dibujarProveedores(cont);
-        } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
-      });
-      document.getElementById('ct-prov-guardar').onclick = async (e) => {
-        const nombreCorto = document.getElementById('ct-prov-corto').value.trim();
-        if (!nombreCorto) { mostrarMensaje(root, 'Indica el nombre corto del proveedor.', 'error'); return; }
-        e.target.disabled = true;
-        try {
-          await api('POST', '/api/catalogos/proveedores', {
-            nombreCorto,
-            nombreFiscal: document.getElementById('ct-prov-fiscal').value.trim() || null,
-            rfcTaxid: document.getElementById('ct-prov-rfc').value.trim() || null,
-            telefono: document.getElementById('ct-prov-tel').value.trim() || null,
-            diasCredito: document.getElementById('ct-prov-credito').value ? Number(document.getElementById('ct-prov-credito').value) : null,
-          });
-          mostrarMensaje(root, `Proveedor "${nombreCorto}" creado.`, 'ok');
-          dibujarProveedores(cont);
-        } catch (err) {
-          mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
-          e.target.disabled = false;
-        }
-      };
     } catch (err) {
       cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }

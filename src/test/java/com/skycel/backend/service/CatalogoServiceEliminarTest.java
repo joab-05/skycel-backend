@@ -1,6 +1,10 @@
 package com.skycel.backend.service;
 
+import com.skycel.backend.domain.dto.request.CatalogoSimpleRequestDTO;
+import com.skycel.backend.domain.entity.Categoria;
 import com.skycel.backend.domain.entity.Color;
+import com.skycel.backend.domain.entity.ProductoMaster;
+import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.domain.entity.Proveedor;
 import com.skycel.backend.domain.mapper.CatalogoMapper;
 import com.skycel.backend.repository.*;
@@ -103,5 +107,45 @@ class CatalogoServiceEliminarTest {
                     assertThat(e.getReason()).contains("40 producto");
                 });
         assertThat(p.getActivo()).isTrue();
+    }
+
+    @Test
+    void renombrar_un_color_renombra_los_articulos_armados_y_respeta_los_de_nombre_propio() {
+        Color verde = color();
+        Categoria accesorios = Categoria.builder().idcat((short) 1).nombre("Accesorios").tipo(TipoProducto.ACCESORIO).incluirEnNombre(false).activo(true).build();
+        Categoria funda = Categoria.builder().idcat((short) 2).nombre("Funda").tipo(TipoProducto.ACCESORIO).categoriaSuperior(accesorios).incluirEnNombre(true).activo(true).build();
+        ProductoMaster armado = ProductoMaster.builder().idprodmaster(1).categoria(funda).nombreProducto("Silicon A15").color(verde)
+                .nombreBase("Funda Silicon A15 Verde").build();
+        ProductoMaster propio = ProductoMaster.builder().idprodmaster(2).categoria(funda).nombreProducto("Lisa").color(verde)
+                .nombreBase("Nombre puesto a mano").build();
+        when(colorRepository.findById((short) 5)).thenReturn(Optional.of(verde));
+        when(colorRepository.findAll()).thenReturn(java.util.List.of(verde));
+        when(productoMasterRepository.findByColor_Idcolor((short) 5)).thenReturn(java.util.List.of(armado, propio));
+        when(catalogoMapper.toColorResponse(verde)).thenReturn(new com.skycel.backend.domain.dto.response.CatalogoSimpleResponseDTO());
+
+        CatalogoSimpleRequestDTO dto = new CatalogoSimpleRequestDTO();
+        dto.setNombre("  Verde   Menta ");
+        service.actualizarColor((short) 5, dto);
+
+        assertThat(verde.getNombre()).isEqualTo("Verde Menta");
+        assertThat(armado.getNombreBase()).isEqualTo("Funda Silicon A15 Verde Menta");
+        assertThat(propio.getNombreBase()).isEqualTo("Nombre puesto a mano");
+    }
+
+    @Test
+    void renombrar_un_color_no_deja_repetir_otro_vigente() {
+        Color verde = color();
+        Color azul = new Color();
+        azul.setIdcolor((short) 3);
+        azul.setNombre("Azul");
+        azul.setActivo(true);
+        when(colorRepository.findById((short) 5)).thenReturn(Optional.of(verde));
+        when(colorRepository.findAll()).thenReturn(java.util.List.of(verde, azul));
+
+        CatalogoSimpleRequestDTO dto = new CatalogoSimpleRequestDTO();
+        dto.setNombre("azul");
+        assertThatThrownBy(() -> service.actualizarColor((short) 5, dto))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        assertThat(verde.getNombre()).isEqualTo("Verde");
     }
 }

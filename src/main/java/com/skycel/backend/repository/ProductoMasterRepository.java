@@ -23,6 +23,9 @@ public interface ProductoMasterRepository extends JpaRepository<ProductoMaster, 
 
     long countByColor_IdcolorAndActivoTrue(Short idcolor);
 
+    /** Los artículos (activos o no) de ese color. */
+    List<ProductoMaster> findByColor_Idcolor(Short idcolor);
+
     /** Los artículos que usan esa descripción del catálogo. */
     List<ProductoMaster> findByDescripcion_Iddescripcion(Integer iddescripcion);
 
