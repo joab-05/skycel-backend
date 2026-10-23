@@ -47,4 +47,14 @@ public interface MovimientoCajaRepository extends JpaRepository<MovimientoCaja, 
             GROUP BY c.tienda.codti, c.tienda.nombre
             """)
     List<CajaTiendaRow> consolidadoPorTienda(@Param("codtis") List<Integer> codtis, @Param("hoyInicio") LocalDateTime hoyInicio);
+
+    /** Lo que se movió en las cajas de las sucursales en un rango, por motivo. Filas: motivo, cat_sat, monto. */
+    @Query("""
+            SELECT m.motivo.nombre, m.motivo.catSat, COALESCE(SUM(m.monto), 0)
+            FROM MovimientoCaja m
+            WHERE m.tipo = :tipo AND m.fechaMov BETWEEN :desde AND :hasta AND m.caja.tienda.codti IN :codtis
+            GROUP BY m.motivo.nombre, m.motivo.catSat
+            """)
+    List<Object[]> totalesPorMotivo(@Param("tipo") Byte tipo, @Param("desde") LocalDateTime desde,
+                                    @Param("hasta") LocalDateTime hasta, @Param("codtis") List<Integer> codtis);
 }

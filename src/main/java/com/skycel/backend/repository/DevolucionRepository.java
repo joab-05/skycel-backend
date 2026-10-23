@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,4 +26,22 @@ public interface DevolucionRepository extends JpaRepository<Devolucion, Integer>
     boolean existeVigenteDeVenta(@Param("idventa") Integer idventa);
 
     List<Devolucion> findByVenta_IdventaOrderByIddevolucion(Integer idventa);
+
+    /** Lo devuelto a clientes (reembolsos y cambios ya procesados) en el rango, de las sucursales dadas. */
+    @Query("""
+            SELECT COALESCE(SUM(d.totalDevuelto), 0) FROM Devolucion d
+            WHERE d.estado = 2 AND d.fechaResolucion BETWEEN :desde AND :hasta AND d.tienda.codti IN :codtis
+            """)
+    BigDecimal totalDevuelto(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta,
+                             @Param("codtis") List<Integer> codtis);
+
+    /** Lo que costó la mercancía que volvió a existencias en esas devoluciones (se resta del costo de lo vendido). */
+    @Query("""
+            SELECT COALESCE(SUM(dd.cantidad * vd.costoUnitarioCompra), 0)
+            FROM DevolucionDetalle dd, Devolucion d, VentaDetalle vd
+            WHERE dd.devolucion = d AND vd.iddetalleVenta = dd.iddetalleVenta AND dd.reingresa = true
+              AND d.estado = 2 AND d.fechaResolucion BETWEEN :desde AND :hasta AND d.tienda.codti IN :codtis
+            """)
+    BigDecimal costoReingresado(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta,
+                                @Param("codtis") List<Integer> codtis);
 }

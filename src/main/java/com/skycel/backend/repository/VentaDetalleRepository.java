@@ -32,6 +32,39 @@ public interface VentaDetalleRepository extends JpaRepository<VentaDetalle, Inte
     List<ResumenTiendaRow> resumenPorTienda(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta,
                                              @Param("codtis") List<Integer> codtis);
 
+    /** Ventas, monto y costo de cada día del rango (solo ventas completadas). Filas: fecha, nº de ventas, monto, costo. */
+    @Query("""
+            SELECT CAST(v.fechaVenta AS LocalDate), COUNT(DISTINCT v.idventa),
+                   COALESCE(SUM(d.precioUnitarioFinal * d.cantidad), 0), COALESCE(SUM(d.costoUnitarioCompra * d.cantidad), 0)
+            FROM VentaDetalle d JOIN d.venta v
+            WHERE v.estado = 1 AND v.fechaVenta BETWEEN :desde AND :hasta AND v.tienda.codti IN :codtis
+            GROUP BY CAST(v.fechaVenta AS LocalDate)
+            ORDER BY CAST(v.fechaVenta AS LocalDate)
+            """)
+    List<Object[]> ventasPorDia(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta,
+                                @Param("codtis") List<Integer> codtis);
+
+    /** Piezas, monto y costo por categoría del artículo. Filas: categoría, piezas, monto, costo. */
+    @Query("""
+            SELECT COALESCE(cat.nombre, 'Sin categoría'), COALESCE(SUM(d.cantidad), 0),
+                   COALESCE(SUM(d.precioUnitarioFinal * d.cantidad), 0), COALESCE(SUM(d.costoUnitarioCompra * d.cantidad), 0)
+            FROM VentaDetalle d JOIN d.venta v JOIN d.productoMaster pm LEFT JOIN pm.categoria cat
+            WHERE v.estado = 1 AND v.fechaVenta BETWEEN :desde AND :hasta AND v.tienda.codti IN :codtis
+            GROUP BY COALESCE(cat.nombre, 'Sin categoría')
+            ORDER BY SUM(d.precioUnitarioFinal * d.cantidad) DESC
+            """)
+    List<Object[]> ventasPorCategoria(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta,
+                                      @Param("codtis") List<Integer> codtis);
+
+    /** Fecha de la última venta de cada artículo (código + sucursal) entre los pedidos. Filas: codpro, codti, fecha. */
+    @Query("""
+            SELECT d.codpro, v.tienda.codti, MAX(v.fechaVenta)
+            FROM VentaDetalle d JOIN d.venta v
+            WHERE v.estado = 1 AND d.codpro IN :codpros AND v.tienda.codti IN :codtis
+            GROUP BY d.codpro, v.tienda.codti
+            """)
+    List<Object[]> ultimaVentaPorArticulo(@Param("codpros") List<String> codpros, @Param("codtis") List<Integer> codtis);
+
     /** Ranking de artículos por unidades vendidas, en el mismo rango y sucursales. */
     @Query("""
             SELECT new com.skycel.backend.dto.reporte.TopProductoRow(

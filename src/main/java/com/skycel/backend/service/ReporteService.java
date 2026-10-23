@@ -52,9 +52,9 @@ public class ReporteService {
     private final MovimientoCajaRepository movimientoCajaRepository;
 
     /** A quiénes puede reportar este usuario: su propia sucursal (encargado) o la(s) que pida (ROOT/ADMIN). */
-    private record Alcance(List<Tienda> tiendas, List<Integer> codtis, Map<Integer, String> nombrePorCodti) {}
+    record Alcance(List<Tienda> tiendas, List<Integer> codtis, Map<Integer, String> nombrePorCodti) {}
 
-    private Alcance alcance(Integer codti, String username) {
+    Alcance alcance(Integer codti, String username) {
         Usuario usuario = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario autenticado no encontrado"));
         boolean admin = usuario.getRol() == Rol.ROOT || usuario.getRol() == Rol.ADMIN;

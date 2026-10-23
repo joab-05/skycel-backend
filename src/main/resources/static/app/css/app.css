@@ -875,3 +875,23 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
   .sidebar, .nav-inferior, #encabezado, #barra-conexion, .enlace, #cr-imprimir { display: none !important; }
   .app-shell, main { margin: 0 !important; padding: 0 !important; max-width: none !important; }
 }
+
+
+/* ── Resultados (Reportes): estado de resultados y barras por categoría ── */
+.er-tabla { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.er-tabla th { text-align: right; font-size: 12.5px; font-weight: 700; color: var(--gris-medio); padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--borde); }
+.er-tabla th:first-child, .er-tabla td:first-child { text-align: left; }
+.er-tabla td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--gris-claro); color: var(--texto); white-space: nowrap; }
+.er-tabla td:first-child { white-space: normal; }
+.er-tabla .er-ant { color: var(--gris-medio); }
+.er-tabla .er-sangria { padding-left: 26px; color: var(--gris-medio); }
+.er-tabla tr.er-detalle td { color: var(--gris-medio); font-size: 13px; }
+.er-tabla tr.er-sub td { font-weight: 700; background: #f8fafc; }
+.er-tabla tr.er-total td { font-weight: 800; font-size: 15px; background: #eef2f7; border-top: 2px solid var(--borde); }
+.er-tabla tr.er-seccion td { text-align: left; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--gris-medio); padding-top: 16px; border-bottom: 1px solid var(--borde); }
+.er-sube { color: #15803d; font-weight: 600; } .er-baja { color: #b91c1c; font-weight: 600; }
+.hbar-fila { padding: 9px 0; border-bottom: 1px solid var(--gris-claro); }
+.hbar-fila:last-child { border-bottom: none; }
+.hbar-cab { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.hbar-pista { height: 8px; background: var(--gris-claro); border-radius: 999px; margin: 6px 0 3px; overflow: hidden; }
+.hbar { height: 100%; background: #3b82f6; border-radius: 999px; }

@@ -1,5 +1,6 @@
 package com.skycel.backend.controller;
 
+import com.skycel.backend.service.ReporteResultadosService;
 import com.skycel.backend.service.ReporteService;
 import com.skycel.backend.shared.dto.StandardApiResponse;
 import com.skycel.backend.shared.response.ResponseEntityBuilder;
@@ -30,6 +31,7 @@ import java.util.Map;
 public class ReporteController {
 
     private final ReporteService reporteService;
+    private final ReporteResultadosService resultadosService;
 
     @GetMapping("/gerencial")
     @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
@@ -58,5 +60,48 @@ public class ReporteController {
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> cajaConsolidada(
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(reporteService.cajaConsolidada(userDetails.getUsername()), "reporte");
+    }
+
+    @GetMapping("/estado-resultados")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> estadoResultados(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(required = false) Integer codti,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(resultadosService.estadoResultados(desde, hasta, codti, userDetails.getUsername()), "reporte");
+    }
+
+    @GetMapping("/ventas-por-dia")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> ventasPorDia(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(required = false) Integer codti,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(resultadosService.ventasPorDia(desde, hasta, codti, userDetails.getUsername()), "reporte");
+    }
+
+    @GetMapping("/ventas-por-categoria")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> ventasPorCategoria(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(required = false) Integer codti,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(resultadosService.ventasPorCategoria(desde, hasta, codti, userDetails.getUsername()), "reporte");
+    }
+
+    @GetMapping("/sin-movimiento")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> sinMovimiento(
+            @RequestParam(required = false) Integer dias,
+            @RequestParam(required = false) Integer codti,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(resultadosService.sinMovimiento(dias, codti, userDetails.getUsername()), "reporte");
     }
 }

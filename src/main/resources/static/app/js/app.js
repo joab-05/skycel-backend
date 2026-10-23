@@ -632,16 +632,12 @@ function formularioAbrirCaja(cont, idCaja, nombreCaja, fondoSugerido, alAbrir) {
 
 /** Formulario para cerrar la caja: se cuenta el efectivo, se ve la diferencia y se genera el corte. */
 function formularioCerrarCaja(cont, idCaja, sesion, alCerrar) {
-  const esperado = Number(sesion.efectivoEsperado || 0);
-  const r = sesion.resumen;
   cont.innerHTML = `
     <div class="tarjeta">
       <h2 class="h2-ic">${ic('lock')} Cerrar ${escapar(sesion.nombreCaja)}</h2>
-      <div class="tc-esperado">Efectivo esperado: <strong>${formatoDinero(esperado)}</strong></div>
-      ${r ? `<div class="ayuda">Fondo inicial ${formatoDinero(sesion.fondoInicial)} · ${r.numVentas} ventas por ${formatoDinero(r.totalVentas)} · entradas ${formatoDinero(r.totalEntradas)} · salidas ${formatoDinero(r.totalSalidas)}</div>` : ''}
+      <div class="ayuda">Cuenta el efectivo del cajón (billetes y monedas) y escríbelo. El sistema no te dice cuánto debería haber hasta que cierres: así el conteo es honesto.</div>
       <label class="obligatorio">Efectivo contado</label>
       <input id="tc-contado" type="number" inputmode="decimal" min="0" step="0.01">
-      <div id="tc-dif" class="tc-dif"></div>
       <label>Se deja en el cajón para mañana</label>
       <input id="tc-sig" type="number" inputmode="decimal" min="0" step="0.01" value="${Number(sesion.fondoInicial || 0).toFixed(2)}">
       <div id="tc-retiro" class="ayuda"></div>
@@ -654,13 +650,8 @@ function formularioCerrarCaja(cont, idCaja, sesion, alCerrar) {
   const contado = document.getElementById('tc-contado');
   const sig = document.getElementById('tc-sig');
   const calcular = () => {
-    const dif = document.getElementById('tc-dif');
     const ret = document.getElementById('tc-retiro');
-    if (contado.value === '') { dif.textContent = ''; ret.textContent = ''; return; }
-    const d = Number(contado.value) - esperado;
-    if (Math.abs(d) < 0.005) { dif.textContent = 'Cuadra: sin diferencia'; dif.className = 'tc-dif ok'; }
-    else if (d > 0) { dif.textContent = 'Sobran ' + formatoDinero(d); dif.className = 'tc-dif sobra'; }
-    else { dif.textContent = 'Faltan ' + formatoDinero(-d); dif.className = 'tc-dif falta'; }
+    if (contado.value === '') { ret.textContent = ''; return; }
     const f = Number(sig.value || 0);
     ret.textContent = f > Number(contado.value) ? 'El fondo para mañana no puede ser mayor a lo contado.'
       : `Se retiran ${formatoDinero(Number(contado.value) - f)} del cajón y quedan ${formatoDinero(f)} para mañana.`;
@@ -2151,10 +2142,12 @@ async function pantallaReportes() {
   const s = Sesion.obtener();
   if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
   const veCaja = SUPERIOR.includes(s.rol);
+  const veResultados = GESTOR_ROLES.includes(s.rol);
   root.innerHTML = `
-    ${cabeceraPantalla(ic('chart-column') + ' Reportes', 'Ventas, resumen gerencial, productos rezagados y caja')}
+    ${cabeceraPantalla(ic('chart-column') + ' Reportes', 'Ventas, resultados, resumen gerencial, productos rezagados y caja')}
     <div class="segmentado">
       <button id="rp-tab-ventas" class="activo">Ventas</button>
+      ${veResultados ? '<button id="rp-tab-resultados">Resultados</button>' : ''}
       <button id="rp-tab-gerencial">Gerencial</button>
       <button id="rp-tab-rezagados">Rezagados</button>
       ${veCaja ? '<button id="rp-tab-caja">Caja</button>' : ''}
@@ -2169,12 +2162,14 @@ async function pantallaReportes() {
       <div id="rp-resumen"></div>
       <div id="rp-lista" style="margin-top:10px;"></div>
     </div>
+    ${veResultados ? '<div id="rp-panel-resultados" class="oculto"></div>' : ''}
     <div id="rp-panel-gerencial" class="oculto"></div>
     <div id="rp-panel-rezagados" class="oculto"></div>
     ${veCaja ? '<div id="rp-panel-caja" class="oculto"></div>' : ''}`;
 
   const paneles = {
     ventas: { tab: document.getElementById('rp-tab-ventas'), panel: document.getElementById('rp-panel-ventas') },
+    ...(veResultados ? { resultados: { tab: document.getElementById('rp-tab-resultados'), panel: document.getElementById('rp-panel-resultados'), iniciar: () => iniciarReporteResultados(paneles.resultados.panel, s) } } : {}),
     gerencial: { tab: document.getElementById('rp-tab-gerencial'), panel: document.getElementById('rp-panel-gerencial'), iniciar: () => iniciarReporteGerencial(paneles.gerencial.panel, s) },
     rezagados: { tab: document.getElementById('rp-tab-rezagados'), panel: document.getElementById('rp-panel-rezagados'), iniciar: () => iniciarReporteRezagados(paneles.rezagados.panel, s) },
   };
@@ -2503,6 +2498,259 @@ async function iniciarCajaConsolidada(cont) {
       resumenEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
     }
   }
+  cargar();
+}
+
+// ── Resultados: estado de resultados, ventas por día y por categoría, accesorios sin movimiento ──
+
+/** Descarga filas como CSV que Excel abre con acentos (UTF-8 con BOM). */
+function descargarCSV(nombre, filas) {
+  const celda = v => { const t = String(v ?? ''); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const texto = '﻿' + filas.map(f => f.map(celda).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** «+12.5 %» / «−3.0 %»; «—» si el periodo anterior no tiene con qué comparar. */
+function variacionPct(actual, anterior) {
+  const a = Number(actual), b = Number(anterior);
+  if (Math.abs(b) < 0.005) return '—';
+  const v = 100 * (a - b) / Math.abs(b);
+  return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + ' %';
+}
+/** Dinero con el signo menos delante del «$»: −$1,234.00. */
+function dineroConSigno(n) {
+  const v = Number(n || 0);
+  return v < -0.004 ? '−' + formatoDinero(-v) : formatoDinero(Math.abs(v) < 0.005 ? 0 : v);
+}
+function fechaCortaMX(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/\./g, '');
+}
+
+/** Pestaña «Resultados» de Reportes: lo que el negocio vendió, costó y dejó, con gastos de caja y comparación. */
+async function iniciarReporteResultados(cont, s) {
+  cont.innerHTML = `
+    <div id="rs-tienda"></div>
+    <div class="segmentado" id="rs-vistas">
+      <button data-v="estado" class="activo">Estado de resultados</button>
+      <button data-v="dia">Por día</button>
+      <button data-v="categoria">Por categoría</button>
+      <button data-v="sinmov">Sin movimiento</button>
+    </div>
+    <div id="rs-periodo">
+      <div class="segmentado" id="rs-presets">
+        <button data-p="hoy">Hoy</button>
+        <button data-p="ayer">Ayer</button>
+        <button data-p="7dias">7 días</button>
+        <button data-p="mes" class="activo">Este mes</button>
+        <button data-p="mespasado">Mes pasado</button>
+        <button data-p="otro">Otras fechas</button>
+      </div>
+      <div id="rs-fechas" class="fila oculto" style="align-items:flex-end;">
+        <div style="flex:1;"><label>Desde</label><input id="rs-desde" type="date"></div>
+        <div style="flex:1;"><label>Hasta</label><input id="rs-hasta" type="date"></div>
+        <button id="rs-ver" class="btn btn-azul btn-chico">Ver</button>
+      </div>
+    </div>
+    <div id="rs-dias" class="fila oculto" style="align-items:flex-end;">
+      <div style="flex:1;"><label>Días sin venderse</label><input id="rs-dias-n" type="number" min="1" value="30"></div>
+      <button id="rs-buscar" class="btn btn-azul btn-chico">${ic('search')} Buscar</button>
+    </div>
+    <div id="rs-cuerpo"></div>`;
+
+  let codti = SUPERIOR.includes(s.rol) ? null : s.codti;
+  const contTienda = document.getElementById('rs-tienda');
+  if (SUPERIOR.includes(s.rol)) {
+    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="rs-codti"><option value="">Todas las sucursales</option></select>`;
+    try {
+      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
+      const sel = document.getElementById('rs-codti');
+      sel.innerHTML += tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      sel.onchange = () => { codti = sel.value ? Number(sel.value) : null; cargar(); };
+    } catch {
+      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
+    }
+  } else {
+    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
+  }
+
+  let vista = 'estado', preset = 'mes';
+  let exportar = null; // { nombre, filas } de lo que se ve, para el botón de Excel
+
+  function rango() {
+    const hoy = new Date();
+    const dia = (y, m, d) => new Date(y, m, d);
+    switch (preset) {
+      case 'hoy': return { desde: fechaISOCorta(hoy), hasta: fechaISOCorta(hoy) };
+      case 'ayer': { const a = dia(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 1); return { desde: fechaISOCorta(a), hasta: fechaISOCorta(a) }; }
+      case '7dias': return { desde: fechaISOCorta(dia(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 6)), hasta: fechaISOCorta(hoy) };
+      case 'mespasado': return { desde: fechaISOCorta(dia(hoy.getFullYear(), hoy.getMonth() - 1, 1)), hasta: fechaISOCorta(dia(hoy.getFullYear(), hoy.getMonth(), 0)) };
+      case 'otro': return { desde: document.getElementById('rs-desde').value, hasta: document.getElementById('rs-hasta').value };
+      default: return { desde: fechaISOCorta(dia(hoy.getFullYear(), hoy.getMonth(), 1)), hasta: fechaISOCorta(hoy) };
+    }
+  }
+  function consulta(extra) {
+    const qs = new URLSearchParams(extra || {});
+    if (codti != null) qs.set('codti', String(codti));
+    return qs.toString();
+  }
+  const botonExcel = () => `<button id="rs-excel" class="btn btn-gris btn-chico" style="margin:8px 0;">${ic('download')} Descargar para Excel</button>`;
+  function activarExcel() {
+    const b = document.getElementById('rs-excel');
+    if (b && exportar) b.onclick = () => descargarCSV(exportar.nombre, exportar.filas);
+  }
+
+  async function cargar() {
+    const cuerpo = document.getElementById('rs-cuerpo');
+    document.getElementById('rs-periodo').classList.toggle('oculto', vista === 'sinmov');
+    document.getElementById('rs-dias').classList.toggle('oculto', vista !== 'sinmov');
+    document.querySelectorAll('#rs-vistas button').forEach(b => b.classList.toggle('activo', b.dataset.v === vista));
+    document.querySelectorAll('#rs-presets button').forEach(b => b.classList.toggle('activo', b.dataset.p === preset));
+    document.getElementById('rs-fechas').classList.toggle('oculto', preset !== 'otro');
+    exportar = null;
+    cuerpo.innerHTML = '<div class="vacio">Cargando...</div>';
+    try {
+      if (vista === 'sinmov') {
+        const dias = Math.max(1, Number(document.getElementById('rs-dias-n').value) || 30);
+        dibujarSinMovimiento(cuerpo, await api('GET', '/api/reportes/sin-movimiento?' + consulta({ dias: String(dias) })));
+      } else {
+        const { desde, hasta } = rango();
+        if (!desde || !hasta) { cuerpo.innerHTML = '<div class="vacio">Elige las dos fechas.</div>'; return; }
+        const q = consulta({ desde, hasta });
+        if (vista === 'estado') dibujarEstado(cuerpo, await api('GET', '/api/reportes/estado-resultados?' + q));
+        else if (vista === 'dia') dibujarPorDia(cuerpo, await api('GET', '/api/reportes/ventas-por-dia?' + q));
+        else dibujarPorCategoria(cuerpo, await api('GET', '/api/reportes/ventas-por-categoria?' + q));
+      }
+      activarExcel();
+    } catch (err) {
+      cuerpo.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  }
+
+  function dibujarEstado(cuerpo, r) {
+    const a = r.actual, b = r.anterior;
+    const filas = [], csv = [['Concepto', `${r.desde} a ${r.hasta}`, `${r.anteriorDesde} a ${r.anteriorHasta}`, 'Cambio']];
+    const linea = (nombre, va, vb, { clase = '', cambio = true, cantidad = false, pct = false, sangria = false } = {}) => {
+      const fmt = v => pct ? Number(v).toFixed(1) + ' %' : cantidad ? String(v) : dineroConSigno(v);
+      const cam = cambio ? variacionPct(va, vb) : '';
+      const colorCam = cam.startsWith('+') ? 'er-sube' : cam.startsWith('−') ? 'er-baja' : '';
+      filas.push(`<tr class="${clase}"><td${sangria ? ' class="er-sangria"' : ''}>${escapar(nombre)}</td><td>${fmt(va)}</td><td class="er-ant">${fmt(vb)}</td><td class="${colorCam}">${cam}</td></tr>`);
+      csv.push([nombre.trim(), pct ? Number(va).toFixed(1) : cantidad ? va : Number(va).toFixed(2), pct ? Number(vb).toFixed(1) : cantidad ? vb : Number(vb).toFixed(2), cam]);
+    };
+    const seccion = t => { filas.push(`<tr class="er-seccion"><td colspan="4">${escapar(t)}</td></tr>`); csv.push([t, '', '', '']); };
+
+    linea('Ventas', a.ventas, b.ventas);
+    linea('(−) Devoluciones', -a.devoluciones, -b.devoluciones, { cambio: false });
+    linea('Ventas netas', a.ventasNetas, b.ventasNetas, { clase: 'er-sub' });
+    linea('(−) Costo de lo vendido', -a.costo, -b.costo, { cambio: false });
+    linea('Utilidad bruta', a.utilidadBruta, b.utilidadBruta, { clase: 'er-sub' });
+    linea('Margen bruto', a.margenBruto, b.margenBruto, { pct: true, cambio: false, sangria: true });
+    linea('(−) Gastos de operación', -a.totalGastos, -b.totalGastos, { cambio: false });
+    const conceptos = [...new Set([...a.gastos.map(g => g.concepto), ...b.gastos.map(g => g.concepto)])];
+    conceptos.forEach(c => {
+      const va = a.gastos.find(g => g.concepto === c)?.monto || 0, vb = b.gastos.find(g => g.concepto === c)?.monto || 0;
+      linea(c, -va, -vb, { cambio: false, sangria: true, clase: 'er-detalle' });
+    });
+    linea('Utilidad neta', a.utilidadNeta, b.utilidadNeta, { clase: 'er-total' });
+    linea('Margen neto', a.margenNeto, b.margenNeto, { pct: true, cambio: false, sangria: true });
+    seccion('Para tu información');
+    linea('Número de ventas', a.numVentas, b.numVentas, { cantidad: true });
+    linea('Abonos de clientes recibidos', a.abonosRecibidos, b.abonosRecibidos);
+    linea('Pagos a proveedores desde caja (compras)', a.pagosProveedor, b.pagosProveedor, { cambio: false });
+    linea('Retiros y traslados de caja (no son gasto)', a.retiros, b.retiros, { cambio: false });
+    linea('Préstamos a empleados (no son gasto)', a.prestamos, b.prestamos, { cambio: false });
+
+    cuerpo.innerHTML = `
+      <div class="kp-h">
+        ${kpiH('c1', 'banknote', formatoDinero(a.ventasNetas), 'Ventas netas')}
+        ${kpiH('c3', 'trending-up', formatoDinero(a.utilidadBruta), 'Utilidad bruta')}
+        ${kpiH(Number(a.utilidadNeta) >= 0 ? 'c3' : 'c6', 'circle-dollar-sign', dineroConSigno(a.utilidadNeta), `Utilidad neta · ${a.margenNeto}%`)}
+        ${kpiH('c4', 'receipt', formatoDinero(a.totalGastos), 'Gastos de caja')}
+      </div>
+      ${botonExcel()}
+      <div class="tarjeta" style="overflow-x:auto;">
+        <table class="er-tabla">
+          <thead><tr><th>Concepto</th><th>${fechaCortaMX(r.desde)}${r.desde === r.hasta ? '' : ' – ' + fechaCortaMX(r.hasta)}</th><th class="er-ant">Periodo anterior<br><small>${fechaCortaMX(r.anteriorDesde)}${r.anteriorDesde === r.anteriorHasta ? '' : ' – ' + fechaCortaMX(r.anteriorHasta)}</small></th><th>Cambio</th></tr></thead>
+          <tbody>${filas.join('')}</tbody>
+        </table>
+      </div>
+      <div class="ayuda">Los gastos son las salidas de caja del periodo (renta, flete, papelería, nómina…), agrupadas por motivo. Los retiros del dueño y los traslados no se cuentan como gasto. La utilidad usa el costo con el que se vendió cada artículo. Es una referencia para decidir, no un documento contable: no incluye lo que no pase por la caja.</div>`;
+    exportar = { nombre: `estado-de-resultados-${r.desde}_${r.hasta}.csv`, filas: csv };
+  }
+
+  function dibujarPorDia(cuerpo, r) {
+    const max = Math.max(...r.dias.map(d => Number(d.totalVenta)), 1);
+    const grafica = r.dias.length <= 31 ? `
+      <div class="tarjeta"><div class="barras" role="img" aria-label="Ventas por día">
+        ${r.dias.map(d => `
+          <div class="barra-col">
+            <span class="barra-val">${Number(d.totalVenta) > 0 && r.dias.length <= 14 ? formatoDinero(d.totalVenta).replace('.00', '') : ''}</span>
+            <div class="barra-pista"><div class="barra" style="height:${Math.max(Number(d.totalVenta) / max * 100, Number(d.totalVenta) > 0 ? 4 : 1).toFixed(1)}%" title="${escapar(d.dia)}: ${formatoDinero(d.totalVenta)}"></div></div>
+            <span class="barra-dia">${Number(d.dia.slice(8, 10))}</span>
+          </div>`).join('')}
+      </div></div>` : '';
+    cuerpo.innerHTML = `
+      <div class="kp-h">
+        ${kpiH('c1', 'receipt', String(r.numVentas), 'Ventas')}
+        ${kpiH('c3', 'banknote', formatoDinero(r.totalVenta), 'Vendido')}
+        ${kpiH('c4', 'trending-up', formatoDinero(r.utilidad), 'Utilidad')}
+      </div>
+      ${botonExcel()}
+      ${grafica}
+      <div class="tarjeta">${r.dias.filter(d => r.dias.length <= 31 || d.numVentas > 0).reverse().map(d => `
+        <div class="detalle-fila"><span class="k">${fechaCortaMX(d.dia)} · ${d.numVentas} ${d.numVentas === 1 ? 'venta' : 'ventas'}</span>
+        <span class="v">${formatoDinero(d.totalVenta)} <span class="ayuda" style="font-weight:400;">(utilidad ${formatoDinero(d.utilidad)})</span></span></div>`).join('')}</div>`;
+    exportar = { nombre: `ventas-por-dia-${r.desde}_${r.hasta}.csv`, filas: [['Día', 'Ventas', 'Vendido', 'Utilidad'], ...r.dias.map(d => [d.dia, d.numVentas, d.totalVenta, d.utilidad])] };
+  }
+
+  function dibujarPorCategoria(cuerpo, r) {
+    if (r.categorias.length === 0) { cuerpo.innerHTML = '<div class="tarjeta"><div class="vacio">Sin ventas en este periodo.</div></div>'; return; }
+    const max = Math.max(...r.categorias.map(c => Number(c.totalVenta)), 1);
+    cuerpo.innerHTML = `
+      <div class="kp-h">${kpiH('c3', 'banknote', formatoDinero(r.totalVenta), 'Vendido en el periodo')}</div>
+      ${botonExcel()}
+      <div class="tarjeta">${r.categorias.map(c => `
+        <div class="hbar-fila">
+          <div class="hbar-cab"><span>${escapar(c.categoria)} <small class="ayuda">${c.piezas} pza</small></span><strong>${formatoDinero(c.totalVenta)}</strong></div>
+          <div class="hbar-pista"><div class="hbar" style="width:${Math.max(Number(c.totalVenta) / max * 100, 1).toFixed(1)}%"></div></div>
+          <div class="ayuda">Utilidad ${formatoDinero(c.utilidad)}</div>
+        </div>`).join('')}</div>`;
+    exportar = { nombre: `ventas-por-categoria-${r.desde}_${r.hasta}.csv`, filas: [['Categoría', 'Piezas', 'Vendido', 'Utilidad'], ...r.categorias.map(c => [c.categoria, c.piezas, c.totalVenta, c.utilidad])] };
+  }
+
+  function dibujarSinMovimiento(cuerpo, r) {
+    cuerpo.innerHTML = `
+      <div class="kp-h">
+        ${kpiH('c1', 'package', String(r.totalArticulos), 'Accesorios sin venderse')}
+        ${kpiH('c4', 'banknote', formatoDinero(r.valorParado), 'Dinero parado (a costo)')}
+      </div>
+      ${r.articulos.length === 0 ? '' : botonExcel()}
+      ${r.limitado ? '<div class="mensaje info">Se muestran los 300 que más dinero tienen parado.</div>' : ''}
+      <div class="tarjeta">${r.articulos.length === 0 ? `<div class="vacio">Todo lo que tienes se ha vendido en los últimos ${r.dias} días.</div>` : r.articulos.map(a => `
+        <div class="detalle-fila"><span class="k">${escapar(a.nombreProducto)}<br><small>${escapar(a.nombreTienda)} · ${Number(a.stock)} pza · ${a.ultimaVenta ? 'última venta ' + formatoFecha(a.ultimaVenta) : 'sin ventas registradas'}</small></span>
+        <span class="v">${formatoDinero(a.valorCosto)}</span></div>`).join('')}</div>`;
+    exportar = { nombre: `sin-movimiento-${r.dias}-dias.csv`, filas: [['Código', 'Producto', 'Sucursal', 'Existencia', 'Valor a costo', 'Última venta'], ...r.articulos.map(a => [a.codpro, a.nombreProducto, a.nombreTienda, a.stock, a.valorCosto, a.ultimaVenta || ''])] };
+  }
+
+  document.querySelectorAll('#rs-vistas button').forEach(b => b.onclick = () => { vista = b.dataset.v; cargar(); });
+  document.querySelectorAll('#rs-presets button').forEach(b => b.onclick = () => {
+    preset = b.dataset.p;
+    if (preset === 'otro') {
+      if (!document.getElementById('rs-desde').value) {
+        document.getElementById('rs-desde').value = fechaISOCorta(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+        document.getElementById('rs-hasta').value = fechaISOCorta(new Date());
+      }
+      document.querySelectorAll('#rs-presets button').forEach(x => x.classList.toggle('activo', x === b));
+      document.getElementById('rs-fechas').classList.remove('oculto');
+      return;
+    }
+    cargar();
+  });
+  document.getElementById('rs-ver').onclick = cargar;
+  document.getElementById('rs-buscar').onclick = cargar;
   cargar();
 }
 
