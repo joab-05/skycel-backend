@@ -191,6 +191,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (SUPERIOR.includes(s.rol)) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
   if (SUPERIOR.includes(s.rol)) items.push({ h: '#/comisiones', i: ic('percent'), t: 'Comisiones', grupo: 'Administración' });
   if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/descansos', i: ic('calendar'), t: 'Descansos', grupo: 'Administración' });
+  items.push({ h: '#/ayuda', i: ic('circle-help'), t: 'Ayuda', grupo: null });
   items.push({ h: '#/pendientes', i: ic('cloud-upload'), t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
   return items;
 }
@@ -294,6 +295,7 @@ async function render() {
     if (ruta === 'devoluciones') return pantallaDevoluciones();
     if (ruta === 'devolucion' && param) return pantallaDevolucionDetalle(param);
     if (ruta === 'ajustes') return pantallaAjustes();
+    if (ruta === 'ayuda') return pantallaAyuda(param);
     if (ruta === 'notificaciones') return pantallaNotificaciones();
     if (ruta === 'catalogos') return pantallaCatalogos();
     navegar('#/menu');
@@ -2752,6 +2754,155 @@ async function iniciarReporteResultados(cont, s) {
   document.getElementById('rs-ver').onclick = cargar;
   document.getElementById('rs-buscar').onclick = cargar;
   cargar();
+}
+
+// ── Ayuda: el manual de usuario dentro de la app ────────────────────────────────────────────
+// El texto vive en /app/ayuda/manual.md (Markdown sencillo: # título, ## tema, ### subtítulo, listas, > notas, tablas).
+
+let MANUAL = null;
+
+function quitarAcentos(t) { return String(t).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function slugTema(t) { return quitarAcentos(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+
+/** **negrita** y `código` dentro de una línea de texto, con el resto escapado. */
+function textoManualHtml(t) {
+  return escapar(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>');
+}
+
+function parsearManual(md) {
+  const temas = [];
+  let titulo = 'Manual de usuario', actual = null, parrafo = [], lista = [], numerada = false, nota = [], tabla = [];
+  const cerrarParrafo = () => { if (parrafo.length) { actual?.bloques.push({ t: 'p', x: parrafo.join(' ') }); parrafo = []; } };
+  const cerrarLista = () => { if (lista.length) { actual?.bloques.push({ t: 'l', n: numerada, x: lista }); lista = []; } };
+  const cerrarNota = () => { if (nota.length) { actual?.bloques.push({ t: 'n', x: nota.join(' ') }); nota = []; } };
+  const celdas = f => f.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+  const cerrarTabla = () => {
+    if (!tabla.length) return;
+    const filas = tabla.map(celdas).filter(c => !c.every(x => /^:?-{2,}:?$/.test(x)));
+    if (filas.length) actual?.bloques.push({ t: 't', cab: filas[0], filas: filas.slice(1) });
+    tabla = [];
+  };
+  for (const cruda of md.replace(/\r\n/g, '\n').split('\n')) {
+    const linea = cruda.replace(/\s+$/, '');
+    const esLista = linea.startsWith('- '), num = /^\d+\.\s+(.*)$/.exec(linea), esNota = linea.startsWith('>'), esTabla = linea.startsWith('|');
+    if (!esLista && !num) cerrarLista();
+    if (!esNota) cerrarNota();
+    if (!esTabla) cerrarTabla();
+    const sigue = linea !== '' && !esLista && !num && !esNota && !esTabla && !linea.startsWith('#');
+    if (!sigue) cerrarParrafo();
+    if (linea.startsWith('### ')) actual?.bloques.push({ t: 'h3', x: linea.slice(4).trim() });
+    else if (linea.startsWith('## ')) { actual = { titulo: linea.slice(3).trim(), bloques: [] }; actual.slug = slugTema(actual.titulo); temas.push(actual); }
+    else if (linea.startsWith('# ')) titulo = linea.slice(2).trim();
+    else if (esLista) { if (lista.length && numerada) cerrarLista(); numerada = false; lista.push(linea.slice(2).trim()); }
+    else if (num) { if (lista.length && !numerada) cerrarLista(); numerada = true; lista.push(num[1].trim()); }
+    else if (esNota) nota.push(linea.slice(1).trim());
+    else if (esTabla) tabla.push(linea);
+    else if (sigue) parrafo.push(linea.trim());
+  }
+  cerrarParrafo(); cerrarLista(); cerrarNota(); cerrarTabla();
+  for (const t of temas) {
+    t.texto = quitarAcentos(t.titulo + ' ' + t.bloques.map(b => b.x ? (Array.isArray(b.x) ? b.x.join(' ') : b.x) : [...b.cab, ...b.filas.flat()].join(' ')).join(' '))
+      .toLowerCase().replace(/\*\*|`/g, '');
+  }
+  return { titulo, temas };
+}
+
+function temaHtml(t) {
+  return `<h2>${escapar(t.titulo)}</h2>` + t.bloques.map(b => {
+    if (b.t === 'h3') return `<h3>${textoManualHtml(b.x)}</h3>`;
+    if (b.t === 'p') return `<p>${textoManualHtml(b.x)}</p>`;
+    if (b.t === 'n') return `<blockquote>${textoManualHtml(b.x)}</blockquote>`;
+    if (b.t === 'l') { const e = b.n ? 'ol' : 'ul'; return `<${e}>${b.x.map(i => `<li>${textoManualHtml(i)}</li>`).join('')}</${e}>`; }
+    return `<div class="man-tabla"><table><thead><tr>${b.cab.map(c => `<th>${textoManualHtml(c)}</th>`).join('')}</tr></thead><tbody>${
+      b.filas.map(f => `<tr>${f.map(c => `<td>${textoManualHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }).join('');
+}
+
+async function cargarManual() {
+  if (MANUAL) return MANUAL;
+  const r = await fetch('/app/ayuda/manual.md');
+  if (!r.ok) throw new Error('No se pudo cargar el manual (sin conexión y sin copia guardada).');
+  MANUAL = parsearManual(await r.text());
+  return MANUAL;
+}
+
+/** El tema del manual que corresponde a la pantalla (la ruta) donde está la persona; F1 y el botón «?» lo usan. */
+function temaDeRuta(ruta) {
+  const mapa = {
+    pos: 'Punto de Venta', caja: 'Caja', corte: 'Caja', devoluciones: 'Devoluciones', devolucion: 'Devoluciones',
+    inventario: 'Inventario', producto: 'Inventario', 'producto-editar': 'Inventario', catalogos: 'Inventario', auditoria: 'Inventario',
+    'inventario-fisico': 'Inventario físico', traspasos: 'Traspasos', traspaso: 'Traspasos', 'traspaso-nuevo': 'Traspasos', faltantes: 'Traspasos',
+    clientes: 'Clientes', cliente: 'Clientes', cxc: 'Cuentas por Cobrar', cuenta: 'Cuentas por Cobrar',
+    garantias: 'Garantías', garantia: 'Garantías',
+    recepcion: 'Órdenes de Servicio', taller: 'Órdenes de Servicio', consultar: 'Órdenes de Servicio', orden: 'Órdenes de Servicio',
+    pendientes: 'Trabajar sin conexión',
+    compras: 'Compras y Proveedores', compra: 'Compras y Proveedores', 'compra-nueva': 'Compras y Proveedores',
+    descuentos: 'Descuentos', reportes: 'Reportes',
+    empleados: 'Empleados, nómina y comisiones', empleado: 'Empleados, nómina y comisiones', nomina: 'Empleados, nómina y comisiones',
+    'nomina-detalle': 'Empleados, nómina y comisiones', 'nomina-historial': 'Empleados, nómina y comisiones',
+    descansos: 'Empleados, nómina y comisiones', comisiones: 'Empleados, nómina y comisiones',
+  };
+  return mapa[ruta] || 'Primeros pasos';
+}
+
+function abrirAyudaDeAquiMismo() {
+  const ruta = (location.hash || '').split('/')[1] || 'menu';
+  if (ruta === 'ayuda' || ruta === 'login') return;
+  navegar('#/ayuda/' + slugTema(temaDeRuta(ruta)));
+}
+document.getElementById('btn-ayuda').onclick = abrirAyudaDeAquiMismo;
+document.addEventListener('keydown', e => {
+  if (e.key === 'F1') { e.preventDefault(); abrirAyudaDeAquiMismo(); }
+});
+
+async function pantallaAyuda(param) {
+  root.innerHTML = `
+    ${cabeceraPantalla(ic('circle-help') + ' Ayuda', 'Manual de usuario: cómo usar cada parte del sistema', `<button id="ay-imprimir" class="btn btn-gris">${ic('printer')} Imprimir o guardar PDF</button>`)}
+    <div id="ay-cuerpo"><div class="vacio">Cargando...</div></div>`;
+  let manual;
+  try { manual = await cargarManual(); }
+  catch (err) {
+    document.getElementById('ay-cuerpo').innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message)}</div></div>`;
+    return;
+  }
+  document.getElementById('ay-cuerpo').innerHTML = `
+    <input id="ay-buscar" type="search" placeholder="Buscar en el manual (por ejemplo: corte, IMEI, devolución)" autocomplete="off">
+    <div class="ayuda-marco">
+      <nav id="ay-indice" class="ayuda-indice"></nav>
+      <article id="ay-tema" class="ayuda-tema tarjeta"></article>
+    </div>`;
+  let actual = manual.temas.find(t => t.slug === param) || manual.temas[0];
+
+  function pintarIndice() {
+    const q = quitarAcentos(document.getElementById('ay-buscar').value.trim()).toLowerCase();
+    const lista = q ? manual.temas.filter(t => t.texto.includes(q)) : manual.temas;
+    const nav = document.getElementById('ay-indice');
+    nav.innerHTML = lista.length ? lista.map(t => `<button data-s="${t.slug}" class="${t.slug === actual.slug ? 'activo' : ''}">${escapar(t.titulo)}</button>`).join('')
+      : '<div class="ayuda">Ningún tema menciona eso.</div>';
+    nav.querySelectorAll('button').forEach(b => b.onclick = () => { actual = manual.temas.find(t => t.slug === b.dataset.s); pintarTema(); pintarIndice(); });
+    if (q && lista.length && !lista.includes(actual)) { actual = lista[0]; pintarTema(); pintarIndice(); }
+  }
+  function pintarTema() {
+    const el = document.getElementById('ay-tema');
+    el.innerHTML = temaHtml(actual);
+    el.scrollTop = 0;
+    if (history.replaceState) history.replaceState(null, '', '#/ayuda/' + actual.slug);
+    window.scrollTo(0, 0);
+  }
+  document.getElementById('ay-buscar').oninput = pintarIndice;
+  pintarIndice();
+  pintarTema();
+
+  document.getElementById('ay-imprimir').onclick = () => {
+    const div = document.createElement('div');
+    div.id = 'ay-impresion';
+    div.innerHTML = `<h1>${escapar(manual.titulo)}</h1>` + manual.temas.map(t => `<section>${temaHtml(t)}</section>`).join('');
+    document.body.appendChild(div);
+    document.body.classList.add('imprimiendo-manual');
+    window.print();
+    document.body.classList.remove('imprimiendo-manual');
+    div.remove();
+  };
 }
 
 // ── Inventario físico por secciones ─────────────────────────────────────
