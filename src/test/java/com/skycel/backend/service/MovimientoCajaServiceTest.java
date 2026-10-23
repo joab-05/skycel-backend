@@ -40,6 +40,7 @@ class MovimientoCajaServiceTest {
     @Mock private CatMotivoRepository      catMotivoRepository;
     @Mock private UsuarioRepository        usuarioRepository;
     @Mock private com.skycel.backend.security.SesionActual sesionActual;
+    @Mock private com.skycel.backend.repository.SesionCajaRepository sesionCajaRepository;
 
     @InjectMocks
     private MovimientoCajaService service;
@@ -68,6 +69,7 @@ class MovimientoCajaServiceTest {
         lenient().when(usuarioRepository.findByUsername("abigail")).thenReturn(Optional.of(encargado));
         lenient().when(usuarioRepository.findByUsername("root")).thenReturn(Optional.of(admin));
         lenient().when(movimientoCajaRepository.save(any(MovimientoCaja.class))).thenAnswer(i -> i.getArgument(0));
+        lenient().when(sesionCajaRepository.existsByCaja_IdCajaAndEstado(ID_CAJA, SesionCaja.ABIERTA)).thenReturn(true);   // caja abierta
         saldo(new BigDecimal("500.00"), BigDecimal.ZERO);
     }
 
@@ -428,5 +430,21 @@ class MovimientoCajaServiceTest {
         service.registrarCancelacionVenta(Venta.builder().idventa(1).caja(caja).build(), encargado);
 
         verify(movimientoCajaRepository, never()).save(any());
+    }
+
+    @org.junit.jupiter.api.Test
+    @DisplayName("con la caja cerrada no se puede registrar un movimiento manual")
+    void manualConCajaCerrada() {
+        when(sesionCajaRepository.existsByCaja_IdCajaAndEstado(ID_CAJA, SesionCaja.ABIERTA)).thenReturn(false);
+        MovimientoCajaRequestDto dto = new MovimientoCajaRequestDto();
+        dto.setIdmotivo(5);
+        dto.setMonto(new BigDecimal("50.00"));
+
+        assertThatThrownBy(() -> service.registrarManual(ID_CAJA, dto, "abigail"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(e.getReason()).contains("cerrada");
+                });
+        verify(movimientoCajaRepository, never()).save(any(MovimientoCaja.class));
     }
 }

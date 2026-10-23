@@ -140,6 +140,8 @@ public class VentaService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "La caja " + caja.getIdCaja() + " no pertenece a la tienda " + tienda.getCodti());
         }
+        // Cobrar exige el turno de caja abierto. Una venta hecha sin conexión ya ocurrió: se acepta siempre.
+        if (!offline) movimientoCajaService.exigirCajaAbierta(caja);
 
         Usuario vendedor = usuarioRepository.findById(idUsuarioVendedor)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuario vendedor no encontrado"));

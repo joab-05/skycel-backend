@@ -9,6 +9,7 @@ import com.skycel.backend.domain.entity.MovimientoCaja;
 import com.skycel.backend.domain.entity.NominaDetalle;
 import com.skycel.backend.domain.entity.OrdenServicio;
 import com.skycel.backend.domain.entity.OrdenServicioAnticipo;
+import com.skycel.backend.domain.entity.SesionCaja;
 import com.skycel.backend.domain.entity.PagoCompra;
 import com.skycel.backend.domain.entity.PagoCuenta;
 import com.skycel.backend.domain.entity.Tienda;
@@ -21,6 +22,7 @@ import com.skycel.backend.dto.caja.SaldoCajaResponseDto;
 import com.skycel.backend.repository.CajaRepository;
 import com.skycel.backend.repository.CatMotivoRepository;
 import com.skycel.backend.repository.MovimientoCajaRepository;
+import com.skycel.backend.repository.SesionCajaRepository;
 import com.skycel.backend.repository.UsuarioRepository;
 import com.skycel.backend.security.SesionActual;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +65,21 @@ public class MovimientoCajaService {
     private final CatMotivoRepository      catMotivoRepository;
     private final UsuarioRepository        usuarioRepository;
     private final SesionActual             sesionActual;
+    private final SesionCajaRepository     sesionCajaRepository;
+
+    /** Para vender o mover efectivo la caja debe estar abierta (turno iniciado con su fondo). */
+    public void exigirCajaAbierta(Caja caja) {
+        if (!sesionCajaRepository.existsByCaja_IdCajaAndEstado(caja.getIdCaja(), SesionCaja.ABIERTA)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La caja '" + caja.getNombreCaja() + "' está cerrada: ábrela con su fondo inicial para poder cobrar o mover efectivo.");
+        }
+    }
+
+    /** Movimiento que registra la apertura o el cierre de un turno (fondo, ajuste o retiro). */
+    @Transactional
+    public MovimientoCaja registrarDeTurno(Caja caja, Usuario usuario, String nombreMotivo, BigDecimal monto, String observaciones) {
+        return guardar(caja, usuario, null, motivoSistema(nombreMotivo), monto, observaciones, null);
+    }
 
     // ── Movimientos manuales ─────────────────────────────────────────────────
 
@@ -71,6 +88,7 @@ public class MovimientoCajaService {
         Usuario usuario = usuarioPorUsername(username);
         Caja caja = buscarCaja(idCaja);
         validarAcceso(usuario, caja);
+        exigirCajaAbierta(caja);
 
         CatMotivo motivo = catMotivoRepository.findById(dto.getIdmotivo())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -149,6 +167,7 @@ public class MovimientoCajaService {
     public void registrarAbonoCuenta(Integer idCaja, CuentaPorCobrar cuenta, PagoCuenta pago, Usuario usuario, java.time.LocalDateTime fecha) {
         Caja caja = idCaja != null ? buscarCaja(idCaja) : cajaPrincipalDe(usuario);
         validarAcceso(usuario, caja);
+        if (fecha == null) exigirCajaAbierta(caja);   // un abono hecho sin conexión ya ocurrió: no se puede exigir
         guardar(caja, usuario, null, motivoSistema(ABONO_CUENTA), pago.getMonto(),
                 "Abono a cuenta " + cuenta.getNoFactura() + " (pago #" + pago.getIdpago() + ")", null, fecha);
     }
@@ -212,6 +231,7 @@ public class MovimientoCajaService {
     public Integer registrarAnticipoServicio(Integer idCaja, OrdenServicio orden, OrdenServicioAnticipo anticipo, Usuario usuario) {
         Caja caja = cajaParaTienda(idCaja, orden.getTienda());
         validarAcceso(usuario, caja);
+        if (orden.getFolioLocal() == null) exigirCajaAbierta(caja);   // recibida sin conexión: ya ocurrió
         return guardar(caja, usuario, null, motivoSistema(ANTICIPO_SERVICIO), anticipo.getMonto(),
                 "Anticipo orden " + orden.getFolio() + " (anticipo #" + anticipo.getIdanticipo() + ")"
                         + (orden.getFolioLocal() != null ? " - recibida sin conexion (" + orden.getFolioLocal() + ")" : ""),
@@ -242,6 +262,7 @@ public class MovimientoCajaService {
     /** Salida de efectivo por el reembolso de una devolución de venta. La caja debe tener el efectivo. */
     @Transactional
     public void registrarDevolucionVenta(Caja caja, com.skycel.backend.domain.entity.Devolucion devolucion, Usuario usuario, BigDecimal monto) {
+        exigirCajaAbierta(caja);
         BigDecimal saldo = saldoDe(caja.getIdCaja());
         if (monto.compareTo(saldo) > 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -347,9 +368,9 @@ public class MovimientoCajaService {
         return u.getRol() == Rol.ROOT || u.getRol() == Rol.ADMIN;
     }
 
-    /** ROOT/ADMIN operan cualquier caja; el resto solo las de su propia tienda. */
+    /** ROOT/ADMIN operan cualquier caja; un vendedor, la de la sucursal donde trabaja ese día; el resto, la de su tienda. */
     private void validarAcceso(Usuario usuario, Caja caja) {
-        if (esAdmin(usuario)) return;
+        if (esAdmin(usuario) || usuario.getRol() == Rol.VENDEDOR) return;
         if (usuario.getTienda() == null || !usuario.getTienda().getCodti().equals(caja.getTienda().getCodti())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a las cajas de otra tienda.");
         }

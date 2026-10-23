@@ -44,10 +44,14 @@ public class MotivoCajaService {
     public static final String PAGO_PROVEEDOR    = "Pago a proveedor";
     public static final String PAGO_NOMINA       = "Pago de nómina";
     public static final String PRESTAMO_EMPLEADO = "Préstamo a empleado";
+    /** Los que registra la apertura y el cierre del turno de caja (ver SesionCajaService). */
+    public static final String FONDO_APERTURA    = "Fondo de apertura";
+    public static final String AJUSTE_APERTURA   = "Ajuste de apertura";
+    public static final String RETIRO_CIERRE     = "Retiro por cierre de caja";
 
     private static final Set<String> DEL_SISTEMA =
             Set.of(VENTA, CANCELACION_VENTA, ABONO_CUENTA, ANTICIPO_SERVICIO, DEVOLUCION_ANTICIPO, DEVOLUCION_VENTA,
-                    PAGO_PROVEEDOR, PAGO_NOMINA, PRESTAMO_EMPLEADO);
+                    PAGO_PROVEEDOR, PAGO_NOMINA, PRESTAMO_EMPLEADO, FONDO_APERTURA, AJUSTE_APERTURA, RETIRO_CIERRE);
 
     private record MotivoBase(String nombre, byte tipoMov, byte catSat) {}
 
@@ -59,6 +63,9 @@ public class MotivoCajaService {
             new MotivoBase(DEVOLUCION_ANTICIPO,  SALIDA,  CAT_OPERATIVO),
             new MotivoBase(DEVOLUCION_VENTA,     SALIDA,  CAT_OPERATIVO),
             new MotivoBase(PAGO_PROVEEDOR,        SALIDA,  CAT_OPERATIVO),
+            new MotivoBase(FONDO_APERTURA,       ENTRADA, CAT_TRASLADO),
+            new MotivoBase(AJUSTE_APERTURA,      SALIDA,  CAT_TRASLADO),
+            new MotivoBase(RETIRO_CIERRE,        SALIDA,  CAT_TRASLADO),
             new MotivoBase("Fondo inicial",     ENTRADA, CAT_OPERATIVO),
             new MotivoBase("Otro ingreso",       ENTRADA, CAT_OPERATIVO),
             new MotivoBase("Gasto operativo",    SALIDA,  CAT_OPERATIVO),

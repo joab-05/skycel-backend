@@ -859,3 +859,19 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
 /* ══ Grupo 6: administración (empleados, traspasos, nómina, comisiones, notificaciones, ajustes) ═══ */
 #em-lista, #tr-lista { display: block; }
 .pag-acciones .btn .enlace { display: none; }
+
+/* ── Turno de caja ─────────────────────────────────────────────────────── */
+.turno { display: flex; flex-direction: column; gap: 4px; }
+.turno-abierto { border-left: 4px solid #059669; }
+.turno-cerrado { border-left: 4px solid #d97706; }
+.punto-estado { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+.punto-estado.verde { background: #059669; }
+.punto-estado.ambar { background: #d97706; }
+.tc-esperado { font-size: 18px; margin: 6px 0 8px 0; color: #0f766e; }
+.tc-esperado strong { font-size: 24px; }
+.tc-dif { font-weight: 700; min-height: 20px; margin-top: 4px; }
+.tc-dif.ok { color: #059669; } .tc-dif.sobra { color: #d97706; } .tc-dif.falta { color: #dc2626; }
+@media print {
+  .sidebar, .nav-inferior, #encabezado, #barra-conexion, .enlace, #cr-imprimir { display: none !important; }
+  .app-shell, main { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+}

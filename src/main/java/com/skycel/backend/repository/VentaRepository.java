@@ -18,6 +18,9 @@ public interface VentaRepository extends JpaRepository<Venta, Integer> {
     List<Venta> findByTienda_CodtiAndFechaVentaBetweenOrderByFechaVentaDesc(
             Integer codti, LocalDateTime desde, LocalDateTime hasta);
 
+    /** Ventas de una caja en un periodo (el corte de un turno). */
+    List<Venta> findByCaja_IdCajaAndFechaVentaBetween(Integer idCaja, LocalDateTime desde, LocalDateTime hasta);
+
     List<Venta> findByCaja_IdCajaAndFechaVentaGreaterThanEqualOrderByFechaVentaDesc(
             Integer idCaja, LocalDateTime desde);
 

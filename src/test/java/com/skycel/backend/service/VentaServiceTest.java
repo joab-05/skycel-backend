@@ -910,6 +910,17 @@ class VentaServiceTest {
     class Validaciones {
 
         @Test
+        @DisplayName("cobrar en línea exige la caja abierta: si está cerrada, 409 y no se descuenta nada")
+        void cajaCerrada() {
+            doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "La caja Caja 1 esta cerrada"))
+                    .when(movimientoCajaService).exigirCajaAbierta(caja);
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(lineaAccesorio((short) 1))), ID_VENDEDOR))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.CONFLICT));
+            verify(ventaRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("stock insuficiente en ACCESORIO: 400")
         void stockInsuficiente_lanzaBadRequest() {
             ProductoMaster master = masterAccesorio();
@@ -1184,6 +1195,16 @@ class VentaServiceTest {
             lenient().when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
             lenient().when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI)).thenReturn(List.of(p));
             return p;
+        }
+
+        @Test
+        @DisplayName("una venta hecha sin conexión se acepta sin exigir la caja abierta (ya ocurrió)")
+        void noExigeCajaAbierta() {
+            accesorioConStock("10");
+
+            ventaService.crear(sinConexion((short) 1), ID_VENDEDOR);
+
+            verify(movimientoCajaService, never()).exigirCajaAbierta(any());
         }
 
         @Test

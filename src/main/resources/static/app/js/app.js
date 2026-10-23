@@ -277,6 +277,7 @@ async function render() {
     if (ruta === 'producto' && param) return pantallaProductoDetalle(param);
     if (ruta === 'producto-editar' && param) return pantallaProductoEditar(param);
     if (ruta === 'caja') return pantallaCaja();
+    if (ruta === 'corte' && param) return pantallaCorte(param);
     if (ruta === 'empleados') return pantallaEmpleados();
     if (ruta === 'empleado' && param) return pantallaEmpleadoDetalle(param);
     if (ruta === 'pos') return pantallaPOS();
@@ -596,6 +597,145 @@ function pastillaColor(estadoDisplay, estadoColor) {
   return `<span class="pastilla" style="background:${estadoColor}22; color:${estadoColor};">${escapar(estadoDisplay)}</span>`;
 }
 function textoDias(d) { return d < 0 ? Math.abs(d) + ' días vencida' : 'vence en ' + d + ' días'; }
+
+// ── Turno de caja: abrir al iniciar el día y cerrar con corte ────────────
+
+/** Formulario para abrir la caja con su fondo inicial (sugerido: lo que se dejó al cerrar). */
+function formularioAbrirCaja(cont, idCaja, nombreCaja, fondoSugerido, alAbrir) {
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <h2 class="h2-ic">${ic('lock-open')} Abrir ${escapar(nombreCaja)}</h2>
+      <div class="ayuda">Cuenta el efectivo que hay en el cajón y captúralo como fondo inicial. Si cambia respecto a lo que el sistema esperaba, la diferencia queda registrada.</div>
+      <label class="obligatorio">Fondo inicial</label>
+      <input id="tc-fondo" type="number" inputmode="decimal" min="0" step="0.01" value="${Number(fondoSugerido || 0).toFixed(2)}">
+      ${fondoSugerido > 0 ? `<div class="ayuda">Sugerido: ${formatoDinero(fondoSugerido)} (lo que se dejó al cerrar).</div>` : ''}
+      <div class="grupo-botones">
+        <button id="tc-abrir" class="btn btn-azul">${ic('lock-open')} Abrir caja</button>
+      </div>
+    </div>`;
+  const inp = document.getElementById('tc-fondo');
+  inp.focus(); inp.select();
+  document.getElementById('tc-abrir').onclick = async (e) => {
+    const fondo = Number(inp.value);
+    if (inp.value === '' || !(fondo >= 0)) { mostrarMensaje(root, 'Escribe el fondo con el que abres (puede ser 0).', 'error'); return; }
+    e.target.disabled = true;
+    try {
+      await api('POST', `/api/cajas/${idCaja}/abrir`, { fondoInicial: fondo });
+      cont.innerHTML = '';
+      alAbrir();
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+    }
+  };
+}
+
+/** Formulario para cerrar la caja: se cuenta el efectivo, se ve la diferencia y se genera el corte. */
+function formularioCerrarCaja(cont, idCaja, sesion, alCerrar) {
+  const esperado = Number(sesion.efectivoEsperado || 0);
+  const r = sesion.resumen;
+  cont.innerHTML = `
+    <div class="tarjeta">
+      <h2 class="h2-ic">${ic('lock')} Cerrar ${escapar(sesion.nombreCaja)}</h2>
+      <div class="tc-esperado">Efectivo esperado: <strong>${formatoDinero(esperado)}</strong></div>
+      ${r ? `<div class="ayuda">Fondo inicial ${formatoDinero(sesion.fondoInicial)} · ${r.numVentas} ventas por ${formatoDinero(r.totalVentas)} · entradas ${formatoDinero(r.totalEntradas)} · salidas ${formatoDinero(r.totalSalidas)}</div>` : ''}
+      <label class="obligatorio">Efectivo contado</label>
+      <input id="tc-contado" type="number" inputmode="decimal" min="0" step="0.01">
+      <div id="tc-dif" class="tc-dif"></div>
+      <label>Se deja en el cajón para mañana</label>
+      <input id="tc-sig" type="number" inputmode="decimal" min="0" step="0.01" value="${Number(sesion.fondoInicial || 0).toFixed(2)}">
+      <div id="tc-retiro" class="ayuda"></div>
+      <label>Observaciones</label>
+      <input id="tc-obs" placeholder="Opcional">
+      <div class="grupo-botones">
+        <button id="tc-cerrar" class="btn btn-azul">${ic('circle-check')} Cerrar caja y generar corte</button>
+      </div>
+    </div>`;
+  const contado = document.getElementById('tc-contado');
+  const sig = document.getElementById('tc-sig');
+  const calcular = () => {
+    const dif = document.getElementById('tc-dif');
+    const ret = document.getElementById('tc-retiro');
+    if (contado.value === '') { dif.textContent = ''; ret.textContent = ''; return; }
+    const d = Number(contado.value) - esperado;
+    if (Math.abs(d) < 0.005) { dif.textContent = 'Cuadra: sin diferencia'; dif.className = 'tc-dif ok'; }
+    else if (d > 0) { dif.textContent = 'Sobran ' + formatoDinero(d); dif.className = 'tc-dif sobra'; }
+    else { dif.textContent = 'Faltan ' + formatoDinero(-d); dif.className = 'tc-dif falta'; }
+    const f = Number(sig.value || 0);
+    ret.textContent = f > Number(contado.value) ? 'El fondo para mañana no puede ser mayor a lo contado.'
+      : `Se retiran ${formatoDinero(Number(contado.value) - f)} del cajón y quedan ${formatoDinero(f)} para mañana.`;
+  };
+  contado.addEventListener('input', calcular);
+  sig.addEventListener('input', calcular);
+  contado.focus();
+  document.getElementById('tc-cerrar').onclick = async (e) => {
+    if (contado.value === '') { mostrarMensaje(root, 'Cuenta el efectivo del cajón y escríbelo.', 'error'); return; }
+    if (Number(sig.value || 0) > Number(contado.value)) { mostrarMensaje(root, 'El fondo para mañana no puede ser mayor a lo contado.', 'error'); return; }
+    if (!confirm('¿Cerrar la caja? Ya no se podrá cobrar hasta abrirla de nuevo.')) return;
+    e.target.disabled = true;
+    try {
+      const corte = await api('POST', `/api/cajas/${idCaja}/cerrar`, {
+        efectivoContado: Number(contado.value),
+        fondoSiguiente: Number(sig.value || 0),
+        observaciones: document.getElementById('tc-obs').value.trim() || null,
+      });
+      cont.innerHTML = '';
+      alCerrar(corte);
+    } catch (err) {
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+      e.target.disabled = false;
+    }
+  };
+}
+
+/** Detalle de un corte guardado: lo contado, la diferencia, las ventas por método y los movimientos por motivo. */
+async function pantallaCorte(id) {
+  root.innerHTML = '<div class="vacio">Cargando...</div>';
+  let c;
+  try { c = await api('GET', '/api/cajas/sesiones/' + id); }
+  catch (err) {
+    root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="navegar('#/caja')">Ir a caja</button></div>`;
+    return;
+  }
+  const r = c.resumen;
+  const dif = Number(c.diferencia || 0);
+  const claseDif = Math.abs(dif) < 0.005 ? 'c3' : (dif > 0 ? 'c4' : 'c6');
+  root.innerHTML = `
+    <button class="enlace" onclick="navegar('#/caja')" style="margin-bottom:6px;">${ic('arrow-left')} Volver a caja</button>
+    ${cabeceraPantalla(ic('receipt') + ' Corte #' + c.idsesionCaja, `${escapar(c.nombreCaja)} · ${escapar(c.nombreTienda || '')}`, `<button id="cr-imprimir" class="btn btn-gris">${ic('printer')} Imprimir</button>`)}
+    ${c.modificadaDespuesDelCierre ? '<div class="mensaje info">Después de cerrar entraron movimientos con fecha de este turno (por ejemplo ventas hechas sin conexión). Este corte conserva lo que se contó al cerrar.</div>' : ''}
+    <div class="kp-h">
+      ${kpiH('c1', 'banknote', formatoDinero(c.efectivoEsperado), c.abierta ? 'Efectivo esperado ahora' : 'Efectivo esperado')}
+      ${c.abierta ? '' : kpiH('c3', 'circle-check', formatoDinero(c.efectivoContado), 'Efectivo contado')}
+      ${c.abierta ? '' : kpiH(claseDif, 'triangle-alert', formatoDinero(dif), 'Diferencia')}
+      ${c.abierta ? '' : kpiH('c5', 'lock', formatoDinero(c.fondoSiguiente), 'Se dejó para mañana')}
+    </div>
+    <div class="tarjeta">
+      <h2>Información del turno</h2>
+      <div class="detalle-fila"><span class="k">Abrió</span><span class="v">${escapar(c.usuarioApertura || '')} · ${formatoFecha(c.fechaApertura)}</span></div>
+      ${c.abierta ? '' : `<div class="detalle-fila"><span class="k">Cerró</span><span class="v">${escapar(c.usuarioCierre || '')} · ${formatoFecha(c.fechaCierre)}</span></div>`}
+      <div class="detalle-fila"><span class="k">Fondo inicial</span><span class="v">${formatoDinero(c.fondoInicial)}</span></div>
+      ${c.abierta ? '' : `<div class="detalle-fila"><span class="k">Retirado al cerrar</span><span class="v">${formatoDinero(c.retiroCierre)}</span></div>`}
+      ${c.observaciones ? `<div class="detalle-fila"><span class="k">Observaciones</span><span class="v">${escapar(c.observaciones)}</span></div>` : ''}
+    </div>
+    ${r ? `
+    <div class="dos-cols">
+      <div class="tarjeta">
+        <h2>Ventas (${r.numVentas}) · ${formatoDinero(r.totalVentas)}</h2>
+        ${(r.ventasPorMetodo || []).length ? r.ventasPorMetodo.map(m => `<div class="detalle-fila"><span class="k">${escapar(m.metodo)} (${m.cantidad})</span><span class="v">${formatoDinero(m.total)}</span></div>`).join('') : '<div class="vacio">Sin ventas.</div>'}
+        ${r.ventasCanceladas ? `<div class="ayuda">${r.ventasCanceladas} venta(s) cancelada(s) no se cuentan.</div>` : ''}
+        <div class="detalle-fila"><span class="k">Abonos de clientes (${r.numAbonos})</span><span class="v">${formatoDinero(r.totalAbonos)}</span></div>
+      </div>
+      <div class="tarjeta">
+        <h2>Movimientos de efectivo</h2>
+        ${(r.movimientos || []).length ? r.movimientos.map(m => `<div class="detalle-fila"><span class="k">${m.tipo === 1 ? '+' : '−'} ${escapar(m.motivo)} (${m.cantidad})</span><span class="v ${m.tipo === 1 ? 'monto-ok' : 'monto-rojo'}">${formatoDinero(m.total)}</span></div>`).join('') : '<div class="vacio">Sin movimientos.</div>'}
+        <div class="detalle-fila"><span class="k"><strong>Total entradas</strong></span><span class="v monto-ok">${formatoDinero(r.totalEntradas)}</span></div>
+        <div class="detalle-fila"><span class="k"><strong>Total salidas</strong></span><span class="v monto-rojo">${formatoDinero(r.totalSalidas)}</span></div>
+      </div>
+    </div>` : ''}`;
+  document.getElementById('cr-imprimir').onclick = () => window.print();
+}
 
 /** Fila de lista con círculo de color e inicial (Inicio: últimas ventas, productos con bajo stock). */
 function filaLista(titulo, meta, derecha) {
@@ -3683,10 +3823,16 @@ async function pantallaCaja() {
       <div id="cj-caja"></div>
     </div>
     <div id="cj-form" class="oculto"></div>
+    <div id="cj-turno"></div>
+    <div id="cj-turno-form"></div>
     <div id="cj-saldo"></div>
     <div class="tarjeta">
       <h2>Movimientos de hoy</h2>
       <div id="cj-lista"><div class="vacio">Cargando...</div></div>
+    </div>
+    <div class="tarjeta">
+      <h2 class="h2-ic">${ic('history')} Historial de cortes</h2>
+      <div id="cj-cortes"><div class="vacio">Cargando...</div></div>
     </div>`;
 
   let codti = s.codti;
@@ -3748,8 +3894,61 @@ async function pantallaCaja() {
     }
   }
 
+  /** El turno de la caja (abierta o cerrada) con sus botones, y el historial de cortes. */
+  async function cargarTurnoYCortes() {
+    const cont = document.getElementById('cj-turno');
+    const contForm = document.getElementById('cj-turno-form');
+    contForm.innerHTML = '';
+    try {
+      const t = await api('GET', `/api/cajas/${idCaja}/sesion`);
+      if (t.abierta) {
+        cont.innerHTML = `
+          <div class="tarjeta turno turno-abierto">
+            <div><span class="punto-estado verde"></span><strong>Caja abierta</strong> desde ${formatoFecha(t.fechaApertura)} por ${escapar(t.usuarioApertura)}</div>
+            <div class="ayuda">Fondo inicial ${formatoDinero(t.fondoInicial)} · efectivo esperado <strong>${formatoDinero(t.efectivoEsperado)}</strong>${t.resumen ? ` · ${t.resumen.numVentas} ventas por ${formatoDinero(t.resumen.totalVentas)}` : ''}</div>
+            <div class="grupo-botones"><button id="cj-cerrar" class="btn btn-azul btn-chico">${ic('lock')} Cerrar caja (corte)</button></div>
+          </div>`;
+        document.getElementById('cj-cerrar').onclick = () => formularioCerrarCaja(contForm, idCaja, t, (corte) => { navegar('#/corte/' + corte.idsesionCaja); });
+      } else {
+        cont.innerHTML = `
+          <div class="tarjeta turno turno-cerrado">
+            <div><span class="punto-estado ambar"></span><strong>Caja cerrada</strong></div>
+            <div class="ayuda">Ábrela con su fondo inicial para poder cobrar y mover efectivo.</div>
+            <div class="grupo-botones"><button id="cj-abrir" class="btn btn-azul btn-chico">${ic('lock-open')} Abrir caja</button></div>
+          </div>`;
+        document.getElementById('cj-abrir').onclick = () => formularioAbrirCaja(contForm, idCaja, t.nombreCaja, t.fondoSugerido, cargarSaldoYMovimientos);
+      }
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+    const contCortes = document.getElementById('cj-cortes');
+    try {
+      const cortes = await api('GET', `/api/cajas/${idCaja}/sesiones?limite=30`);
+      contCortes.innerHTML = cortes.length === 0 ? '<div class="vacio">Aún no hay cortes.</div>' : `
+        <div class="tabla-cont"><table class="tabla">
+          <thead><tr><th>#</th><th>Apertura</th><th>Cierre</th><th>Abrió</th><th>Cerró</th><th>Fondo</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr></thead>
+          <tbody>${cortes.map(c => `
+            <tr data-id="${c.idsesionCaja}">
+              <td>${c.idsesionCaja}</td><td>${formatoFecha(c.fechaApertura)}</td><td>${c.abierta ? 'abierta' : formatoFecha(c.fechaCierre)}</td>
+              <td>${escapar(c.usuarioApertura || '')}</td><td>${escapar(c.usuarioCierre || '')}</td>
+              <td>${formatoDinero(c.fondoInicial)}</td>
+              <td>${c.abierta ? '' : formatoDinero(c.efectivoEsperado)}</td><td>${c.abierta ? '' : formatoDinero(c.efectivoContado)}</td>
+              <td class="${Number(c.diferencia) < -0.004 ? 'monto-rojo' : (Number(c.diferencia) > 0.004 ? 'dias-pos' : '')}">${c.abierta ? '' : formatoDinero(c.diferencia)}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>
+        <div class="inv-tarjetas">${cortes.map(c => `
+          <div class="orden-item" data-id="${c.idsesionCaja}">
+            <div class="orden-cab"><span class="orden-folio">Corte #${c.idsesionCaja}</span><span class="pastilla ${c.abierta ? 'recibida' : 'lista'}">${c.abierta ? 'Abierta' : 'Cerrada'}</span></div>
+            <div class="orden-cliente">${formatoFecha(c.fechaApertura)} · ${escapar(c.usuarioApertura || '')}</div>
+            ${c.abierta ? '' : `<div class="orden-meta"><span class="orden-fecha">Contado ${formatoDinero(c.efectivoContado)}</span><span style="font-weight:700;">Dif. ${formatoDinero(c.diferencia)}</span></div>`}
+          </div>`).join('')}</div>`;
+      contCortes.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/corte/' + el.dataset.id));
+    } catch { contCortes.innerHTML = '<div class="vacio">No se pudo cargar el historial.</div>'; }
+  }
+
   async function cargarSaldoYMovimientos() {
     if (idCaja == null) return;
+    cargarTurnoYCortes();
     const contSaldo = document.getElementById('cj-saldo');
     const contLista = document.getElementById('cj-lista');
     contSaldo.innerHTML = '<div class="vacio">Cargando...</div>';
@@ -4751,6 +4950,7 @@ async function pantallaPOS() {
   posCarrito = [];
 
   root.innerHTML = `
+    <div id="pv-turno"></div>
     ${cabeceraPantalla(ic('shopping-cart') + ' Punto de venta', `Vendedor: ${escapar(s.nombreCompleto || s.username)} · ${new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}`)}
     <div class="pos-grid">
     <div class="pos-izq">
@@ -4819,6 +5019,19 @@ async function pantallaPOS() {
   const cajas = await promesaCajas;
   if (cajas) idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0]?.idCaja ?? null;
 
+  // Para cobrar la caja debe estar abierta: si no lo está, se ofrece abrirla aquí mismo
+  const revisarTurno = async () => {
+    const cont = document.getElementById('pv-turno');
+    if (!cont || idCaja == null) return;
+    try {
+      const t = await api('GET', `/api/cajas/${idCaja}/sesion`);
+      if (t.abierta) { cont.innerHTML = ''; return; }
+      cont.innerHTML = '<div class="mensaje info">' + ic('lock') + ' La caja está cerrada: ábrela con su fondo inicial para poder cobrar.</div><div id="pv-turno-form"></div>';
+      formularioAbrirCaja(document.getElementById('pv-turno-form'), idCaja, t.nombreCaja, t.fondoSugerido, revisarTurno);
+    } catch { /* sin conexión: no se bloquea nada aquí; el servidor decide al cobrar */ }
+  };
+  revisarTurno();
+
   const contResultados = document.getElementById('pv-resultados');
   // Filtro por categoría: sin escribir nada muestra lo que hay de esa categoría (con existencia primero)
   const contChips = document.getElementById('pv-chips');
@@ -4835,8 +5048,8 @@ async function pantallaPOS() {
   };
   const mostrarResultados = () => {
     const q = inputBuscar.value.trim();
-    // En celular el carrito queda debajo del catálogo: no se llena la pantalla hasta que se busque o se elija una categoría
-    if (q.length < 2 && !categoriaSel && window.innerWidth < 900) { contResultados.innerHTML = ''; return; }
+    // El catálogo no se muestra completo: solo cuando se busca algo o se elige una categoría
+    if (q.length < 2 && !categoriaSel) { contResultados.innerHTML = '<div class="vacio">Escribe en el buscador para ver productos.</div>'; return; }
     let lista = q.length >= 2 ? filtrarProductos(productos, q) : productos;
     if (categoriaSel) lista = lista.filter(p => (p.categoriaPrincipal || p.nombreCategoria) === categoriaSel);
     if (q.length < 2) lista = lista.filter(hayExistencia).sort((a, b) => a.nombreProductoMaster.localeCompare(b.nombreProductoMaster, 'es'));
@@ -4901,6 +5114,7 @@ async function pantallaPOS() {
       setTimeout(() => pantallaPOS(), 1200);
     } catch (err) {
       mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: esta venta no se guardó. Usa JSystem en la tienda mientras tanto.' : err.message, 'error');
+      if (!err.network && /cerrada/.test(err.message || '')) revisarTurno();
       e.target.disabled = false;
       e.target.innerHTML = ic('banknote') + ' Cobrar';
     }
