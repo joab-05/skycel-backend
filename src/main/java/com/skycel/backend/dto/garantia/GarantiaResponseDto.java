@@ -13,7 +13,11 @@ public class GarantiaResponseDto {
 
     private Integer idgarantia;
     private String  folio;
+    /** null cuando el producto se vendió con el sistema anterior. */
     private Integer idventa;
+    /** true si el producto se vendió antes de este sistema (se capturó a mano). */
+    private Boolean ventaAnterior;
+    private String  folioVentaAnterior;
 
     // ── Producto ──────────────────────────────────────────────────────────────
     private String codpro;

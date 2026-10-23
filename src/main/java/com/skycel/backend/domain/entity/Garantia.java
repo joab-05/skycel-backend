@@ -28,17 +28,44 @@ public class Garantia {
     @Column(name = "idgarantia")
     private Integer idgarantia;
 
-    /** La venta original. */
+    /** La venta original. Es null cuando el producto se vendió con el sistema anterior ({@link #ventaAnterior}). */
     @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "idventa", nullable = false)
+    @JoinColumn(name = "idventa")
     private Venta venta;
 
-    /** El producto (en la tienda que lo vendió) al que pertenece el equipo o accesorio reclamado. */
+    /**
+     * El producto (en la tienda que lo vendió) al que pertenece el equipo o accesorio reclamado. Es null cuando el
+     * producto se vendió con el sistema anterior: ya no existe en este inventario.
+     */
     @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "idproducto", nullable = false)
+    @JoinColumn(name = "idproducto")
     private Producto producto;
+
+    // ── Ventas del sistema anterior ───────────────────────────────────────────
+
+    /** true si el producto se vendió antes de este sistema: no hay venta ni producto aquí, se captura a mano. */
+    @Builder.Default
+    @Column(name = "venta_anterior", nullable = false, columnDefinition = "TINYINT(1) NOT NULL DEFAULT 0")
+    private Boolean ventaAnterior = false;
+
+    @Column(name = "nombre_producto_anterior", length = 255)
+    private String nombreProductoAnterior;
+
+    /** CELULAR (equipo) o ACCESORIO. */
+    @Column(name = "tipo_producto_anterior", length = 20)
+    private String tipoProductoAnterior;
+
+    @Column(name = "fecha_compra_anterior")
+    private LocalDate fechaCompraAnterior;
+
+    @Column(name = "dias_garantia_anterior")
+    private Integer diasGarantiaAnterior;
+
+    /** Número de ticket o venta del sistema anterior, si el cliente lo trae (solo para rastrear). */
+    @Column(name = "folio_venta_anterior", length = 40)
+    private String folioVentaAnterior;
 
     /** Quien recibió el equipo e hizo la inspección inicial. */
     @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)

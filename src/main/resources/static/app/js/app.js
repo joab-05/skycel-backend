@@ -1942,6 +1942,8 @@ async function pantallaGarantiaDetalle(id) {
     ${cabeceraPantalla(escapar(g.folio), `${escapar(g.nombreProducto)} · ingresó ${formatoFecha(g.fechaIngreso)}`, pastillaGarantia(g))}
     <div class="tarjeta">
       <h2>Información de la garantía</h2>
+      ${g.ventaAnterior ? `<div class="detalle-fila"><span class="k">Compra</span><span class="v">Sistema anterior${g.folioVentaAnterior ? ' · ticket ' + escapar(g.folioVentaAnterior) : ''} · ${escapar(g.fechaVentaOriginal || '—')} · cubría hasta ${escapar(g.garantiaVigenteHasta || '—')}</span></div>`
+        : `<div class="detalle-fila"><span class="k">Venta</span><span class="v">#${g.idventa}${g.fechaVentaOriginal ? ' · ' + escapar(g.fechaVentaOriginal) : ''}</span></div>`}
       <div class="detalle-fila"><span class="k">Producto</span><span class="v">${escapar(g.nombreProducto)}</span></div>
       <div class="detalle-fila"><span class="k">IMEI/Serie</span><span class="v">${escapar(g.imei || '—')}</span></div>
       <div class="detalle-fila"><span class="k">Contacto</span><span class="v">${escapar(g.nombreContacto || '—')}</span></div>

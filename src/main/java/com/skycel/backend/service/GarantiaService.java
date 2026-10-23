@@ -75,6 +75,10 @@ public class GarantiaService {
     private final UsuarioRepository           usuarioRepository;
     private final CategoriaFolioRepository    categoriaFolioRepository;
     private final NotificacionService         notificacionService;
+    private final ProveedorRepository         proveedorRepository;
+
+    /** Tope razonable de días de garantía que se acepta capturar a mano (3 años). */
+    private static final int MAX_DIAS_GARANTIA_ANTERIOR = 1095;
 
     /** Lo que se necesita saber de un producto vendido para reclamarle la garantía. */
     private record Cobertura(Venta venta, Producto producto, ProductoMaster master, String imei, int dias, LocalDate fechaVenta, LocalDate vence) {}
@@ -85,6 +89,14 @@ public class GarantiaService {
     public GarantiaResponseDto crear(GarantiaRequestDto dto, String username) {
         Usuario usuario = usuarioPorUsername(username);
         Tienda tienda = tiendaQueOpera(dto.getCodti(), usuario);
+
+        if (Boolean.TRUE.equals(dto.getVentaAnterior())) {
+            return crearDeVentaAnterior(dto, usuario, tienda);
+        }
+        if (dto.getIdventa() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Indique la venta (idventa), o marque que el producto se vendió con el sistema anterior.");
+        }
 
         Cobertura c = evaluar(dto.getIdventa(), dto.getImei(), dto.getCodpro());
 
@@ -120,6 +132,83 @@ public class GarantiaService {
                 .fechaLimiteSolucion(sumarDiasHabiles(hoy, DIAS_HABILES_SOLUCION))
                 .build());
         registrar(g, usuario, "Producto recibido en " + tienda.getNombre()
+                + (g.getDiagnosticoInicial() != null ? ". Estado: " + g.getDiagnosticoInicial() : ""));
+        return toDto(g);
+    }
+
+    /**
+     * Reclamo de un producto que se vendió con el sistema anterior: aquí no hay venta ni producto, así que se captura a
+     * mano lo mínimo para decidir si aún tiene garantía (qué es, cuándo se compró y cuántos días cubría) y se sigue el
+     * mismo camino que cualquier otra garantía. La vigencia se exige igual que con una venta de este sistema.
+     */
+    private GarantiaResponseDto crearDeVentaAnterior(GarantiaRequestDto dto, Usuario usuario, Tienda tienda) {
+        String nombreProducto = trimOrNull(dto.getNombreProducto());
+        if (nombreProducto == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique qué producto es (nombreProducto).");
+        }
+        if (dto.getFechaCompra() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique cuándo se compró (fechaCompra).");
+        }
+        LocalDate hoy = LocalDate.now();
+        if (dto.getFechaCompra().isAfter(hoy)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha de compra no puede ser futura.");
+        }
+        Integer dias = dto.getDiasGarantia();
+        if (dias == null || dias <= 0 || dias > MAX_DIAS_GARANTIA_ANTERIOR) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Indique los días de garantía que tenía el producto (de 1 a " + MAX_DIAS_GARANTIA_ANTERIOR + ").");
+        }
+        LocalDate vence = dto.getFechaCompra().plusDays(dias);
+        if (hoy.isAfter(vence)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La garantía de '" + nombreProducto + "' venció el " + vence + " (compra del " + dto.getFechaCompra() + ", " + dias + " días).");
+        }
+
+        String imei = trimOrNull(dto.getImei());
+        if (imei != null) {
+            boolean yaAbierta = garantiaRepository.findByImei(imei).stream().anyMatch(g -> g.getEstadoActual() != ENTREGADO);
+            if (yaAbierta) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya hay una garantía abierta para el IMEI o serie '" + imei + "'.");
+            }
+        }
+
+        String nombre = trimOrNull(dto.getNombreContacto());
+        String telefono = trimOrNull(dto.getTelefonoContacto());
+        if (nombre == null || telefono == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Indique el nombre y el teléfono de contacto (nombreContacto y telefonoContacto).");
+        }
+        if (digitos(telefono).length() < 4) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El teléfono de contacto debe tener al menos 4 dígitos.");
+        }
+
+        Proveedor proveedor = null;
+        if (dto.getIdProveedor() != null) {
+            proveedor = proveedorRepository.findById(dto.getIdProveedor())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Proveedor no encontrado: " + dto.getIdProveedor()));
+        }
+        String tipo = trimOrNull(dto.getTipoProducto());
+        tipo = tipo != null ? tipo.toUpperCase() : (imei != null ? "CELULAR" : "ACCESORIO");
+
+        Garantia g = garantiaRepository.save(Garantia.builder()
+                .ventaAnterior(true)
+                .nombreProductoAnterior(nombreProducto).tipoProductoAnterior(tipo)
+                .fechaCompraAnterior(dto.getFechaCompra()).diasGarantiaAnterior(dias)
+                .folioVentaAnterior(trimOrNull(dto.getFolioVentaAnterior()))
+                .usuarioRecibe(usuario).tienda(tienda)
+                .folioSeguimiento(siguienteFolio())
+                .imei(imei)
+                .fallaReportada(dto.getFallaReportada().trim())
+                .diagnosticoInicial(trimOrNull(dto.getDiagnosticoInicial()))
+                .nombreContacto(nombre).telefonoContacto(telefono)
+                .proveedor(proveedor)
+                .estadoActual(RECIBIDO_SUCURSAL)
+                .fechaLimiteSolucion(sumarDiasHabiles(hoy, DIAS_HABILES_SOLUCION))
+                .build());
+        registrar(g, usuario, "Producto recibido en " + tienda.getNombre()
+                + " (venta del sistema anterior"
+                + (g.getFolioVentaAnterior() != null ? ", folio " + g.getFolioVentaAnterior() : "")
+                + ", comprado el " + g.getFechaCompraAnterior() + ")"
                 + (g.getDiagnosticoInicial() != null ? ". Estado: " + g.getDiagnosticoInicial() : ""));
         return toDto(g);
     }
@@ -249,7 +338,7 @@ public class GarantiaService {
                 : (g.getImei().length() > 4 ? "•".repeat(g.getImei().length() - 4) + g.getImei().substring(g.getImei().length() - 4) : g.getImei());
         return GarantiaPublicaResponseDto.builder()
                 .folio(g.getFolioSeguimiento())
-                .producto(g.getProducto().getProductoMaster().getNombreBase())
+                .producto(nombreDelProducto(g))
                 .imei(imei)
                 .sucursal(g.getTienda().getNombre())
                 .fechaIngreso(g.getFechaIngreso())
@@ -392,15 +481,27 @@ public class GarantiaService {
     // ── Mapeo ────────────────────────────────────────────────────────────────
 
     private GarantiaResponseDto toDto(Garantia g) {
-        ProductoMaster master = g.getProducto().getProductoMaster();
-        LocalDate fechaVenta = g.getVenta().getFechaVenta() != null ? g.getVenta().getFechaVenta().toLocalDate() : null;
-        LocalDate vigenteHasta = fechaVenta != null && master.getDiasGarantia() != null ? fechaVenta.plusDays(master.getDiasGarantia()) : null;
+        boolean anterior = Boolean.TRUE.equals(g.getVentaAnterior()) || g.getVenta() == null || g.getProducto() == null;
+        ProductoMaster master = anterior ? null : g.getProducto().getProductoMaster();
+        LocalDate fechaVenta;
+        LocalDate vigenteHasta;
+        if (anterior) {
+            fechaVenta = g.getFechaCompraAnterior();
+            vigenteHasta = fechaVenta != null && g.getDiasGarantiaAnterior() != null ? fechaVenta.plusDays(g.getDiasGarantiaAnterior()) : null;
+        } else {
+            fechaVenta = g.getVenta().getFechaVenta() != null ? g.getVenta().getFechaVenta().toLocalDate() : null;
+            vigenteHasta = fechaVenta != null && master.getDiasGarantia() != null ? fechaVenta.plusDays(master.getDiasGarantia()) : null;
+        }
         boolean abierta = g.getEstadoActual() != ENTREGADO;
         Long restantes = abierta && g.getFechaLimiteSolucion() != null ? ChronoUnit.DAYS.between(LocalDate.now(), g.getFechaLimiteSolucion()) : null;
 
         return GarantiaResponseDto.builder()
-                .idgarantia(g.getIdgarantia()).folio(g.getFolioSeguimiento()).idventa(g.getVenta().getIdventa())
-                .codpro(g.getProducto().getCodpro()).nombreProducto(master.getNombreBase()).tipoProducto(master.getTipo().name())
+                .idgarantia(g.getIdgarantia()).folio(g.getFolioSeguimiento())
+                .idventa(anterior ? null : g.getVenta().getIdventa())
+                .ventaAnterior(anterior).folioVentaAnterior(g.getFolioVentaAnterior())
+                .codpro(anterior ? null : g.getProducto().getCodpro())
+                .nombreProducto(nombreDelProducto(g))
+                .tipoProducto(anterior ? g.getTipoProductoAnterior() : master.getTipo().name())
                 .imei(g.getImei()).fechaVentaOriginal(fechaVenta).garantiaVigenteHasta(vigenteHasta)
                 .codti(g.getTienda().getCodti()).nombreTienda(g.getTienda().getNombre())
                 .idusuarioRecibe(g.getUsuarioRecibe().getIdusuario()).nombreRecibe(g.getUsuarioRecibe().getNombreCompleto())
@@ -418,6 +519,14 @@ public class GarantiaService {
                                 .fecha(h.getFechaMovimiento()).build())
                         .collect(Collectors.toList()))
                 .build();
+    }
+
+    /** El nombre del producto: el del catálogo o, en una venta del sistema anterior, el que se capturó. */
+    private String nombreDelProducto(Garantia g) {
+        if (g.getProducto() != null && g.getProducto().getProductoMaster() != null) {
+            return g.getProducto().getProductoMaster().getNombreBase();
+        }
+        return g.getNombreProductoAnterior();
     }
 
     private String estadoDisplay(Byte estado) {

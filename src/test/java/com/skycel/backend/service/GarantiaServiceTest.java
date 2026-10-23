@@ -46,6 +46,7 @@ class GarantiaServiceTest {
     @Mock private UsuarioRepository           usuarioRepository;
     @Mock private CategoriaFolioRepository    categoriaFolioRepository;
     @Mock private NotificacionService         notificacionService;
+    @Mock private ProveedorRepository         proveedorRepository;
 
     @InjectMocks
     private GarantiaService service;
@@ -116,8 +117,11 @@ class GarantiaServiceTest {
         lenient().when(garantiaRepository.findByFolioSeguimiento(anyString())).thenAnswer(inv ->
                 garantias.values().stream().filter(g -> g.getFolioSeguimiento().equals(inv.getArgument(0))).findFirst());
         lenient().when(garantiaRepository.findByVenta_IdventaAndProducto_Idproducto(anyInt(), anyInt())).thenAnswer(inv ->
-                garantias.values().stream().filter(g -> g.getVenta().getIdventa().equals(inv.getArgument(0))
+                garantias.values().stream().filter(g -> g.getVenta() != null && g.getVenta().getIdventa().equals(inv.getArgument(0))
                         && g.getProducto().getIdproducto().equals(inv.getArgument(1))).collect(Collectors.toList()));
+        lenient().when(garantiaRepository.findByImei(anyString())).thenAnswer(inv ->
+                garantias.values().stream().filter(g -> inv.getArgument(0).equals(g.getImei())).collect(Collectors.toList()));
+        lenient().when(proveedorRepository.findById((short) 2)).thenReturn(Optional.of(proveedor));
         lenient().when(historialRepository.save(any(GarantiaHistorial.class))).thenAnswer(inv -> {
             GarantiaHistorial h = inv.getArgument(0);
             h.setFechaMovimiento(LocalDateTime.now());
@@ -594,6 +598,119 @@ class GarantiaServiceTest {
 
             assertThat(r.toString()).doesNotContain("Sofia", "7571200001", "ABIGAIL", "Golpe visible", "pagó de más");
             assertThat(r.getMensaje()).contains("no procedió");
+        }
+    }
+
+    // ── Productos vendidos con el sistema anterior ───────────────────────────
+
+    private GarantiaRequestDto reclamoAnterior(String producto, int diasDeCompra, int diasGarantia, String imei) {
+        GarantiaRequestDto d = new GarantiaRequestDto();
+        d.setVentaAnterior(true);
+        d.setNombreProducto(producto);
+        d.setFechaCompra(LocalDate.now().minusDays(diasDeCompra));
+        d.setDiasGarantia(diasGarantia);
+        d.setImei(imei);
+        d.setFallaReportada("No enciende");
+        d.setNombreContacto("Pedro Mostrador");
+        d.setTelefonoContacto("7571110000");
+        return d;
+    }
+
+    @Nested
+    @DisplayName("producto vendido con el sistema anterior")
+    class VentaAnterior {
+
+        @Test
+        @DisplayName("se recibe sin venta ni producto: toma lo capturado, calcula la vigencia y deja la nota en la bitácora")
+        void recibe() {
+            GarantiaRequestDto d = reclamoAnterior("Samsung Galaxy A15 128gb", 100, 365, "352000000000999");
+            d.setFolioVentaAnterior("V-88231");
+            d.setIdProveedor((short) 2);
+
+            GarantiaResponseDto r = service.crear(d, "abigail");
+
+            assertThat(r.getVentaAnterior()).isTrue();
+            assertThat(r.getIdventa()).isNull();
+            assertThat(r.getCodpro()).isNull();
+            assertThat(r.getFolioVentaAnterior()).isEqualTo("V-88231");
+            assertThat(r.getNombreProducto()).isEqualTo("Samsung Galaxy A15 128gb");
+            assertThat(r.getTipoProducto()).isEqualTo("CELULAR");
+            assertThat(r.getFechaVentaOriginal()).isEqualTo(LocalDate.now().minusDays(100));
+            assertThat(r.getGarantiaVigenteHasta()).isEqualTo(LocalDate.now().minusDays(100).plusDays(365));
+            assertThat(r.getProveedor()).isEqualTo("Mayorista Movil MX");
+            assertThat(r.getEstado()).isEqualTo((byte) 1);
+            assertThat(r.getNombreContacto()).isEqualTo("Pedro Mostrador");
+            assertThat(r.getHistorial()).hasSize(1);
+            assertThat(r.getHistorial().get(0).getComentario()).contains("sistema anterior").contains("V-88231");
+        }
+
+        @Test
+        @DisplayName("sin IMEI se toma como accesorio, y el tipo capturado manda")
+        void tipo() {
+            assertThat(service.crear(reclamoAnterior("Funda Silicon", 5, 30, null), "abigail").getTipoProducto()).isEqualTo("ACCESORIO");
+
+            GarantiaRequestDto d = reclamoAnterior("Tablet Lenovo", 5, 365, null);
+            d.setTipoProducto("tablet");
+            assertThat(service.crear(d, "abigail").getTipoProducto()).isEqualTo("TABLET");
+        }
+
+        @Test
+        @DisplayName("si ya pasó la vigencia, se rechaza igual que con una venta de este sistema")
+        void vencida() {
+            assertEstado(HttpStatus.CONFLICT, () -> service.crear(reclamoAnterior("Samsung A15", 400, 365, null), "abigail"));
+            assertThat(garantias).isEmpty();
+        }
+
+        @Test
+        @DisplayName("exige producto, fecha de compra (no futura), días de garantía y contacto")
+        void datosObligatorios() {
+            GarantiaRequestDto sinNombre = reclamoAnterior("  ", 5, 365, null);
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(sinNombre, "abigail"));
+
+            GarantiaRequestDto sinFecha = reclamoAnterior("Samsung A15", 5, 365, null);
+            sinFecha.setFechaCompra(null);
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(sinFecha, "abigail"));
+
+            GarantiaRequestDto futura = reclamoAnterior("Samsung A15", 5, 365, null);
+            futura.setFechaCompra(LocalDate.now().plusDays(1));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(futura, "abigail"));
+
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(reclamoAnterior("Samsung A15", 5, 0, null), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(reclamoAnterior("Samsung A15", 5, 5000, null), "abigail"));
+
+            GarantiaRequestDto sinContacto = reclamoAnterior("Samsung A15", 5, 365, null);
+            sinContacto.setNombreContacto(null);
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(sinContacto, "abigail"));
+            assertThat(garantias).isEmpty();
+        }
+
+        @Test
+        @DisplayName("el mismo IMEI no puede tener dos reclamos abiertos")
+        void duplicada() {
+            service.crear(reclamoAnterior("Samsung A15", 5, 365, "352000000000999"), "abigail");
+            assertEstado(HttpStatus.CONFLICT, () -> service.crear(reclamoAnterior("Samsung A15", 5, 365, "352000000000999"), "abigail"));
+            assertThat(garantias).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("sigue el mismo camino de estados y el cliente la consulta con folio y teléfono")
+        void avanceYConsultaPublica() {
+            GarantiaResponseDto r = service.crear(reclamoAnterior("Samsung Galaxy A15", 10, 365, "352000000000999"), "abigail");
+
+            service.avanzar(r.getIdgarantia(), paso(2, null), "abigail");
+            assertThat(service.obtener(r.getIdgarantia(), "abigail").getEstadoDisplay()).isEqualTo("En tránsito a bodega");
+
+            GarantiaPublicaResponseDto publica = service.consultaPublica(r.getFolio(), "7571110000");
+            assertThat(publica.getProducto()).isEqualTo("Samsung Galaxy A15");
+            assertThat(publica.getImei()).endsWith("0999");
+        }
+
+        @Test
+        @DisplayName("una venta de este sistema sin idventa ni marca de venta anterior se rechaza")
+        void sinVenta() {
+            GarantiaRequestDto d = reclamo(500, IMEI, null);
+            d.setIdventa(null);
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(d, "abigail"));
         }
     }
 }

@@ -14,6 +14,9 @@ public interface GarantiaRepository extends JpaRepository<Garantia, Integer> {
 
     Optional<Garantia> findByFolioSeguimiento(String folioSeguimiento);
 
+    /** Reclamos de un IMEI o serie (para no abrir dos a la vez sobre un equipo de una venta anterior al sistema). */
+    List<Garantia> findByImei(String imei);
+
     /** Reclamos de una venta sobre un producto (para no abrir dos a la vez sobre el mismo equipo). */
     List<Garantia> findByVenta_IdventaAndProducto_Idproducto(Integer idventa, Integer idproducto);
 
