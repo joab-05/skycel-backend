@@ -23,6 +23,7 @@ public class RecepcionRequestDto {
 
     @Data
     public static class FaltanteDto {
+        /** Solo accesorios; un equipo se reporta por sus IMEI. */
         private String codpro;
         /** Accesorios: cuánto no llegó. */
         private BigDecimal cantidad;

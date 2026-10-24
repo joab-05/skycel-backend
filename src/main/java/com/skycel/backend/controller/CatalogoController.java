@@ -48,7 +48,7 @@ public class CatalogoController {
     @Operation(summary = "Cambiar el nombre de un color", description = "Renombra también los artículos que lo llevan en su nombre.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/colores/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<CatalogoSimpleResponseDTO>> actualizarColor(@PathVariable Short id,
                                                                                          @Valid @RequestBody CatalogoSimpleRequestDTO request) {
         return ResponseEntityBuilder.updated(catalogoService.actualizarColor(id, request), "color");
@@ -57,7 +57,7 @@ public class CatalogoController {
     @Operation(summary = "Eliminar un color que ya no sirve", description = "Solo si ningún producto o artículo activo lo usa. Es lógica.")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/colores/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<java.util.Map<String, String>> eliminarColor(@PathVariable Short id) {
         catalogoService.eliminarColor(id);
         return ResponseEntity.ok(java.util.Map.of("mensaje", "Color eliminado."));
@@ -66,7 +66,7 @@ public class CatalogoController {
     @Operation(summary = "Eliminar un proveedor que ya no sirve", description = "Solo si ningún producto activo lo usa. Es lógica.")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/proveedores/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<java.util.Map<String, String>> eliminarProveedor(@PathVariable Short id) {
         catalogoService.eliminarProveedor(id);
         return ResponseEntity.ok(java.util.Map.of("mensaje", "Proveedor eliminado."));
@@ -75,7 +75,7 @@ public class CatalogoController {
     @Operation(summary = "Actualizar proveedor")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/proveedores/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<ProveedorResponseDTO>> actualizarProveedor(
             @PathVariable Short id,
             @Valid @RequestBody ProveedorRequestDTO request) {
@@ -97,7 +97,7 @@ public class CatalogoController {
     @ApiResponses({ @ApiResponse(responseCode = "201", description = "Categoria creada exitosamente"), @ApiResponse(responseCode = "400", description = "Datos inválidos"), @ApiResponse(responseCode = "409", description = "Ya existe categoria con ese nombre"), @ApiResponse(responseCode = "401", description = "No autenticado")})
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/categorias")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<CategoriaResponseDTO>> crearCategoria(@Valid @RequestBody CategoriaRequestDTO request) {
         return ResponseEntityBuilder.created(catalogoService.crearCategoria(request),"categoria");
     }
@@ -106,7 +106,7 @@ public class CatalogoController {
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Categoria actualizada exitosamente"), @ApiResponse(responseCode = "400", description = "Datos inválidos"), @ApiResponse(responseCode = "404", description = "Categoria no encontrada"), @ApiResponse(responseCode = "409", description = "Ya existe otra categoria con ese nombre"), @ApiResponse(responseCode = "401", description = "No autenticado")})
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/categorias/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<CategoriaResponseDTO>> actualizarCategoria(@PathVariable Short id, @Valid @RequestBody CategoriaRequestDTO request) {
         return ResponseEntityBuilder.updated(catalogoService.actualizarCategoria(id, request), "categoria");
     }
@@ -125,7 +125,7 @@ public class CatalogoController {
     @Operation(summary = "Crear color", description = "Crea un nuevo color")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/colores")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<CatalogoSimpleResponseDTO>> crearColor(@Valid @RequestBody CatalogoSimpleRequestDTO request) {
         return ResponseEntityBuilder.created(catalogoService.crearColor(request),"color");
     }
@@ -141,7 +141,7 @@ public class CatalogoController {
     @ApiResponses({ @ApiResponse(responseCode = "201", description = "Magnitud creada exitosamente"), @ApiResponse(responseCode = "400", description = "Datos inválidos"), @ApiResponse(responseCode = "409", description = "Ya existe magnitud con ese nombre"), @ApiResponse(responseCode = "401", description = "No autenticado")})
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/magnitudes")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<MagnitudResponseDTO>> crearMagnitud(@Valid @RequestBody com.skycel.backend.domain.dto.request.MagnitudRequestDTO request) {
         return ResponseEntityBuilder.created(catalogoService.crearMagnitud(request),"magnitud");
     }
@@ -149,7 +149,7 @@ public class CatalogoController {
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Magnitud actualizada exitosamente")})
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/magnitudes/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<MagnitudResponseDTO>> actualizarMagnitud(@PathVariable Short id, @Valid @RequestBody MagnitudRequestDTO request) {
         return ResponseEntityBuilder.updated(catalogoService.actualizarMagnitud(id, request),"magnitud");
     }
@@ -164,7 +164,7 @@ public class CatalogoController {
     @Operation(summary = "Crear proveedor", description = "Crea un nuevo proveedor con datos fiscales detallados")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/proveedores")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<ProveedorResponseDTO>> crearProveedor(@Valid @RequestBody com.skycel.backend.domain.dto.request.ProveedorRequestDTO request) {
         return ResponseEntityBuilder.created(catalogoService.crearProveedor(request),"proveedor");
     }
@@ -179,14 +179,14 @@ public class CatalogoController {
     @Operation(summary = "Crear sección", description = "Crea una nueva sección física en tienda")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/secciones")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<StandardApiResponse<SeccionResponseDTO>> crearSeccion(@Valid @RequestBody SeccionRequestDTO request) {
         return ResponseEntityBuilder.created(catalogoService.crearSeccion(request), "seccion");
     }
 
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{tipo}/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     @Operation(summary = "Desactivar registros (Soft Delete) ", description = "Realiza un borrado lógico dado un catálogo y su ID. Tipos válidos: 'color', 'magnitud', 'proveedor', 'seccion'")
     @ApiResponses({@ApiResponse(responseCode = "204", description = "Eliminacion exitosa"), @ApiResponse(responseCode = "404", description = "No encontrada"), @ApiResponse(responseCode = "401", description = "No autenticado")})
     public ResponseEntity<StandardApiResponse<Void>> eliminarCatalogoSimple(@PathVariable String tipo, @PathVariable Short id) {

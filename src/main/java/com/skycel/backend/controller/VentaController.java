@@ -34,7 +34,7 @@ public class VentaController {
     @Operation(summary = "Registrar una venta")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')")
+    @PreAuthorize("@permisos.tiene('VENTA_CREAR')")
     public ResponseEntity<StandardApiResponse<VentaResponseDto>> crear(
             @Valid @RequestBody VentaRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -83,7 +83,7 @@ public class VentaController {
     @Operation(summary = "Listar ventas de una tienda en un rango de fechas (por defecto, el día de hoy)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('VENTA_HISTORIAL')")
     public ResponseEntity<StandardApiResponse<List<VentaResponseDto>>> listarPorTienda(
             @PathVariable Integer codti,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime desde,
@@ -102,7 +102,7 @@ public class VentaController {
     @Operation(summary = "Listar ventas de un cliente")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/cliente/{idcliente}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('VENTA_HISTORIAL')")
     public ResponseEntity<StandardApiResponse<List<VentaResponseDto>>> listarPorCliente(
             @PathVariable Integer idcliente) {
         return ResponseEntityBuilder.ok(ventaService.listarPorCliente(idcliente), "ventas");
@@ -111,7 +111,7 @@ public class VentaController {
     @Operation(summary = "Cancelar una venta (revierte stock e IMEIs)")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/cancelar")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('VENTA_CANCELAR')")
     public ResponseEntity<StandardApiResponse<VentaResponseDto>> cancelar(
             @PathVariable Integer id,
             @AuthenticationPrincipal UserDetails userDetails) {

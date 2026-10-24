@@ -25,8 +25,15 @@ public class TraspasoDetalle {
     @JoinColumn(name = "idtraspaso", nullable = false)
     private Traspaso traspaso;
 
-    @Column(name = "codpro", nullable = false, length = 25)
+    /** Código del producto (accesorios). Vacío en un equipo: el equipo se identifica por su IMEI. */
+    @Column(name = "codpro", length = 25)
     private String codpro;
+
+    /** El artículo de un equipo (en una solicitud, lo que se pide; en un envío, el de la unidad que viaja). */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idprodmaster")
+    private ProductoMaster productoMaster;
 
     @Column(name = "cantidad", nullable = false, precision = 10, scale = 2)
     private BigDecimal cantidad;

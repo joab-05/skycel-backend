@@ -317,6 +317,30 @@ class OrdenServicioServiceTest {
         }
 
         @Test
+        @DisplayName("con tiempo estimado en horas: promete el día y la hora (recepción + horas) y manda sobre la fecha")
+        void horasEstimadas() {
+            OrdenServicioRequestDto dto = recepcion();
+            dto.setHorasEstimadas(30);
+            dto.setFechaPromesa(LocalDate.now().plusDays(10));
+
+            OrdenServicioResponseDto r = service.crear(dto, "abigail");
+
+            assertThat(r.getHorasEstimadas()).isEqualTo(30);
+            assertThat(r.getFechaPromesaHora()).isBetween(LocalDateTime.now().plusHours(30).minusMinutes(1), LocalDateTime.now().plusHours(30).plusMinutes(1));
+            assertThat(r.getFechaPromesa()).isEqualTo(r.getFechaPromesaHora().toLocalDate());
+        }
+
+        @Test
+        @DisplayName("las horas estimadas van de 1 a 720: 0 o 721 dan 400")
+        void horasFueraDeRango() {
+            for (int horas : new int[]{0, 721}) {
+                OrdenServicioRequestDto dto = recepcion();
+                dto.setHorasEstimadas(horas);
+                assertThatThrownBy(() -> service.crear(dto, "abigail")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("1 a 720");
+            }
+        }
+
+        @Test
         @DisplayName("los folios son consecutivos")
         void folios() {
             assertThat(service.crear(recepcion(), "abigail").getFolio()).isEqualTo("OS-000001");

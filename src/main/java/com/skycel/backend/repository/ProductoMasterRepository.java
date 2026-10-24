@@ -13,6 +13,10 @@ public interface ProductoMasterRepository extends JpaRepository<ProductoMaster, 
     
     List<ProductoMaster> findByActivoTrue();
 
+    /** Equipos con un mínimo de existencias definido (para avisar cuando una sucursal se queda corta). */
+    List<ProductoMaster> findByTipoInAndStockMinimoEquiposGreaterThanAndActivoTrue(
+            java.util.Collection<com.skycel.backend.domain.enums.TipoProducto> tipos, Integer minimo);
+
     Optional<ProductoMaster> findByNombreBaseIgnoreCaseAndActivoTrue(String nombreBase);
     
     List<ProductoMaster> findByCategoria_IdcatAndActivoTrue(Short idcat);

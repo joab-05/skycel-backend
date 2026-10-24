@@ -47,6 +47,7 @@ class TraspasoServiceTest {
     @Mock private UsuarioRepository         usuarioRepository;
     @Mock private ProductoRepository        productoRepository;
     @Mock private ProductoImeiRepository    productoImeiRepository;
+    @Mock private ProductoMasterRepository  productoMasterRepository;
     @Mock private ProductoService           productoService;
     @Mock private MovimientoInventarioService movimientoInventarioService;
     @Mock private NotificacionService       notificacionService;
@@ -131,6 +132,7 @@ class TraspasoServiceTest {
         });
         lenient().when(productoImeiRepository.findByImei(anyString())).thenAnswer(inv -> Optional.ofNullable(imeis.get((String) inv.getArgument(0))));
         lenient().when(productoImeiRepository.save(any(ProductoImei.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(productoMasterRepository.findById(1)).thenReturn(Optional.of(celular));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -147,10 +149,28 @@ class TraspasoServiceTest {
         return p;
     }
 
-    private ProductoImei unidad(Producto p, String imei) {
-        ProductoImei pi = ProductoImei.builder().id((long) siguienteId++).producto(p).imei(imei).estado("DISPONIBLE").build();
+    /** Un equipo (celular) en una sucursal: se identifica por su IMEI, sin código de producto. */
+    private ProductoImei equipo(Tienda t, String imei) {
+        ProductoImei pi = ProductoImei.builder().id((long) siguienteId++).productoMaster(celular).tienda(t).imei(imei)
+                .estado("DISPONIBLE").precioVenta(new BigDecimal("3000")).costo(new BigDecimal("2000")).build();
         imeis.put(imei, pi);
         return pi;
+    }
+
+    /** Un renglón de equipos: solo los IMEI que viajan (y, si se quiere, la cantidad que se declara). */
+    private TraspasoLineaRequestDto lineaEquipos(String cantidad, String... imeisViajan) {
+        TraspasoLineaRequestDto l = new TraspasoLineaRequestDto();
+        l.setCantidad(cantidad == null ? null : new BigDecimal(cantidad));
+        l.setImeis(imeisViajan.length == 0 ? null : List.of(imeisViajan));
+        return l;
+    }
+
+    /** Pedir equipos: el artículo y cuántos. */
+    private TraspasoLineaRequestDto pedidoEquipos(int idprodmaster, String cantidad) {
+        TraspasoLineaRequestDto l = new TraspasoLineaRequestDto();
+        l.setIdprodmaster(idprodmaster);
+        l.setCantidad(new BigDecimal(cantidad));
+        return l;
     }
 
     private TraspasoLineaRequestDto linea(String codpro, String cantidad, String... imeisViajan) {
@@ -223,23 +243,30 @@ class TraspasoServiceTest {
         }
 
         @Test
-        @DisplayName("equipos: cada unidad queda TRASPASADO (en tránsito), el stock baja y el detalle lleva sus IMEI")
+        @DisplayName("equipos: cada unidad queda TRASPASADO (en tránsito) y el detalle lleva sus IMEI, sin código")
         void equipos() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "3", negro);
-            ProductoImei u1 = unidad(a15, "350000000000011");
-            ProductoImei u2 = unidad(a15, "350000000000029");
-            unidad(a15, "350000000000037");
+            ProductoImei u1 = equipo(almacen, "350000000000011");
+            ProductoImei u2 = equipo(almacen, "350000000000029");
+            equipo(almacen, "350000000000037");
 
             TraspasoResponseDto r = service.crearEnvio(
-                    envio(1, 2, linea("CEL-000004", "2", "350000000000011", "350000000000029")), "root");
+                    envio(1, 2, lineaEquipos("2", "350000000000011", "350000000000029")), "root");
 
             assertThat(u1.getEstado()).isEqualTo("TRASPASADO");
             assertThat(u2.getEstado()).isEqualTo("TRASPASADO");
             assertThat(imeis.get("350000000000037").getEstado()).isEqualTo("DISPONIBLE");
-            assertThat(a15.getStock()).isEqualByComparingTo("1");
+            assertThat(r.getLineas()).hasSize(1);
+            assertThat(r.getLineas().get(0).getCodpro()).isNull();
+            assertThat(r.getLineas().get(0).getIdprodmaster()).isEqualTo(1);
+            assertThat(r.getLineas().get(0).getNombreProducto()).isEqualTo("Samsung Galaxy A15");
             assertThat(r.getLineas().get(0).getCantidad()).isEqualByComparingTo("2");
             assertThat(r.getLineas().get(0).getImeis()).containsExactly("350000000000011", "350000000000029");
-            assertThat(detalles).hasSize(2).allSatisfy(d -> assertThat(d.getCantidad()).isEqualByComparingTo("1"));
+            assertThat(detalles).hasSize(2).allSatisfy(d -> {
+                assertThat(d.getCantidad()).isEqualByComparingTo("1");
+                assertThat(d.getCodpro()).isNull();
+                assertThat(d.getProductoMaster()).isSameAs(celular);
+            });
+            verify(movimientoInventarioService).registrarEquipo(u1, -1, "TRASPASO_SALIDA", null, "Traspaso #" + r.getIdtraspaso());
         }
 
         @Test
@@ -291,39 +318,41 @@ class TraspasoServiceTest {
         }
 
         @Test
-        @DisplayName("equipos: cantidad distinta a los IMEI, IMEI repetido, de otro producto o no disponible: 400")
+        @DisplayName("equipos: cantidad distinta a los IMEI, IMEI repetido, de otra sucursal, no disponible o sin registrar: 400")
         void imeisInvalidos() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "3", negro);
-            Producto otro = stock("CEL-000005", almacen, celular, "1", azul);
-            unidad(a15, "350000000000011");
-            unidad(a15, "350000000000029");
-            unidad(otro, "350000000000037");
-            ProductoImei vendida = unidad(a15, "350000000000045");
+            equipo(almacen, "350000000000011");
+            equipo(almacen, "350000000000029");
+            equipo(zocalo, "350000000000037");
+            ProductoImei vendida = equipo(almacen, "350000000000045");
             vendida.setEstado("VENDIDO");
 
-            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, linea("CEL-000004", "2", "350000000000011")), "root"))
+            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, lineaEquipos("2", "350000000000011")), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("exactamente 2 IMEI");
-            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, linea("CEL-000004", "2", "350000000000011", "350000000000011")), "root"))
+            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, lineaEquipos("2", "350000000000011", "350000000000011")), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("repetido");
-            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, linea("CEL-000004", "1", "350000000000037")), "root"))
-                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no pertenece");
-            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, linea("CEL-000004", "1", "350000000000045")), "root"))
+            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000037")), "root"))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no está en la tienda origen");
+            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000045")), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no está disponible");
-            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, linea("CEL-000004", "1", "999999999999999")), "root"))
+            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, lineaEquipos(null, "999999999999999")), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no está registrado");
+            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, lineaEquipos(null)), "root"))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Indique los IMEI");
         }
 
         @Test
-        @DisplayName("un accesorio con IMEI, o una cantidad no entera de equipos: 400")
+        @DisplayName("un accesorio con IMEI, una cantidad no entera de equipos o un equipo con código: 400")
         void imeiEnAccesorioYCantidadNoEntera() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "3", negro);
-            unidad(a15, "350000000000011");
+            equipo(almacen, "350000000000011");
             stock("ACC-000001", almacen, accesorio, "5", negro);
+            stock("CEL-000004", almacen, celular, "3", negro);   // producto por modelo de antes: ya no se usa
 
             assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, linea("ACC-000001", "1", "350000000000011")), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no lleva IMEI");
-            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, linea("CEL-000004", "1.5", "350000000000011")), "root"))
+            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, lineaEquipos("1.5", "350000000000011")), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("número entero");
+            assertThatThrownBy(() -> service.crearEnvio(envio(1, 2, linea("CEL-000004", "1")), "root"))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("es un equipo");
         }
     }
 
@@ -394,25 +423,23 @@ class TraspasoServiceTest {
         }
 
         @Test
-        @DisplayName("equipos: cada IMEI pasa al producto de la destino, DISPONIBLE, conservando su condición y costo")
+        @DisplayName("equipos: cada IMEI pasa a la sucursal destino, DISPONIBLE, conservando su condición y costo")
         void equipos() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "2", negro);
-            ProductoImei usado = unidad(a15, "350000000000011");
+            ProductoImei usado = equipo(almacen, "350000000000011");
             usado.setCondicion("USADO");
-            usado.setCostoUnitario(new BigDecimal("1900"));
-            unidad(a15, "350000000000029");
-            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "2", "350000000000011", "350000000000029")), "root").getIdtraspaso();
+            usado.setCosto(new BigDecimal("1900"));
+            equipo(almacen, "350000000000029");
+            int id = service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000011", "350000000000029")), "root").getIdtraspaso();
             assertThat(usado.getEstado()).isEqualTo("TRASPASADO");
 
             service.recibir(id, "abigail");
 
-            Producto destino = enTienda("CEL-000004", zocalo);
-            assertThat(destino.getStock()).isEqualByComparingTo("2");
-            assertThat(usado.getProducto()).isSameAs(destino);
+            assertThat(usado.getTienda()).isSameAs(zocalo);
             assertThat(usado.getEstado()).isEqualTo("DISPONIBLE");
             assertThat(usado.getCondicion()).isEqualTo("USADO");
-            assertThat(usado.getCostoUnitario()).isEqualByComparingTo("1900");
-            assertThat(a15.getStock()).isEqualByComparingTo("0");
+            assertThat(usado.getCosto()).isEqualByComparingTo("1900");
+            assertThat(imeis.get("350000000000029").getTienda()).isSameAs(zocalo);
+            verify(movimientoInventarioService).registrarEquipo(usado, +1, "TRASPASO_ENTRADA", null, "Traspaso #" + id);
         }
 
         @Test
@@ -501,29 +528,25 @@ class TraspasoServiceTest {
         @Test
         @DisplayName("equipos: el IMEI que no llegó queda FALTANTE en el origen; el que llegó pasa a la destino")
         void equipoParcial() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "2", negro);
-            ProductoImei llega = unidad(a15, "350000000000011");
-            ProductoImei noLlega = unidad(a15, "350000000000029");
-            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "2", "350000000000011", "350000000000029")), "root").getIdtraspaso();
+            ProductoImei llega = equipo(almacen, "350000000000011");
+            ProductoImei noLlega = equipo(almacen, "350000000000029");
+            int id = service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000011", "350000000000029")), "root").getIdtraspaso();
 
-            service.recibir(id, falta("Se quedó en la caja del repartidor", "CEL-000004", null, "350000000000029"), "abigail");
+            service.recibir(id, falta("Se quedó en la caja del repartidor", null, null, "350000000000029"), "abigail");
 
             assertThat(llega.getEstado()).isEqualTo("DISPONIBLE");
-            assertThat(llega.getProducto()).isSameAs(enTienda("CEL-000004", zocalo));
-            assertThat(enTienda("CEL-000004", zocalo).getStock()).isEqualByComparingTo("1");
+            assertThat(llega.getTienda()).isSameAs(zocalo);
             assertThat(noLlega.getEstado()).isEqualTo("FALTANTE");
-            assertThat(noLlega.getProducto()).isSameAs(a15);
-            assertThat(a15.getStock()).isEqualByComparingTo("0");
+            assertThat(noLlega.getTienda()).isSameAs(almacen);
         }
 
         @Test
         @DisplayName("un IMEI que no viene en el envío: 400")
         void imeiInvalido() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "1", negro);
-            unidad(a15, "350000000000011");
-            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "1", "350000000000011")), "root").getIdtraspaso();
+            equipo(almacen, "350000000000011");
+            int id = service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000011")), "root").getIdtraspaso();
 
-            assertEstado(HttpStatus.BAD_REQUEST, () -> service.recibir(id, falta("x", "CEL-000004", null, "350000000009999"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.recibir(id, falta("x", null, null, "350000000009999"), "abigail"));
         }
 
         @Test
@@ -545,33 +568,29 @@ class TraspasoServiceTest {
         }
 
         @Test
-        @DisplayName("reintegrado al origen: el stock regresa al origen y solo lo confirma el origen (o un admin)")
+        @DisplayName("reintegrado al origen: el equipo vuelve a estar disponible y solo lo confirma el origen (o un admin)")
         void reintegrado() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "1", negro);
-            ProductoImei u = unidad(a15, "350000000000011");
-            Producto extra = stock("CEL-000005", almacen, celular, "1", azul);
-            unidad(extra, "350000000000029");
-            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "1", "350000000000011"), linea("CEL-000005", "1", "350000000000029")), "root").getIdtraspaso();
-            service.recibir(id, falta("No estaba", "CEL-000004", null, "350000000000011"), "abigail");
-            int det = idDetalle("CEL-000004");
+            ProductoImei u = equipo(almacen, "350000000000011");
+            equipo(almacen, "350000000000029");
+            int id = service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000011", "350000000000029")), "root").getIdtraspaso();
+            service.recibir(id, falta("No estaba", null, null, "350000000000011"), "abigail");
+            int det = detalles.stream().filter(d -> "350000000000011".equals(d.getImei())).findFirst().orElseThrow().getIddetalle();
 
             assertEstado(HttpStatus.FORBIDDEN, () -> service.resolverFaltante(det, resolver("REINTEGRADO_ORIGEN", null, null), "abigail"));
             service.resolverFaltante(det, resolver("REINTEGRADO_ORIGEN", null, "Estaba en bodega"), "root");
 
-            assertThat(a15.getStock()).isEqualByComparingTo("1");
             assertThat(u.getEstado()).isEqualTo("DISPONIBLE");
-            assertThat(u.getProducto()).isSameAs(a15);
+            assertThat(u.getTienda()).isSameAs(almacen);
             assertThat(service.listarFaltantes(null, "root")).isEmpty();
         }
 
         @Test
-        @DisplayName("baja: solo ROOT/ADMIN, con nota; el equipo queda DEBAJA y el stock no vuelve")
+        @DisplayName("baja: solo ROOT/ADMIN, con nota; el equipo queda DEBAJA")
         void baja() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "2", negro);
-            unidad(a15, "350000000000011");
-            ProductoImei perdido = unidad(a15, "350000000000029");
-            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "2", "350000000000011", "350000000000029")), "root").getIdtraspaso();
-            service.recibir(id, falta("Extraviado", "CEL-000004", null, "350000000000029"), "abigail");
+            equipo(almacen, "350000000000011");
+            ProductoImei perdido = equipo(almacen, "350000000000029");
+            int id = service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000011", "350000000000029")), "root").getIdtraspaso();
+            service.recibir(id, falta("Extraviado", null, null, "350000000000029"), "abigail");
             int det = detalles.stream().filter(d -> "350000000000029".equals(d.getImei())).findFirst().orElseThrow().getIddetalle();
 
             assertEstado(HttpStatus.FORBIDDEN, () -> service.resolverFaltante(det, resolver("BAJA", null, "Extraviado"), "abigail"));
@@ -579,7 +598,6 @@ class TraspasoServiceTest {
             service.resolverFaltante(det, resolver("BAJA", null, "Extraviado en ruta"), "root");
 
             assertThat(perdido.getEstado()).isEqualTo("DEBAJA");
-            assertThat(a15.getStock()).isEqualByComparingTo("0");
             assertThat(service.listarFaltantes(null, "root")).isEmpty();
         }
 
@@ -635,18 +653,18 @@ class TraspasoServiceTest {
         @Test
         @DisplayName("un envío sin recibir: el stock y las unidades regresan al origen y queda Anulado")
         void envioSinRecibir() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "2", negro);
-            ProductoImei u1 = unidad(a15, "350000000000011");
-            unidad(a15, "350000000000029");
+            ProductoImei u1 = equipo(almacen, "350000000000011");
+            equipo(almacen, "350000000000029");
             Producto funda = stock("ACC-000001", almacen, accesorio, "40", negro);
-            int id = service.crearEnvio(envio(1, 2, linea("CEL-000004", "1", "350000000000011"), linea("ACC-000001", "10")), "root").getIdtraspaso();
+            int id = service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000011"), linea("ACC-000001", "10")), "root").getIdtraspaso();
             assertThat(u1.getEstado()).isEqualTo("TRASPASADO");
             assertThat(funda.getStock()).isEqualByComparingTo("30");
 
             TraspasoResponseDto r = service.anular(id, "root");
 
             assertThat(u1.getEstado()).isEqualTo("DISPONIBLE");
-            assertThat(a15.getStock()).isEqualByComparingTo("2");
+            assertThat(u1.getTienda()).isSameAs(almacen);
+            verify(movimientoInventarioService).registrarEquipo(u1, +1, "TRASPASO_ANULADO", null, "Traspaso #" + id);
             assertThat(funda.getStock()).isEqualByComparingTo("40");
             assertThat(r.getActivo()).isFalse();
             assertThat(r.getEstadoDisplay()).isEqualTo("Anulado");
@@ -761,19 +779,22 @@ class TraspasoServiceTest {
         }
 
         @Test
-        @DisplayName("aceptar un pedido de equipos: hay que elegir los IMEI, y solo de lo pedido")
+        @DisplayName("pedir equipos es por artículo y cantidad; al aceptar hay que elegir los IMEI, y solo de lo pedido")
         void aceptarEquipos() {
-            Producto a15 = stock("CEL-000004", almacen, celular, "3", negro);
-            ProductoImei u1 = unidad(a15, "350000000000011");
-            unidad(a15, "350000000000029");
-            int id = pedir(linea("CEL-000004", "1"));
+            ProductoImei u1 = equipo(almacen, "350000000000011");
+            equipo(almacen, "350000000000029");
+            int id = pedir(pedidoEquipos(1, "1"));
+            assertThat(detalles).hasSize(1).allSatisfy(d -> {
+                assertThat(d.getCodpro()).isNull();
+                assertThat(d.getProductoMaster()).isSameAs(celular);
+            });
 
             assertThatThrownBy(() -> service.aceptar(id, null, "root"))
-                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("exactamente 1 IMEI");
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("1 IMEI");
 
             AceptarSolicitudRequestDto ajeno = new AceptarSolicitudRequestDto();
             AceptarSolicitudRequestDto.UnidadesElegidasDto otro = new AceptarSolicitudRequestDto.UnidadesElegidasDto();
-            otro.setCodpro("CEL-000777");
+            otro.setIdprodmaster(777);
             otro.setImeis(List.of("350000000000011"));
             ajeno.setEquipos(List.of(otro));
             assertThatThrownBy(() -> service.aceptar(id, ajeno, "root"))
@@ -781,7 +802,7 @@ class TraspasoServiceTest {
 
             AceptarSolicitudRequestDto ok = new AceptarSolicitudRequestDto();
             AceptarSolicitudRequestDto.UnidadesElegidasDto elegida = new AceptarSolicitudRequestDto.UnidadesElegidasDto();
-            elegida.setCodpro("CEL-000004");
+            elegida.setIdprodmaster(1);
             elegida.setImeis(List.of("350000000000011"));
             ok.setEquipos(List.of(elegida));
             TraspasoResponseDto envio = service.aceptar(id, ok, "root");

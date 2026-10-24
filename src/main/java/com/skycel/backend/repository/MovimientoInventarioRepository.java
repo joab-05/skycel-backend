@@ -12,9 +12,9 @@ import java.util.List;
 @Repository
 public interface MovimientoInventarioRepository extends JpaRepository<MovimientoInventario, Long> {
 
-    @Query("SELECT m FROM MovimientoInventario m WHERE m.producto.tienda.codti = :codti " +
+    @Query("SELECT m FROM MovimientoInventario m LEFT JOIN m.producto p WHERE m.codti = :codti " +
             "AND m.fecha BETWEEN :desde AND :hasta " +
-            "AND (:codpro IS NULL OR m.producto.codpro = :codpro) " +
+            "AND (:codpro IS NULL OR p.codpro = :codpro OR m.imei = :codpro) " +
             "ORDER BY m.fecha DESC, m.idmov DESC")
     List<MovimientoInventario> buscar(@Param("codti") Integer codti,
                                       @Param("desde") LocalDateTime desde,

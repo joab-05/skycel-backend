@@ -319,187 +319,24 @@ class ProductoServiceTest {
         verify(productoRepository, never()).save(any());
     }
 
-    // ── CELULAR — ENTRADA ────────────────────────────────────────────────────
+    // ── CELULAR: ya no se ajusta por cantidad ────────────────────────────────
 
     @Nested
-    @DisplayName("ajustarStock — CELULAR / ENTRADA")
-    class CelularEntrada {
+    @DisplayName("ajustarStock — un equipo se maneja por IMEI, no por cantidad")
+    class Equipo {
 
         @Test
-        @DisplayName("con IMEIs válidos y nuevos: suma stock y registra cada IMEI como DISPONIBLE")
-        void entrada_imeisValidos_sumaStockYRegistraImeis() {
+        @DisplayName("ENTRADA o SALIDA de un celular: 400, se hace desde Equipos (por IMEI o serie)")
+        void ajusteDeUnEquipo_rechazado() {
             Producto p = celular(BigDecimal.valueOf(2));
             when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-            when(productoImeiRepository.existsByImei(anyString())).thenReturn(false);
 
-            List<String> imeis = List.of("123456789012345", "123456789012346");
-            StockAjusteDTO request = dto("ENTRADA", BigDecimal.valueOf(2), imeis, null);
-
-            productoService.ajustarStock(CODPRO, request);
-
-            assertThat(p.getStock()).isEqualByComparingTo("4");
-            verify(productoImeiRepository, times(2)).save(imeiCaptor.capture());
-            assertThat(imeiCaptor.getAllValues())
-                    .extracting(ProductoImei::getImei)
-                    .containsExactlyInAnyOrderElementsOf(imeis);
-            assertThat(imeiCaptor.getAllValues())
-                    .allMatch(pi -> "DISPONIBLE".equals(pi.getEstado()));
-        }
-
-        @Test
-        @DisplayName("si el número de IMEIs no coincide con la cantidad: 400")
-        void entrada_cantidadImeisNoCoincide_lanzaBadRequest() {
-            Producto p = celular(BigDecimal.ZERO);
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-
-            StockAjusteDTO request = dto("ENTRADA", BigDecimal.valueOf(2),
-                    List.of("123456789012345"), null); // solo 1 IMEI, se piden 2
-
-            assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, request))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("exactamente 2 IMEIs");
-
-            verifyNoInteractions(productoImeiRepository);
-        }
-
-        @ParameterizedTest(name = "IMEI/Serie inválido: \"{0}\"")
-        @ValueSource(strings = {"abc", "1234", "123456789012345678901", "no-valido!"})
-        @DisplayName("rechaza identificadores que no tengan entre 5 y 20 caracteres alfanuméricos")
-        void entrada_imeiFormatoInvalido_lanzaBadRequest(String imeiInvalido) {
-            Producto p = celular(BigDecimal.ZERO);
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-
-            StockAjusteDTO request = dto("ENTRADA", BigDecimal.ONE, List.of(imeiInvalido), null);
-
-            assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, request))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("5 y 20 caracteres");
-        }
-
-        @Test
-        @DisplayName("si un IMEI ya existe en el sistema: 409 y no se guarda ninguno")
-        void entrada_imeiDuplicado_lanzaConflict() {
-            Producto p = celular(BigDecimal.ZERO);
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-            when(productoImeiRepository.existsByImei("123456789012345")).thenReturn(false);
-            when(productoImeiRepository.existsByImei("123456789012346")).thenReturn(true);
-
-            StockAjusteDTO request = dto("ENTRADA", BigDecimal.valueOf(2),
-                    List.of("123456789012345", "123456789012346"), null);
-
-            assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, request))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("ya está registrado");
-
-            // Regla actual del servicio: valida TODOS antes de guardar ninguno
-            verify(productoImeiRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("cantidad no entera (p.ej. 1.5) para un celular: 400")
-        void entrada_cantidadNoEntera_lanzaBadRequest() {
-            Producto p = celular(BigDecimal.ZERO);
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-
-            StockAjusteDTO request = dto("ENTRADA", new BigDecimal("1.5"), null, null);
-
-            assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, request))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("número entero");
-        }
-    }
-
-    // ── CELULAR — SALIDA ─────────────────────────────────────────────────────
-
-    @Nested
-    @DisplayName("ajustarStock — CELULAR / SALIDA")
-    class CelularSalida {
-
-        @Test
-        @DisplayName("con IMEI disponible del mismo producto: resta stock y marca DEBAJA por defecto")
-        void salida_imeiDisponible_marcaDebajaPorDefecto() {
-            Producto p = celular(BigDecimal.valueOf(3));
-            ProductoImei pi = ProductoImei.builder()
-                    .id(1L).producto(p).imei("123456789012345").estado("DISPONIBLE").build();
-
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-            when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
-
-            StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("123456789012345"), null);
-
-            productoService.ajustarStock(CODPRO, request);
-
+            for (String tipo : List.of("ENTRADA", "SALIDA")) {
+                assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, dto(tipo, BigDecimal.ONE, null, null)))
+                        .isInstanceOf(ResponseStatusException.class)
+                        .hasMessageContaining("IMEI");
+            }
             assertThat(p.getStock()).isEqualByComparingTo("2");
-            assertThat(pi.getEstado()).isEqualTo("DEBAJA");
-        }
-
-        @Test
-        @DisplayName("si el comentario menciona VENTA: marca el IMEI como VENDIDO en vez de DEBAJA")
-        void salida_comentarioVenta_marcaVendido() {
-            Producto p = celular(BigDecimal.ONE);
-            ProductoImei pi = ProductoImei.builder()
-                    .id(1L).producto(p).imei("123456789012345").estado("DISPONIBLE").build();
-
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-            when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
-
-            StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("123456789012345"), "Venta de contado");
-
-            productoService.ajustarStock(CODPRO, request);
-
-            assertThat(pi.getEstado()).isEqualTo("VENDIDO");
-        }
-
-        @Test
-        @DisplayName("si el IMEI pertenece a otro producto: 400 y no se toca el stock")
-        void salida_imeiDeOtroProducto_lanzaBadRequest() {
-            Producto p = celular(BigDecimal.ONE);
-            Producto otro = celular(BigDecimal.ZERO);
-            otro.setIdproducto(999);
-            ProductoImei pi = ProductoImei.builder()
-                    .id(1L).producto(otro).imei("123456789012345").estado("DISPONIBLE").build();
-
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-            when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
-
-            StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("123456789012345"), null);
-
-            assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, request))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("no pertenece a este producto");
-
-            assertThat(p.getStock()).isEqualByComparingTo("1");
-        }
-
-        @Test
-        @DisplayName("si el IMEI ya no está DISPONIBLE (p.ej. ya vendido): 400")
-        void salida_imeiNoDisponible_lanzaBadRequest() {
-            Producto p = celular(BigDecimal.ONE);
-            ProductoImei pi = ProductoImei.builder()
-                    .id(1L).producto(p).imei("123456789012345").estado("VENDIDO").build();
-
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-            when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
-
-            StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("123456789012345"), null);
-
-            assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, request))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("no está disponible");
-        }
-
-        @Test
-        @DisplayName("IMEI inexistente en salida: 404")
-        void salida_imeiInexistente_lanza404() {
-            Producto p = celular(BigDecimal.ONE);
-            when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
-            when(productoImeiRepository.findByImei("999999999999999")).thenReturn(Optional.empty());
-
-            StockAjusteDTO request = dto("SALIDA", BigDecimal.ONE, List.of("999999999999999"), null);
-
-            assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, request))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("no existe");
         }
     }
 

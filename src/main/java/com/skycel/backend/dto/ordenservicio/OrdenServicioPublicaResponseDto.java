@@ -25,6 +25,7 @@ public class OrdenServicioPublicaResponseDto {
     private String  mensaje;
     private LocalDateTime fechaIngreso;
     private LocalDate     fechaPromesa;
+    private java.time.LocalDateTime fechaPromesaHora;
     private LocalDateTime fechaLista;
     private LocalDateTime fechaEntrega;
     /** Garantía del trabajo, una vez entregado. */

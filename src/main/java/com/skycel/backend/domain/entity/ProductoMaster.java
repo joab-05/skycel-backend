@@ -89,6 +89,10 @@ public class ProductoMaster {
     @Column(name = "tipo", nullable = false)
     private TipoProducto tipo = TipoProducto.ACCESORIO;
 
+    /** Equipos (celular/tablet): cuántas unidades disponibles de este artículo hay que tener como mínimo en cada sucursal; 0 = sin aviso. */
+    @Column(name = "stock_minimo_equipos", columnDefinition = "INT DEFAULT 0")
+    private Integer stockMinimoEquipos;
+
     @Column(name = "activo", columnDefinition = "TINYINT DEFAULT 1")
     private Boolean activo;
 

@@ -47,6 +47,7 @@ class GarantiaServiceTest {
     @Mock private CategoriaFolioRepository    categoriaFolioRepository;
     @Mock private NotificacionService         notificacionService;
     @Mock private ProveedorRepository         proveedorRepository;
+    @Mock private MovimientoInventarioService movimientoInventarioService;
 
     @InjectMocks
     private GarantiaService service;
@@ -103,7 +104,7 @@ class GarantiaServiceTest {
         lenient().when(categoriaFolioRepository.obtenerUltimoFolioGenerado((short) -2)).thenAnswer(inv -> ++folio);
         lenient().when(ventaRepository.findById(anyInt())).thenAnswer(inv -> Optional.ofNullable(ventas.get((Integer) inv.getArgument(0))));
         lenient().when(ventaDetalleRepository.findByVenta_Idventa(anyInt())).thenAnswer(inv -> lineas.getOrDefault((Integer) inv.getArgument(0), List.of()));
-        lenient().when(productoImeiRepository.findByImei(IMEI)).thenReturn(Optional.of(ProductoImei.builder().imei(IMEI).producto(pCelular).build()));
+        lenient().when(productoImeiRepository.findByImei(IMEI)).thenReturn(Optional.of(ProductoImei.builder().imei(IMEI).productoMaster(mCelular).tienda(zocalo).proveedor(proveedor).build()));
         lenient().when(productoRepository.findByCodproAndTienda_Codti(anyString(), anyInt())).thenAnswer(inv ->
                 List.of(pAccesorio, pSinGarantia, pServicio, pCelular).stream().filter(p -> p.getCodpro().equals(inv.getArgument(0))).findFirst());
 
@@ -118,7 +119,7 @@ class GarantiaServiceTest {
                 garantias.values().stream().filter(g -> g.getFolioSeguimiento().equals(inv.getArgument(0))).findFirst());
         lenient().when(garantiaRepository.findByVenta_IdventaAndProducto_Idproducto(anyInt(), anyInt())).thenAnswer(inv ->
                 garantias.values().stream().filter(g -> g.getVenta() != null && g.getVenta().getIdventa().equals(inv.getArgument(0))
-                        && g.getProducto().getIdproducto().equals(inv.getArgument(1))).collect(Collectors.toList()));
+                        && g.getProducto() != null && g.getProducto().getIdproducto().equals(inv.getArgument(1))).collect(Collectors.toList()));
         lenient().when(garantiaRepository.findByImei(anyString())).thenAnswer(inv ->
                 garantias.values().stream().filter(g -> inv.getArgument(0).equals(g.getImei())).collect(Collectors.toList()));
         lenient().when(proveedorRepository.findById((short) 2)).thenReturn(Optional.of(proveedor));
@@ -180,6 +181,114 @@ class GarantiaServiceTest {
     private void assertEstado(HttpStatus esperado, Runnable accion) {
         assertThatThrownBy(accion::run).isInstanceOfSatisfying(ResponseStatusException.class,
                 e -> assertThat(e.getStatusCode()).isEqualTo(esperado));
+    }
+
+    // ── Garantía de vitrina ──────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("garantía de vitrina (equipo sin vender con una falla)")
+    class Vitrina {
+
+        private static final String IMEI_VITRINA = "350000000000099";
+        private ProductoImei unidad;
+
+        @BeforeEach
+        void unidadEnVitrina() {
+            unidad = ProductoImei.builder().id(7L).imei(IMEI_VITRINA).productoMaster(mCelular).tienda(zocalo)
+                    .proveedor(proveedor).estado("DISPONIBLE").build();
+            lenient().when(productoImeiRepository.findByImei(IMEI_VITRINA)).thenReturn(Optional.of(unidad));
+        }
+
+        private GarantiaRequestDto reclamoVitrina(String imei) {
+            GarantiaRequestDto d = new GarantiaRequestDto();
+            d.setVitrina(true);
+            d.setImei(imei);
+            d.setFallaReportada("La pantalla parpadea");
+            return d;
+        }
+
+        @Test
+        @DisplayName("sin venta ni cliente: la unidad sale de las existencias (EN_GARANTIA) y la garantía va al proveedor de la unidad")
+        void crear() {
+            GarantiaResponseDto r = service.crear(reclamoVitrina(IMEI_VITRINA), "abigail");
+
+            assertThat(r.getVitrina()).isTrue();
+            assertThat(r.getIdventa()).isNull();
+            assertThat(r.getVentaAnterior()).isFalse();
+            assertThat(r.getNombreProducto()).isEqualTo("iPhone 16 Pro");
+            assertThat(r.getProveedor()).isEqualTo("Mayorista Movil MX");
+            assertThat(r.getImei()).isEqualTo(IMEI_VITRINA);
+            assertThat(r.getGarantiaVigenteHasta()).isNull();
+            assertThat(r.getFechaLimiteSolucion()).isEqualTo(GarantiaService.sumarDiasHabiles(LocalDate.now(), 30));
+            assertThat(unidad.getEstado()).isEqualTo("EN_GARANTIA");
+            verify(movimientoInventarioService).registrarEquipo(eq(unidad), eq(-1), eq("GARANTIA_VITRINA"), anyString(), eq(r.getFolio()));
+        }
+
+        @Test
+        @DisplayName("un equipo que no está disponible (vendido), de otra sucursal, sin registrar o con una garantía abierta: no se recibe")
+        void invalidos() {
+            unidad.setEstado("VENDIDO");
+            assertEstado(HttpStatus.CONFLICT, () -> service.crear(reclamoVitrina(IMEI_VITRINA), "abigail"));
+
+            unidad.setEstado("DISPONIBLE");
+            unidad.setTienda(corpo);
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(reclamoVitrina(IMEI_VITRINA), "abigail"));
+
+            unidad.setTienda(zocalo);
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(reclamoVitrina("999999999999999"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(reclamoVitrina(null), "abigail"));
+
+            service.crear(reclamoVitrina(IMEI_VITRINA), "abigail");
+            unidad.setEstado("DISPONIBLE");
+            assertEstado(HttpStatus.CONFLICT, () -> service.crear(reclamoVitrina(IMEI_VITRINA), "abigail"));
+        }
+
+        @Test
+        @DisplayName("reparado por el proveedor: al entregarse el equipo vuelve a las existencias (DISPONIBLE)")
+        void reparadoVuelve() {
+            int g = service.crear(reclamoVitrina(IMEI_VITRINA), "abigail").getIdgarantia();
+
+            ir(g, "gerente", 2, 3, 4, 5, 6, 9, 10);
+            assertThat(unidad.getEstado()).isEqualTo("EN_GARANTIA");   // sigue fuera mientras no se entrega
+            service.avanzar(g, paso(11, null), "abigail");
+
+            assertThat(unidad.getEstado()).isEqualTo("DISPONIBLE");
+            verify(movimientoInventarioService).registrarEquipo(eq(unidad), eq(+1), eq("GARANTIA_VITRINA"), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("cambio físico: exige el IMEI del equipo nuevo; el que falló se devuelve y el nuevo entra a vitrina al entregar")
+        void cambioFisico() {
+            int g = service.crear(reclamoVitrina(IMEI_VITRINA), "abigail").getIdgarantia();
+            ir(g, "gerente", 2, 3, 4, 5);
+
+            assertThatThrownBy(() -> service.avanzar(g, paso(7, "El proveedor lo cambia"), "gerente"))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("equipo nuevo");
+            assertThatThrownBy(() -> {
+                AvanceGarantiaRequestDto malo = paso(7, "El proveedor lo cambia");
+                malo.setImeiReemplazo("12 34");
+                service.avanzar(g, malo, "gerente");
+            }).isInstanceOf(ResponseStatusException.class);
+
+            AvanceGarantiaRequestDto ok = paso(7, "El proveedor lo cambia");
+            ok.setImeiReemplazo("350999000000077");
+            service.avanzar(g, ok, "gerente");
+
+            assertThat(unidad.getEstado()).isEqualTo("DEVUELTO");
+            ArgumentCaptor<ProductoImei> nueva = ArgumentCaptor.forClass(ProductoImei.class);
+            verify(productoImeiRepository, atLeastOnce()).save(nueva.capture());
+            ProductoImei nuevo = nueva.getAllValues().stream().filter(u -> "350999000000077".equals(u.getImei())).findFirst().orElseThrow();
+            assertThat(nuevo.getProductoMaster()).isSameAs(mCelular);
+            assertThat(nuevo.getTienda()).isSameAs(zocalo);
+            assertThat(nuevo.getEstado()).isEqualTo("EN_GARANTIA");   // hasta que se entregue
+            when(productoImeiRepository.findByImei("350999000000077")).thenReturn(Optional.of(nuevo));
+
+            ir(g, "gerente", 9, 10);
+            service.avanzar(g, paso(11, null), "abigail");
+
+            assertThat(nuevo.getEstado()).isEqualTo("DISPONIBLE");
+            assertThat(unidad.getEstado()).isEqualTo("DEVUELTO");
+        }
     }
 
     // ── Recibir un reclamo ───────────────────────────────────────────────────

@@ -13,6 +13,8 @@ public class AceptarSolicitudRequestDto {
 
     @Data
     public static class UnidadesElegidasDto {
+        /** El artículo del equipo pedido (el equipo no lleva código). */
+        private Integer idprodmaster;
         private String codpro;
         private List<String> imeis;
     }

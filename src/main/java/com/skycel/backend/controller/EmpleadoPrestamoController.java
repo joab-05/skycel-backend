@@ -20,7 +20,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/prestamos-empleado")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+@PreAuthorize("@permisos.tiene('PRESTAMOS')")
 @SecurityRequirement(name = "Bearer Authentication")
 @Tag(name = "Préstamos a empleados", description = "Adelantos de dinero, con saldo que se abona desde la nómina")
 public class EmpleadoPrestamoController {

@@ -22,7 +22,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/comisiones")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+@PreAuthorize("@permisos.tiene('NOMINA')")
 @SecurityRequirement(name = "Bearer Authentication")
 @Tag(name = "Comisiones", description = "Comisión mensual de encargado y comisión por venta PayJoy")
 public class ComisionController {

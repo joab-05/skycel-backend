@@ -28,7 +28,7 @@ public class InventarioFisicoController {
     private final InventarioFisicoService service;
 
     @PostMapping("/aperturar")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> aperturar(
             @RequestParam Integer codti,
@@ -38,7 +38,7 @@ public class InventarioFisicoController {
     }
 
     @PostMapping("/{idinventario}/escanear")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> escanear(
             @PathVariable Integer idinventario,
@@ -49,7 +49,7 @@ public class InventarioFisicoController {
     }
 
     @GetMapping("/{idinventario}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> detalle(
             @PathVariable Integer idinventario,
@@ -59,7 +59,7 @@ public class InventarioFisicoController {
     }
 
     @PostMapping("/{idinventario}/cerrar-conteo")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> cerrarConteo(
             @PathVariable Integer idinventario,
@@ -68,7 +68,7 @@ public class InventarioFisicoController {
     }
 
     @PostMapping("/{idinventario}/detalle/{iddetalleInv}/resolver")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> resolverDetalle(
             @PathVariable Integer idinventario,
@@ -80,7 +80,7 @@ public class InventarioFisicoController {
     }
 
     @PostMapping("/{idinventario}/finalizar")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> finalizar(
             @PathVariable Integer idinventario,
@@ -89,7 +89,7 @@ public class InventarioFisicoController {
     }
 
     @GetMapping("/tienda/{codti}/activa")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> activa(
             @PathVariable Integer codti,
@@ -98,7 +98,7 @@ public class InventarioFisicoController {
     }
 
     @GetMapping("/tienda/{codti}/historial")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> historial(
             @PathVariable Integer codti,

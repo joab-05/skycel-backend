@@ -30,7 +30,7 @@ public class TraspasoController {
                     "hasta que la tienda destino confirme la recepción.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/envios")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> crearEnvio(
             @Valid @RequestBody EnvioRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.created(traspasoService.crearEnvio(request, user.getUsername()), "envío");
@@ -40,7 +40,7 @@ public class TraspasoController {
             description = "Una tienda le pide mercancía a otra, que la acepta (y genera el envío) o la rechaza.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/solicitudes")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> crearSolicitud(
             @Valid @RequestBody SolicitudRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.created(traspasoService.crearSolicitud(request, user.getUsername()), "solicitud");
@@ -52,7 +52,7 @@ public class TraspasoController {
                     "y queda pendiente de resolver.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/recibir")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> recibir(
             @PathVariable Integer id,
             @Valid @RequestBody(required = false) RecepcionRequestDto request,
@@ -65,7 +65,7 @@ public class TraspasoController {
                     "(o filtra por una); el encargado, solo los de la suya.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/faltantes")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<List<FaltanteResponseDto>>> faltantes(
             @RequestParam(required = false) Integer codti, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(traspasoService.listarFaltantes(codti, user.getUsername()), "faltantes");
@@ -76,7 +76,7 @@ public class TraspasoController {
                     "el origen) o BAJA (solo ROOT/ADMIN, con nota). Se puede resolver por partes.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/faltantes/{iddetalle}/resolver")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<FaltanteResponseDto>> resolverFaltante(
             @PathVariable Integer iddetalle,
             @Valid @RequestBody ResolverFaltanteRequestDto request,
@@ -87,7 +87,7 @@ public class TraspasoController {
     @Operation(summary = "Marcar una solicitud como leída")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/leer")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> leer(
             @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(traspasoService.leer(id, user.getUsername()), "solicitud");
@@ -97,7 +97,7 @@ public class TraspasoController {
             description = "Devuelve el envío generado. Para los equipos pedidos hay que indicar qué IMEI se mandan.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/aceptar")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> aceptar(
             @PathVariable Integer id,
             @RequestBody(required = false) AceptarSolicitudRequestDto request,
@@ -108,7 +108,7 @@ public class TraspasoController {
     @Operation(summary = "Rechazar una solicitud")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/rechazar")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> rechazar(
             @PathVariable Integer id,
             @Valid @RequestBody RechazoRequestDto request,
@@ -120,7 +120,7 @@ public class TraspasoController {
             description = "En un envío, el stock y las unidades regresan al origen.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/anular")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> anular(
             @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(traspasoService.anular(id, user.getUsername()), "traspaso");
@@ -129,7 +129,7 @@ public class TraspasoController {
     @Operation(summary = "Consultar un traspaso")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> obtener(
             @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(traspasoService.obtener(id, user.getUsername()), "traspaso");
@@ -139,7 +139,7 @@ public class TraspasoController {
             description = "Filtros opcionales: tipo (1 envío, 2 solicitud) y estado (1 a 5). Por defecto no incluye los anulados.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<List<TraspasoResponseDto>>> listar(
             @PathVariable Integer codti,
             @RequestParam(required = false) Byte tipo,
@@ -154,7 +154,7 @@ public class TraspasoController {
             description = "Envíos por recibir y solicitudes por leer o resolver dirigidos a la tienda.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}/pendientes")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
     public ResponseEntity<StandardApiResponse<List<TraspasoResponseDto>>> pendientes(
             @PathVariable Integer codti, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(traspasoService.pendientes(codti, user.getUsername()), "pendientes");

@@ -36,7 +36,7 @@ public class MotivoCajaController {
     @Operation(summary = "Agregar un motivo al catálogo")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CAJA_CONFIG')")
     public ResponseEntity<StandardApiResponse<MotivoCajaResponseDto>> crear(
             @Valid @RequestBody MotivoCajaRequestDto request) {
         return ResponseEntityBuilder.created(motivoCajaService.crear(request), "motivo");
@@ -45,7 +45,7 @@ public class MotivoCajaController {
     @Operation(summary = "Activar o desactivar un motivo")
     @SecurityRequirement(name = "Bearer Authentication")
     @PatchMapping("/{id}/activo")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CAJA_CONFIG')")
     public ResponseEntity<StandardApiResponse<MotivoCajaResponseDto>> cambiarActivo(
             @PathVariable Integer id, @RequestParam boolean activo) {
         return ResponseEntityBuilder.updated(motivoCajaService.cambiarActivo(id, activo), "motivo");

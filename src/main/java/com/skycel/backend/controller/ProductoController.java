@@ -23,13 +23,13 @@ public class ProductoController {
 
     private final ProductoService productoService;
     private final com.skycel.backend.service.MovimientoInventarioService movimientoInventarioService;
+    private final com.skycel.backend.service.PermisoService permisoService;
 
-    /** Quién puede ver cuánto costó la mercancía: administradores y encargados. Vendedores y técnicos, no. */
-    private static boolean veCostos(org.springframework.security.core.userdetails.UserDetails u) {
-        return u != null && u.getAuthorities().stream().anyMatch(a ->
-                a.getAuthority().equals("ROLE_ROOT") || a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_ENCARGADO_TIENDA"));
+    /** Quién puede ver cuánto costó la mercancía: los roles con el permiso COSTOS_VER (por omisión administradores y encargados). */
+    private boolean veCostos(org.springframework.security.core.userdetails.UserDetails u) {
+        return u != null && permisoService.tiene(com.skycel.backend.domain.enums.Permiso.COSTOS_VER.name());
     }
-    private static ProductoResponseDTO sinCostos(ProductoResponseDTO d, org.springframework.security.core.userdetails.UserDetails u) {
+    private ProductoResponseDTO sinCostos(ProductoResponseDTO d, org.springframework.security.core.userdetails.UserDetails u) {
         if (veCostos(u)) return d;
         d.setPreciopro(null);
         if (d.getImeisDisponibles() != null) {
@@ -37,7 +37,7 @@ public class ProductoController {
         }
         return d;
     }
-    private static List<ProductoResponseDTO> sinCostosSiAplica(List<ProductoResponseDTO> lista, org.springframework.security.core.userdetails.UserDetails u) {
+    private List<ProductoResponseDTO> sinCostosSiAplica(List<ProductoResponseDTO> lista, org.springframework.security.core.userdetails.UserDetails u) {
         if (!veCostos(u)) lista.forEach(d -> sinCostos(d, u));
         return lista;
     }
@@ -63,7 +63,7 @@ public class ProductoController {
     @Operation(summary = "Crear Producto Maestro")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/master")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_EDITAR')")
     public ResponseEntity<ProductoMasterResponseDTO> crearMaster(
             @Valid @RequestBody ProductoMasterRequestDTO request) {
         return ResponseEntity.ok(productoService.crearMaster(request));
@@ -72,7 +72,7 @@ public class ProductoController {
     @Operation(summary = "Desactivar Producto Maestro")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/master/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_EDITAR')")
     public ResponseEntity<Void> eliminarMaster(@PathVariable Integer id) {
         productoService.eliminarMaster(id);
         return ResponseEntity.noContent().build();
@@ -103,7 +103,7 @@ public class ProductoController {
                     "Por defecto los últimos 30 días; filtro opcional por producto. Un encargado solo consulta su tienda.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}/movimientos")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_AJUSTAR')")
     public ResponseEntity<List<com.skycel.backend.dto.producto.MovimientoInventarioResponseDto>> movimientos(
             @PathVariable Integer codti,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime desde,
@@ -133,19 +133,10 @@ public class ProductoController {
         return ResponseEntity.ok(sinCostosSiAplica(productoService.obtenerAccesoriosCompatibles(codti, con), user));
     }
 
-    @Operation(summary = "Buscar producto por IMEI")
-    @SecurityRequirement(name = "Bearer Authentication")
-    @GetMapping("/imei/{imei}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ProductoResponseDTO> getProductoPorImei(@PathVariable String imei,
-            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
-        return ResponseEntity.ok(sinCostos(productoService.obtenerProductoPorImei(imei), user));
-    }
-
     @Operation(summary = "Registrar producto en tienda")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_EDITAR')")
     public ResponseEntity<ProductoResponseDTO> crearProducto(
             @Valid @RequestBody ProductoRequestDTO request) {
         return ResponseEntity.ok(productoService.crearProducto(request));
@@ -154,7 +145,7 @@ public class ProductoController {
     @Operation(summary = "Actualizar precios y datos de un producto")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/{codpro}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_EDITAR')")
     public ResponseEntity<ProductoResponseDTO> actualizarProducto(
             @PathVariable String codpro,
             @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
@@ -168,7 +159,7 @@ public class ProductoController {
     @Operation(summary = "Ajustar stock — ENTRADA / SALIDA / AJUSTE")
     @SecurityRequirement(name = "Bearer Authentication")
     @PatchMapping("/{codpro}/stock")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_AJUSTAR')")
     public ResponseEntity<ProductoResponseDTO> ajustarStock(
             @PathVariable String codpro,
             @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
@@ -180,7 +171,7 @@ public class ProductoController {
     @Operation(summary = "Marcar (o desmarcar) un artículo como rezagado a mano")
     @SecurityRequirement(name = "Bearer Authentication")
     @PatchMapping("/{codpro}/rezagado")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_AJUSTAR')")
     public ResponseEntity<ProductoResponseDTO> marcarRezagado(
             @PathVariable String codpro,
             @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
@@ -189,29 +180,10 @@ public class ProductoController {
         return ResponseEntity.ok(productoService.marcarRezagado(codpro, codti, rezagado));
     }
 
-    @Operation(summary = "Fijar (o quitar) el precio propio de un IMEI específico, distinto al del modelo")
-    @SecurityRequirement(name = "Bearer Authentication")
-    @PatchMapping("/imei/{imei}/precio")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
-    public ResponseEntity<com.skycel.backend.domain.dto.response.ImeiInfoDTO> actualizarPrecioImei(
-            @PathVariable String imei,
-            @RequestBody com.skycel.backend.domain.dto.request.ImeiPrecioUpdateDTO request) {
-        return ResponseEntity.ok(productoService.actualizarPrecioImei(imei, request));
-    }
-
-    @Operation(summary = "Corregir la condición (NUEVO/USADO/REACONDICIONADO) o el costo de una unidad disponible")
-    @SecurityRequirement(name = "Bearer Authentication")
-    @PatchMapping("/imei/{imei}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
-    public ResponseEntity<ImeiInfoDTO> actualizarImei(
-            @PathVariable String imei, @Valid @RequestBody ImeiUpdateDTO request) {
-        return ResponseEntity.ok(productoService.actualizarImei(imei, request));
-    }
-
     @Operation(summary = "Actualizar compatibilidad, tiempo estimado o garantía de un producto maestro")
     @SecurityRequirement(name = "Bearer Authentication")
     @PatchMapping("/master/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_EDITAR')")
     public ResponseEntity<ProductoMasterResponseDTO> actualizarMaster(
             @PathVariable Integer id, @Valid @RequestBody ProductoMasterUpdateDTO request) {
         return ResponseEntity.ok(productoService.actualizarMaster(id, request));
@@ -220,7 +192,7 @@ public class ProductoController {
     @Operation(summary = "Desactivar producto (soft delete)")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{codpro}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_EDITAR')")
     public ResponseEntity<Void> eliminarProducto(
             @PathVariable String codpro,
             @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")

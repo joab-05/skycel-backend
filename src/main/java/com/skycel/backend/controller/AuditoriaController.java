@@ -29,7 +29,7 @@ public class AuditoriaController {
     private final AuditoriaService auditoriaService;
 
     @GetMapping("/{entidad}/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('AUDITORIA')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> historial(
             @PathVariable String entidad, @PathVariable Integer id) {

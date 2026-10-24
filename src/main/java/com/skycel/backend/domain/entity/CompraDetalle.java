@@ -20,9 +20,15 @@ public class CompraDetalle {
     @JoinColumn(name = "idcompra", nullable = false)
     private Compra compra;
 
+    /** El producto (accesorios). Vacío en una línea de equipos: esa se identifica por su artículo. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "idproducto", nullable = false)
+    @JoinColumn(name = "idproducto")
     private Producto producto;
+
+    /** El artículo de una línea de equipos (celulares o tablets recibidos por IMEI). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idprodmaster")
+    private ProductoMaster productoMaster;
 
     @Column(name = "cantidad", nullable = false, precision = 10, scale = 2)
     private BigDecimal cantidad;

@@ -142,15 +142,20 @@ public class MovimientoCajaService {
 
     /**
      * Salida que revierte la entrada de una venta cancelada. Si la venta no generó movimiento
-     * (no fue en efectivo, o es anterior a este módulo) no hay nada que revertir.
+     * (no fue en efectivo, o es anterior a este módulo) no hay nada que revertir. Si lo hubo, devolver ese
+     * efectivo exige la caja abierta.
      */
     @Transactional
     public void registrarCancelacionVenta(Venta venta, Usuario usuario) {
         CatMotivo motivoVenta = motivoSistema(VENTA);
         movimientoCajaRepository
                 .findFirstByMotivo_IdmotivoAndObservaciones(motivoVenta.getIdmotivo(), referenciaVenta(venta.getIdventa()))
-                .ifPresent(original -> guardar(original.getCaja(), usuario, null, motivoSistema(CANCELACION_VENTA),
-                        original.getMonto(), "Cancelación de venta #" + venta.getIdventa(), original.getIdmovimiento()));
+                .ifPresent(original -> {
+                    // El efectivo se le devuelve al cliente del cajón: la caja de esa venta debe estar abierta
+                    exigirCajaAbierta(original.getCaja());
+                    guardar(original.getCaja(), usuario, null, motivoSistema(CANCELACION_VENTA),
+                            original.getMonto(), "Cancelación de venta #" + venta.getIdventa(), original.getIdmovimiento());
+                });
     }
 
     /**

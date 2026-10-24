@@ -21,7 +21,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/descansos-empleado")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+@PreAuthorize("@permisos.tiene('DESCANSOS')")
 @SecurityRequirement(name = "Bearer Authentication")
 @Tag(name = "Descansos de empleados", description = "Calendario de fechas de descanso tomadas por cada empleado")
 public class EmpleadoDescansoController {

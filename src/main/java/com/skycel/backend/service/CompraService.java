@@ -38,8 +38,10 @@ public class CompraService {
     private final ProveedorRepository   proveedorRepository;
     private final TiendaRepository      tiendaRepository;
     private final ProductoRepository    productoRepository;
+    private final ProductoMasterRepository productoMasterRepository;
     private final UsuarioRepository     usuarioRepository;
     private final ProductoService       productoService;
+    private final EquipoService         equipoService;
     private final MovimientoCajaService movimientoCajaService;
 
     private static final byte METODO_EFECTIVO = 1;
@@ -120,8 +122,38 @@ public class CompraService {
         BigDecimal total = BigDecimal.ZERO;
         List<CompraDetalle> lineas = new ArrayList<>();
         for (CompraLineaRequestDto l : dto.getLineas()) {
-            if (l.getCodpro() == null || l.getCodpro().isBlank())
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta el código de un producto en la compra.");
+            if (l.getCodpro() == null || l.getCodpro().isBlank()) {
+                if (l.getIdprodmaster() == null && l.getIdCategoria() == null)
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta el código de un producto en la compra (o el artículo, si es un equipo).");
+                // Equipos: se dan de alta por IMEI o serie, cada uno con su costo
+                List<UnidadEquipoDTO> unidades = l.getUnidades();
+                if (unidades == null || unidades.isEmpty())
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indica el IMEI (o serie) de los equipos recibidos.");
+                BigDecimal costoEquipos = BigDecimal.ZERO;
+                for (UnidadEquipoDTO u : unidades) {
+                    if (u.getCostoUnitario() == null || u.getCostoUnitario().signum() <= 0)
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indica el costo del IMEI '" + u.getImei() + "'.");
+                    costoEquipos = costoEquipos.add(u.getCostoUnitario());
+                }
+                com.skycel.backend.dto.equipo.EquipoRequestDto alta = new com.skycel.backend.dto.equipo.EquipoRequestDto();
+                alta.setCodti(dto.getCodti());
+                alta.setIdProductoMaster(l.getIdprodmaster());
+                alta.setIdCategoria(l.getIdCategoria());
+                alta.setNombreProducto(l.getNombreProducto());
+                alta.setIdColor(l.getIdColor());
+                alta.setUnidades(unidades);
+                alta.setPrecioVenta(l.getPrecioVenta());
+                alta.setIdProveedor(proveedor.getIdproveedor());
+                alta.setMotivo("Compra #" + compra.getIdcompra() + " a " + nombreProveedor(proveedor)
+                        + (dto.getFolioProveedor() != null && !dto.getFolioProveedor().isBlank() ? " (folio " + dto.getFolioProveedor() + ")" : ""));
+                var altas = equipoService.registrar(alta, username);
+                ProductoMaster articulo = productoMasterRepository.findById(altas.get(0).getIdprodmaster()).orElseThrow();
+                BigDecimal n = BigDecimal.valueOf(unidades.size());
+                lineas.add(CompraDetalle.builder().compra(compra).productoMaster(articulo)
+                        .cantidad(n).costoUnitario(costoEquipos.divide(n, 2, java.math.RoundingMode.HALF_UP)).subtotal(costoEquipos).build());
+                total = total.add(costoEquipos);
+                continue;
+            }
             Producto producto = productoRepository.findByCodproAndTienda_Codti(l.getCodpro(), dto.getCodti())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "El producto '" + l.getCodpro() + "' no existe en esa sucursal."));
@@ -304,8 +336,9 @@ public class CompraService {
         if (c.getLineas() != null) {
             m.put("lineas", c.getLineas().stream().map(l -> {
                 Map<String, Object> lm = new LinkedHashMap<>();
-                lm.put("codpro",        l.getProducto().getCodpro());
-                lm.put("nombreProducto", l.getProducto().getProductoMaster().getNombreBase());
+                lm.put("codpro",        l.getProducto() != null ? l.getProducto().getCodpro() : null);
+                lm.put("nombreProducto", l.getProducto() != null ? l.getProducto().getProductoMaster().getNombreBase()
+                        : (l.getProductoMaster() != null ? l.getProductoMaster().getNombreBase() : null));
                 lm.put("cantidad",      l.getCantidad());
                 lm.put("costoUnitario", l.getCostoUnitario());
                 lm.put("subtotal",      l.getSubtotal());

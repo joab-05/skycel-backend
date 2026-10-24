@@ -60,6 +60,9 @@ public class OrdenServicioRequestDto {
     /** Fecha prometida al cliente (no puede ser anterior a hoy). */
     private LocalDate fechaPromesa;
 
+    /** Tiempo estimado de entrega en horas (1 a 720). Si viene, calcula el día y la hora prometidos y manda sobre la fecha. */
+    private Integer horasEstimadas;
+
     /** Técnico asignado (usuario con rol TECNICO). Opcional: se puede asignar después. */
     private Integer idTecnico;
 

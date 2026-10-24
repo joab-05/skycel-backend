@@ -84,6 +84,7 @@ class VentaServiceTest {
         lenient().when(usuarioRepository.findById(ID_VENDEDOR)).thenReturn(Optional.of(vendedor));
         // Sin reglas de descuento salvo que una prueba diga lo contrario: el precio de sistema es el de lista.
         lenient().when(descuentoService.calcularDescuento(any(), any(), any())).thenReturn(BigDecimal.ZERO);
+        lenient().when(descuentoService.calcularDescuento(any(), any(), any(), any())).thenReturn(BigDecimal.ZERO);
 
         // save(...) devuelve la misma entidad recibida, como haría JPA con un save simple.
         lenient().when(ventaRepository.save(any(Venta.class))).thenAnswer(inv -> {
@@ -158,11 +159,11 @@ class VentaServiceTest {
     class CrearCelular {
 
         @Test
-        @DisplayName("con IMEI disponible: descuenta 1 de stock, marca el IMEI como VENDIDO y calcula el total")
-        void ventaExitosa_descuentaStockYMarcaImeiVendido() {
+        @DisplayName("con IMEI disponible: marca el IMEI como VENDIDO, deja constancia en el historial y calcula el total")
+        void ventaExitosa_marcaImeiVendido() {
             ProductoMaster master = masterCelular();
             Producto producto = productoCelular(master, BigDecimal.ONE);
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(producto).imei("123456789012345").estado("DISPONIBLE").build();
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(master).tienda(tienda).precioVenta(new BigDecimal("199")).costo(new BigDecimal("100")).imei("123456789012345").estado("DISPONIBLE").build();
 
             when(productoMasterRepository.findById(1)).thenReturn(Optional.of(master));
             when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
@@ -172,18 +173,21 @@ class VentaServiceTest {
             VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
 
             assertThat(response.getTotal()).isEqualByComparingTo("199");
-            assertThat(producto.getStock()).isEqualByComparingTo("0");
             assertThat(pi.getEstado()).isEqualTo("VENDIDO");
-            verify(ventaDetalleRepository).save(any(VentaDetalle.class));
+            ArgumentCaptor<VentaDetalle> detalle = ArgumentCaptor.forClass(VentaDetalle.class);
+            verify(ventaDetalleRepository).save(detalle.capture());
+            assertThat(detalle.getValue().getCodpro()).isNull();   // un equipo no lleva código: lo identifica su IMEI
+            assertThat(detalle.getValue().getImei()).isEqualTo("123456789012345");
+            verify(movimientoInventarioService).registrarEquipo(eq(pi), eq(-1), eq("VENTA"), any(), any(), any());
         }
 
         @Test
-        @DisplayName("si el IMEI tiene precio propio (override), ese es el precio de referencia — no el del modelo")
+        @DisplayName("el precio de referencia es el de ESTA unidad (una liquidación no cambia el de las demás)")
         void imeiConPrecioPropio_usaEsePrecioComoBase() {
             ProductoMaster master = masterCelular();
             Producto producto = productoCelular(master, BigDecimal.ONE); // preciopub = 200
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(producto).imei("123456789012345")
-                    .estado("DISPONIBLE").precioVentaOverride(new BigDecimal("150")).build(); // liquidación
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(master).tienda(tienda).precioVenta(new BigDecimal("199")).costo(new BigDecimal("100")).imei("123456789012345")
+                    .estado("DISPONIBLE").precioVenta(new BigDecimal("150")).build(); // liquidación
 
             when(productoMasterRepository.findById(1)).thenReturn(Optional.of(master));
             when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
@@ -196,6 +200,39 @@ class VentaServiceTest {
 
             assertThat(response.getDetalles().get(0).getPrecioUnitarioBase()).isEqualByComparingTo("150");
             assertThat(response.getTotal()).isEqualByComparingTo("150");
+        }
+
+        @Test
+        @DisplayName("solo con el IMEI (sin indicar el artículo): la unidad ya sabe de cuál es")
+        void soloConImei_tomaElArticuloDeLaUnidad() {
+            ProductoMaster master = masterCelular();
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(master).tienda(tienda)
+                    .precioVenta(new BigDecimal("199")).costo(new BigDecimal("100")).imei("123456789012345").estado("DISPONIBLE").build();
+            when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
+            VentaDetalleRequestDto linea = lineaCelular("123456789012345");
+            linea.setIdprodmaster(null);
+
+            VentaResponseDto response = ventaService.crear(ventaBase(List.of(linea)), ID_VENDEDOR);
+
+            assertThat(response.getTotal()).isEqualByComparingTo("199");
+            assertThat(pi.getEstado()).isEqualTo("VENDIDO");
+        }
+
+        @Test
+        @DisplayName("IMEI de otra sucursal: 400")
+        void imeiDeOtraSucursal() {
+            ProductoMaster master = masterCelular();
+            Tienda otra = Tienda.builder().codti(9).nombre("Otra").build();
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(master).tienda(otra)
+                    .precioVenta(new BigDecimal("199")).imei("123456789012345").estado("DISPONIBLE").build();
+            when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
+            VentaDetalleRequestDto linea = lineaCelular("123456789012345");
+            linea.setIdprodmaster(null);
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(linea)), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("otra tienda");
+            verify(ventaRepository, never()).save(any());
         }
 
         @Test
@@ -220,7 +257,7 @@ class VentaServiceTest {
         void imeiNoDisponible_lanzaBadRequest() {
             ProductoMaster master = masterCelular();
             Producto producto = productoCelular(master, BigDecimal.ONE);
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(producto).imei("123456789012345").estado("VENDIDO").build();
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(master).tienda(tienda).precioVenta(new BigDecimal("199")).costo(new BigDecimal("100")).imei("123456789012345").estado("VENDIDO").build();
 
             when(productoMasterRepository.findById(1)).thenReturn(Optional.of(master));
             when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
@@ -379,7 +416,7 @@ class VentaServiceTest {
         private void celularDisponible(String imei) {
             ProductoMaster master = masterCelular();
             Producto producto = productoCelular(master, BigDecimal.ONE);
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(producto).imei(imei).estado("DISPONIBLE").build();
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(master).tienda(tienda).precioVenta(new BigDecimal("199")).costo(new BigDecimal("100")).imei(imei).estado("DISPONIBLE").build();
             lenient().when(productoMasterRepository.findById(1)).thenReturn(Optional.of(master));
             lenient().when(productoImeiRepository.findByImei(imei)).thenReturn(Optional.of(pi));
         }
@@ -616,8 +653,9 @@ class VentaServiceTest {
     class CostoPorUnidad {
 
         private ProductoImei unidadConCosto(Producto producto, BigDecimal costo) {
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(producto).imei("350000000000011")
-                    .estado("DISPONIBLE").costoUnitario(costo).build();
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(producto.getProductoMaster()).tienda(tienda)
+                    .precioVenta(new BigDecimal("199")).imei("350000000000011")
+                    .estado("DISPONIBLE").costo(costo).build();
             when(productoImeiRepository.findByImei("350000000000011")).thenReturn(Optional.of(pi));
             return pi;
         }
@@ -638,8 +676,8 @@ class VentaServiceTest {
         }
 
         @Test
-        @DisplayName("sin costo propio: se usa el costo del modelo")
-        void usaElCostoDelModelo() {
+        @DisplayName("sin costo registrado en la unidad: el costo de la venta es 0")
+        void sinCostoRegistrado() {
             ProductoMaster master = masterCelular();
             Producto producto = productoCelular(master, BigDecimal.ONE);
             unidadConCosto(producto, null);
@@ -649,7 +687,7 @@ class VentaServiceTest {
 
             ArgumentCaptor<VentaDetalle> cap = ArgumentCaptor.forClass(VentaDetalle.class);
             verify(ventaDetalleRepository).save(cap.capture());
-            assertThat(cap.getValue().getCostoUnitarioCompra()).isEqualByComparingTo("100");
+            assertThat(cap.getValue().getCostoUnitarioCompra()).isEqualByComparingTo("0");
         }
     }
 
@@ -1105,10 +1143,9 @@ class VentaServiceTest {
     class Cancelar {
 
         @Test
-        @DisplayName("revierte el IMEI a DISPONIBLE, suma 1 al stock y marca la venta como CANCELADA")
-        void cancelarVentaDeCelular_revierteImeiYStock() {
+        @DisplayName("revierte el IMEI a DISPONIBLE, deja constancia en el historial y marca la venta como CANCELADA")
+        void cancelarVentaDeCelular_revierteImei() {
             ProductoMaster master = masterCelular();
-            Producto producto = productoCelular(master, BigDecimal.ZERO); // ya vendido, stock en 0
             Venta venta = Venta.builder()
                     .idventa(500).estado((byte) 1).total(new BigDecimal("199"))
                     .tienda(tienda).caja(caja).usuarioVendedor(vendedor)
@@ -1116,11 +1153,11 @@ class VentaServiceTest {
                     .build();
             VentaDetalle detalle = VentaDetalle.builder()
                     .iddetalleVenta(900).venta(venta).productoMaster(master)
-                    .codpro(producto.getCodpro()).cantidad((short) 1)
+                    .cantidad((short) 1)
                     .precioUnitarioBase(new BigDecimal("200")).precioUnitarioFinal(new BigDecimal("199"))
                     .costoUnitarioCompra(new BigDecimal("100")).imei("123456789012345")
                     .build();
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(producto).imei("123456789012345").estado("VENDIDO").build();
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(master).tienda(tienda).precioVenta(new BigDecimal("199")).costo(new BigDecimal("100")).imei("123456789012345").estado("VENDIDO").build();
 
             when(ventaRepository.findById(500)).thenReturn(Optional.of(venta));
             when(ventaDetalleRepository.findByVenta_Idventa(500)).thenReturn(List.of(detalle));
@@ -1129,7 +1166,7 @@ class VentaServiceTest {
             ventaService.cancelar(500, ID_VENDEDOR);
 
             assertThat(pi.getEstado()).isEqualTo("DISPONIBLE");
-            assertThat(producto.getStock()).isEqualByComparingTo("1");
+            verify(movimientoInventarioService).registrarEquipo(pi, +1, "CANCELACION_VENTA", null, "Venta #500");
             assertThat(venta.getEstado()).isEqualTo((byte) 2);
         }
 

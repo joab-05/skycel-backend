@@ -26,7 +26,7 @@ public class CuentaPorCobrarController {
 
     /** GET /api/cuentas-por-cobrar — todas */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CUENTAS_COBRAR')")
     public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> listar(
             @RequestParam(defaultValue = "false") boolean soloActivas) {
         var lista = soloActivas ? cpcService.listarActivas() : cpcService.listarTodas();
@@ -35,14 +35,14 @@ public class CuentaPorCobrarController {
 
     /** GET /api/cuentas-por-cobrar/resumen */
     @GetMapping("/resumen")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CUENTAS_COBRAR')")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> resumen() {
         return ResponseEntityBuilder.ok(cpcService.resumen(), "resumen");
     }
 
     /** POST /api/cuentas-por-cobrar */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CUENTAS_COBRAR')")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> crear(
             @RequestBody CuentaPorCobrarRequestDto dto) {
         return ResponseEntityBuilder.created(cpcService.crear(dto), "cuenta-por-cobrar");
@@ -50,7 +50,7 @@ public class CuentaPorCobrarController {
 
     /** POST /api/cuentas-por-cobrar/{id}/pago */
     @PostMapping("/{id}/pago")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CUENTAS_COBRAR')")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> registrarPago(
             @PathVariable Integer id,
             @RequestParam BigDecimal monto,
@@ -77,7 +77,7 @@ public class CuentaPorCobrarController {
 
     /** GET /api/cuentas-por-cobrar/{id}/historial */
     @GetMapping("/{id}/historial")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CUENTAS_COBRAR')")
     public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> historial(
             @PathVariable Integer id) {
         return ResponseEntityBuilder.ok(cpcService.historialPagos(id), "pagos");

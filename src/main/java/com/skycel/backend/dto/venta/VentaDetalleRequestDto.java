@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 @Data
 public class VentaDetalleRequestDto {
 
-    @NotNull(message = "El idprodmaster es obligatorio")
+    /** El artículo. Obligatorio salvo en un equipo: con su IMEI basta, la unidad ya sabe de qué artículo es. */
     private Integer idprodmaster;
 
     /** Código específico de producto (puede ser null si se vende por master) */

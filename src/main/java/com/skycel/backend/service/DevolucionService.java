@@ -176,8 +176,8 @@ public class DevolucionService {
                 if (m.getTipo() == TipoProducto.SERVICIO) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Un servicio no se puede llevar a cambio.");
                 }
-                if (m.getTipo() == TipoProducto.CELULAR && (c.getImei() == null || c.getImei().isBlank() || c.getCantidad() != 1)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "«" + m.getNombreBase() + "» es un equipo: indique el IMEI de la unidad (1 por renglón).");
+                if ((m.getTipo() == TipoProducto.CELULAR || m.getTipo() == TipoProducto.TABLET) && (c.getImei() == null || c.getImei().isBlank() || c.getCantidad() != 1)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "«" + m.getNombreBase() + "» es un equipo: indique el IMEI o serie de la unidad (1 por renglón).");
                 }
                 nuevo = nuevo.add(c.getPrecioUnitarioFinal().multiply(BigDecimal.valueOf(c.getCantidad())));
                 cambio.add(DevolucionCambioLinea.builder().idprodmaster(c.getIdprodmaster()).codpro(trimOrNull(c.getCodpro()))
@@ -288,20 +288,21 @@ public class DevolucionService {
 
     /** Lo devuelto en buen estado vuelve al inventario; lo dañado se da de baja. */
     private void reingresarOBaja(DevolucionDetalle x, Devolucion d) {
-        Producto producto;
-        if (x.getImei() != null) {
+        if (x.getImei() != null) {   // un equipo: la unidad vuelve a estar disponible (o se da de baja)
             ProductoImei pi = productoImeiRepository.findByImei(x.getImei())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "La unidad '" + x.getImei() + "' ya no existe en el sistema."));
-            if (!"VENDIDO".equals(pi.getEstado())) {
+            if (!ProductoImei.VENDIDO.equals(pi.getEstado())) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "La unidad '" + x.getImei() + "' ya no figura como vendida (estado: " + pi.getEstado() + ").");
             }
-            pi.setEstado(Boolean.TRUE.equals(x.getReingresa()) ? "DISPONIBLE" : "DEBAJA");
+            boolean reingresa = Boolean.TRUE.equals(x.getReingresa());
+            pi.setEstado(reingresa ? ProductoImei.DISPONIBLE : "DEBAJA");
+            pi.setTienda(d.getTienda());
             productoImeiRepository.save(pi);
-            producto = pi.getProducto();
-        } else {
-            producto = productoRepository.findByCodproAndTienda_Codti(x.getCodpro(), d.getTienda().getCodti()).orElse(null);
+            if (reingresa) movimientoInventarioService.registrarEquipo(pi, +1, "DEVOLUCION", "Devolución de venta", d.getFolio());
+            return;
         }
+        Producto producto = productoRepository.findByCodproAndTienda_Codti(x.getCodpro(), d.getTienda().getCodti()).orElse(null);
         if (Boolean.TRUE.equals(x.getReingresa()) && producto != null) {
             BigDecimal antes = producto.getStock() != null ? producto.getStock() : BigDecimal.ZERO;
             producto.setStock(antes.add(BigDecimal.valueOf(x.getCantidad())));

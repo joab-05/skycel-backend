@@ -253,7 +253,7 @@ public class VentaService {
             VentaDetalle detalle = VentaDetalle.builder()
                     .venta(venta)
                     .productoMaster(linea.productoMaster)
-                    .codpro(linea.producto.getCodpro())
+                    .codpro(linea.producto != null ? linea.producto.getCodpro() : null)
                     .cantidad(linea.cantidadSolicitada)
                     .precioUnitarioBase(linea.precioUnitarioBase)
                     .precioUnitarioFinal(linea.precioUnitarioFinal)
@@ -464,14 +464,9 @@ public class VentaService {
                     "El IMEI '" + imei + "' ya no está en estado VENDIDO (estado actual: " + pi.getEstado() +
                             "); no se puede revertir automáticamente.");
         }
-        pi.setEstado("DISPONIBLE");
+        pi.setEstado(ProductoImei.DISPONIBLE);
         productoImeiRepository.save(pi);
-
-        Producto producto = pi.getProducto();
-        BigDecimal stockActual = producto.getStock() != null ? producto.getStock() : BigDecimal.ZERO;
-        producto.setStock(stockActual.add(BigDecimal.ONE));
-        productoRepository.save(producto);
-        movimientoInventarioService.registrar(producto, stockActual, "CANCELACION_VENTA", null, "Venta #" + idventa);
+        movimientoInventarioService.registrarEquipo(pi, +1, "CANCELACION_VENTA", null, "Venta #" + idventa);
     }
 
     private void revertirStockAccesorio(String codpro, Integer codti, Short cantidad, Integer idventa) {
@@ -491,8 +486,9 @@ public class VentaService {
     /** Datos ya validados de una línea de venta, antes de tocar la base de datos. */
     private static class LineaResuelta {
         ProductoMaster productoMaster;
-        Producto producto;
-        String imei; // solo CELULAR
+        Producto producto;      // accesorios y servicios; null en un equipo
+        ProductoImei unidad;    // solo equipos (celular o tablet): la unidad que se vende
+        String imei; // solo equipos
         Short cantidadSolicitada;
         BigDecimal costoUnitarioCompra;
         BigDecimal precioUnitarioBase;
@@ -507,57 +503,58 @@ public class VentaService {
     }
 
     private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor, boolean desdeOrden, boolean sinConexion, boolean esPayjoy) {
-        ProductoMaster master = productoMasterRepository.findById(d.getIdprodmaster())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Producto maestro no encontrado: " + d.getIdprodmaster()));
+        // Un equipo se vende por su IMEI: la unidad ya sabe de qué artículo es
+        ProductoImei unidadPedida = d.getImei() != null && !d.getImei().isBlank()
+                ? productoImeiRepository.findByImei(d.getImei().trim().toUpperCase()).orElse(null) : null;
+        if (d.getIdprodmaster() == null && unidadPedida == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, d.getImei() != null && !d.getImei().isBlank()
+                    ? "El IMEI '" + d.getImei() + "' no está registrado." : "Indique el artículo (idprodmaster) o el IMEI del equipo.");
+        }
+        ProductoMaster master = d.getIdprodmaster() != null
+                ? productoMasterRepository.findById(d.getIdprodmaster())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Producto maestro no encontrado: " + d.getIdprodmaster()))
+                : unidadPedida.getProductoMaster();
 
         LineaResuelta linea = new LineaResuelta();
         linea.productoMaster = master;
         linea.cantidadSolicitada = d.getCantidad();
         linea.esRegalo = Boolean.TRUE.equals(d.getEsRegalo());
 
-        if (master.getTipo() == TipoProducto.CELULAR) {
+        if (master.getTipo() == TipoProducto.CELULAR || master.getTipo() == TipoProducto.TABLET) {
             if (d.getImei() == null || d.getImei().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Debe indicar el IMEI para vender el artículo CELULAR '" + master.getNombreBase() + "'.");
+                        "Debe indicar el IMEI o serie para vender el equipo '" + master.getNombreBase() + "'.");
             }
             if (d.getCantidad() == null || d.getCantidad() != 1) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Cada línea de un CELULAR debe tener cantidad = 1 (un IMEI por línea). IMEI: " + d.getImei());
+                        "Cada línea de un equipo debe tener cantidad = 1 (un IMEI por línea). IMEI: " + d.getImei());
             }
 
-            ProductoImei pi = productoImeiRepository.findByImei(d.getImei())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                            "El IMEI '" + d.getImei() + "' no está registrado."));
-
-            Producto producto = pi.getProducto();
-            if (!producto.getTienda().getCodti().equals(tienda.getCodti())) {
+            ProductoImei pi = unidadPedida;
+            if (pi == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "El IMEI '" + d.getImei() + "' no está registrado.");
+            }
+            if (pi.getTienda() == null || !pi.getTienda().getCodti().equals(tienda.getCodti())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El IMEI '" + d.getImei() + "' pertenece a otra tienda.");
             }
-            if (!producto.getProductoMaster().getIdprodmaster().equals(master.getIdprodmaster())) {
+            if (!pi.getProductoMaster().getIdprodmaster().equals(master.getIdprodmaster())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "El IMEI '" + d.getImei() + "' no corresponde al producto maestro indicado.");
+                        "El IMEI '" + d.getImei() + "' no corresponde al artículo indicado.");
             }
-            if (!"DISPONIBLE".equals(pi.getEstado())) {
+            if (!ProductoImei.DISPONIBLE.equals(pi.getEstado())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El IMEI '" + d.getImei() + "' no está disponible (Estado: " + pi.getEstado() + ").");
             }
 
-            linea.producto = producto;
-            linea.imei = d.getImei();
-            // El costo de ESTA unidad (p. ej. un usado comprado a un cliente) o, si no tiene, el del modelo.
-            linea.costoUnitarioCompra = pi.getCostoUnitario() != null
-                    ? pi.getCostoUnitario() : producto.getPreciopro();
-            // El precio de referencia es el de ESTA unidad (override si tiene uno propio),
-            // no el genérico del modelo — es justo lo que resuelve poder liquidar un
-            // equipo específico sin tocar el precio de los demás del mismo modelo. Un descuento
-            // automático solo se resta al precio de lista: una unidad con precio propio ya es una
-            // excepción manual del admin, no se le encima un descuento más.
-            linea.precioUnitarioBase = pi.getPrecioVentaOverride() != null
-                    ? pi.getPrecioVentaOverride()
-                    : producto.getPreciopub().subtract(
-                            descuentoService.calcularDescuento(producto, producto.getPreciopub(), LocalDateTime.now()));
+            linea.unidad = pi;
+            linea.imei = pi.getImei();
+            // El costo y el precio de ESTA unidad. El descuento automático (si alguna regla aplica ahora) se resta del precio de lista.
+            linea.costoUnitarioCompra = pi.getCosto() != null ? pi.getCosto() : BigDecimal.ZERO;
+            BigDecimal lista = pi.getPrecioVenta() != null ? pi.getPrecioVenta() : BigDecimal.ZERO;
+            linea.precioUnitarioBase = lista.subtract(
+                    descuentoService.calcularDescuento(master, tienda.getCodti(), lista, LocalDateTime.now()));
 
         } else {
             Producto producto = resolverProductoNoSerial(d, master, tienda);
@@ -675,17 +672,17 @@ public class VentaService {
     }
 
     private void aplicarDescuentoStock(LineaResuelta linea, Venta venta, boolean sinConexion) {
-        if (linea.productoMaster.getTipo() == TipoProducto.CELULAR) {
+        if (linea.unidad != null) {
             ProductoImei pi = productoImeiRepository.findByImei(linea.imei)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
                             "El IMEI '" + linea.imei + "' dejó de existir durante el procesamiento de la venta."));
-            pi.setEstado("VENDIDO");
+            if (!ProductoImei.DISPONIBLE.equals(pi.getEstado())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "El IMEI '" + linea.imei + "' ya no está disponible (Estado: " + pi.getEstado() + ").");
+            }
+            pi.setEstado(ProductoImei.VENDIDO);
             productoImeiRepository.save(pi);
-
-            BigDecimal stockActual = linea.producto.getStock() != null ? linea.producto.getStock() : BigDecimal.ZERO;
-            linea.producto.setStock(stockActual.subtract(BigDecimal.ONE));
-            productoRepository.save(linea.producto);
-            movimientoInventarioService.registrar(linea.producto, stockActual, "VENTA", venta.getFolioLocal() != null ? "Venta hecha sin conexión (" + venta.getFolioLocal() + ")" : null,
+            movimientoInventarioService.registrarEquipo(pi, -1, "VENTA", venta.getFolioLocal() != null ? "Venta hecha sin conexión (" + venta.getFolioLocal() + ")" : null,
                     "Venta #" + venta.getIdventa(), venta.getFechaVenta());
 
         } else if (linea.productoMaster.getTipo() != TipoProducto.SERVICIO) {

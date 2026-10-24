@@ -107,6 +107,14 @@ public class OrdenServicio {
     @Column(name = "fecha_promesa")
     private LocalDate fechaPromesa;
 
+    /** Tiempo estimado de entrega que se le dio al cliente, en horas (contadas desde que se estimó). */
+    @Column(name = "horas_estimadas")
+    private Integer horasEstimadas;
+
+    /** Día y hora a los que se prometió el equipo; se calcula con {@link #horasEstimadas}. */
+    @Column(name = "fecha_promesa_hora")
+    private LocalDateTime fechaPromesaHora;
+
     @Column(name = "fecha_lista")
     private LocalDateTime fechaLista;
 

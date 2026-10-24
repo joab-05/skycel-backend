@@ -23,10 +23,7 @@ import java.util.List;
 @Tag(name = "Órdenes de servicio", description = "Taller: recepción de equipos, reparación, anticipos y entrega")
 public class OrdenServicioController {
 
-    private static final String PERSONAL = "hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')";
-    private static final String PERSONAL_Y_TECNICO = "hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR','TECNICO')";
     /** El trabajo del taller (estados, servicios, observaciones): administradores y técnicos. */
-    private static final String TALLER = "hasAnyRole('ROOT','ADMIN','TECNICO')";
 
     private final OrdenServicioService ordenService;
 
@@ -34,7 +31,7 @@ public class OrdenServicioController {
             description = "Opcionalmente con técnico, renglones (servicios y refacciones) y un anticipo.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('ORDEN_RECIBIR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> crear(
             @Valid @RequestBody OrdenServicioRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.created(ordenService.crear(request, user.getUsername()), "orden de servicio");
@@ -43,7 +40,7 @@ public class OrdenServicioController {
     @Operation(summary = "Consultar una orden")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{id}")
-    @PreAuthorize(PERSONAL_Y_TECNICO)
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> obtener(
             @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(ordenService.obtener(id, user.getUsername()), "orden de servicio");
@@ -52,7 +49,7 @@ public class OrdenServicioController {
     @Operation(summary = "Consultar una orden por su folio (OS-000001)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/folio/{folio}")
-    @PreAuthorize(PERSONAL_Y_TECNICO)
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> obtenerPorFolio(
             @PathVariable String folio, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(ordenService.obtenerPorFolio(folio, user.getUsername()), "orden de servicio");
@@ -62,7 +59,7 @@ public class OrdenServicioController {
             description = "Filtros opcionales: estado (1 Recibida, 2 En reparación, 3 Lista, 4 Entregada, 5 Cancelada) y técnico.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/tienda/{codti}")
-    @PreAuthorize(PERSONAL_Y_TECNICO)
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
     public ResponseEntity<StandardApiResponse<List<OrdenServicioResponseDto>>> listar(
             @PathVariable Integer codti,
             @RequestParam(required = false) Byte estado,
@@ -82,7 +79,7 @@ public class OrdenServicioController {
     @Operation(summary = "Actualizar los datos de una orden abierta (incluye el diagnóstico)")
     @SecurityRequirement(name = "Bearer Authentication")
     @PatchMapping("/{id}")
-    @PreAuthorize(PERSONAL_Y_TECNICO)
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> actualizar(
             @PathVariable Integer id, @Valid @RequestBody OrdenActualizarDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.actualizar(id, request, user.getUsername()), "orden de servicio");
@@ -91,7 +88,7 @@ public class OrdenServicioController {
     @Operation(summary = "Asignar (o cambiar) el técnico")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/tecnico")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','TECNICO')")
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> asignarTecnico(
             @PathVariable Integer id, @Valid @RequestBody AsignarTecnicoDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.asignarTecnico(id, request, user.getUsername()), "orden de servicio");
@@ -101,7 +98,7 @@ public class OrdenServicioController {
             description = "Un administrador y el técnico encargado ven todas; un técnico, las que nadie ha tomado y las suyas.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/taller")
-    @PreAuthorize(TALLER)
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
     public ResponseEntity<StandardApiResponse<List<OrdenServicioResponseDto>>> taller(@AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(ordenService.taller(user.getUsername()), "órdenes del taller");
     }
@@ -120,7 +117,7 @@ public class OrdenServicioController {
             description = "Queda en la bitácora sin cambiar el estado. Solo un administrador o un técnico.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/notas")
-    @PreAuthorize(TALLER)
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> agregarNota(
             @PathVariable Integer id, @Valid @RequestBody ComentarioRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.agregarNota(id, request, user.getUsername()), "orden de servicio");
@@ -129,7 +126,7 @@ public class OrdenServicioController {
     @Operation(summary = "Agregar un servicio o una refacción a la orden")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/lineas")
-    @PreAuthorize(TALLER)
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> agregarLinea(
             @PathVariable Integer id, @Valid @RequestBody OrdenLineaRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.agregarLinea(id, request, user.getUsername()), "orden de servicio");
@@ -138,7 +135,7 @@ public class OrdenServicioController {
     @Operation(summary = "Quitar un renglón de la orden")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{id}/lineas/{iddetalle}")
-    @PreAuthorize(TALLER)
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> eliminarLinea(
             @PathVariable Integer id, @PathVariable Integer iddetalle, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.eliminarLinea(id, iddetalle, user.getUsername()), "orden de servicio");
@@ -147,7 +144,7 @@ public class OrdenServicioController {
     @Operation(summary = "Iniciar la reparación", description = "Requiere un técnico asignado.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/iniciar")
-    @PreAuthorize(TALLER)
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> iniciar(
             @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.iniciar(id, user.getUsername()), "orden de servicio");
@@ -157,7 +154,7 @@ public class OrdenServicioController {
             description = "Exige al menos un renglón y stock de las refacciones.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/lista")
-    @PreAuthorize(TALLER)
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> lista(
             @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.marcarLista(id, user.getUsername()), "orden de servicio");
@@ -166,7 +163,7 @@ public class OrdenServicioController {
     @Operation(summary = "Reabrir una orden lista (vuelve a reparación)")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/reabrir")
-    @PreAuthorize(TALLER)
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> reabrir(
             @PathVariable Integer id, @Valid @RequestBody ComentarioRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.reabrir(id, request, user.getUsername()), "orden de servicio");
@@ -175,7 +172,7 @@ public class OrdenServicioController {
     @Operation(summary = "Registrar un anticipo", description = "Solo el efectivo entra a la caja.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/anticipos")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('ORDEN_RECIBIR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> registrarAnticipo(
             @PathVariable Integer id, @Valid @RequestBody AnticipoRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.registrarAnticipo(id, request, user.getUsername()), "orden de servicio");
@@ -185,7 +182,7 @@ public class OrdenServicioController {
             description = "Genera la venta de la orden. El anticipo ya cobrado no vuelve a entrar a la caja.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/entregar")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('ORDEN_RECIBIR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> entregar(
             @PathVariable Integer id,
             @Valid @RequestBody(required = false) EntregaRequestDto request,
@@ -197,7 +194,7 @@ public class OrdenServicioController {
     @Operation(summary = "Cancelar la orden", description = "Opcionalmente devuelve los anticipos en efectivo.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/cancelar")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('ORDEN_RECIBIR')")
     public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> cancelar(
             @PathVariable Integer id, @Valid @RequestBody CancelarOrdenRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(ordenService.cancelar(id, request, user.getUsername()), "orden de servicio");

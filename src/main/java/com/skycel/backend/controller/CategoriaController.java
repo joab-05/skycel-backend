@@ -34,7 +34,7 @@ public class CategoriaController {
     @Operation(summary = "Crear categoría o subcategoría")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<CategoriaResponseDTO> crear(@Valid @RequestBody CategoriaRequestDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(categoriaService.crear(request));
     }
@@ -43,7 +43,7 @@ public class CategoriaController {
             description = "Solo si no tiene subcategorías ni artículos activos. Es lógica: conserva el historial y se reactiva si se vuelve a crear con el mismo nombre.")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<java.util.Map<String, String>> eliminar(@PathVariable Short id) {
         categoriaService.eliminar(id);
         return ResponseEntity.ok(java.util.Map.of("mensaje", "Categoría eliminada."));
@@ -52,7 +52,7 @@ public class CategoriaController {
     @Operation(summary = "Actualizar nombre, código corto o categoría superior")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<CategoriaResponseDTO> actualizar(@PathVariable Short id,
                                                             @Valid @RequestBody CategoriaRequestDTO request) {
         return ResponseEntity.ok(categoriaService.actualizar(id, request));

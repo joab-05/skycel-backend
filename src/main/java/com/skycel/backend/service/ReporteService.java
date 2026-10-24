@@ -124,6 +124,15 @@ public class ReporteService {
         // ── Valor del inventario (a hoy, no depende del rango de fechas) ──
         Map<Integer, ValorInventarioRow> valorPorCodti = productoRepository.valorInventarioPorTienda(codtis).stream()
                 .collect(Collectors.toMap(ValorInventarioRow::getCodti, r -> r));
+        // Los equipos (por IMEI) también son inventario: se suman a lo que ya hay en accesorios
+        for (Object[] f : productoImeiRepository.valorPorTienda(codtis)) {
+            Integer id = (Integer) f[0];
+            ValorInventarioRow previo = valorPorCodti.get(id);
+            valorPorCodti.put(id, new ValorInventarioRow(id, (String) f[1],
+                    ((BigDecimal) f[3]).add(previo != null ? previo.getValorCosto() : BigDecimal.ZERO),
+                    ((BigDecimal) f[4]).add(previo != null ? previo.getValorVenta() : BigDecimal.ZERO),
+                    (previo != null ? previo.getNumProductos() : 0L) + (Long) f[2]));
+        }
         List<Map<String, Object>> inventario = codtis.stream().map(id -> {
             ValorInventarioRow r = valorPorCodti.getOrDefault(id,
                     new ValorInventarioRow(id, nombrePorCodti.get(id), BigDecimal.ZERO, BigDecimal.ZERO, 0L));

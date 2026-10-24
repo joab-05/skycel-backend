@@ -20,6 +20,9 @@ public interface GarantiaRepository extends JpaRepository<Garantia, Integer> {
     /** Reclamos de una venta sobre un producto (para no abrir dos a la vez sobre el mismo equipo). */
     List<Garantia> findByVenta_IdventaAndProducto_Idproducto(Integer idventa, Integer idproducto);
 
+    /** Reclamos de una venta sobre un artículo (equipos, que no tienen producto con código). */
+    List<Garantia> findByVenta_IdventaAndProductoMaster_Idprodmaster(Integer idventa, Integer idprodmaster);
+
     /**
      * Reclamos, más recientes primero. Filtros opcionales por sucursal que recibió y por estado; solo abiertos (no
      * entregados) y solo los que ya pasaron su fecha límite.

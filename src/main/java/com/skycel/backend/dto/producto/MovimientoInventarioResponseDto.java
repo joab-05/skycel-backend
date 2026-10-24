@@ -12,6 +12,8 @@ public class MovimientoInventarioResponseDto {
     private Long idmov;
     private LocalDateTime fecha;
     private String codpro;
+    /** Equipos: el IMEI o serie de la unidad (no tienen código de producto). */
+    private String imei;
     private String nombreProducto;
     /** ALTA, ENTRADA, SALIDA, AJUSTE, VENTA, CANCELACION_VENTA, TRASPASO_* */
     private String tipo;

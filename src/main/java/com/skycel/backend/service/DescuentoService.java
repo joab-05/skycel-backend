@@ -42,10 +42,17 @@ public class DescuentoService {
     /** El descuento (en pesos, ≥ 0) que aplica hoy a este producto vendido en {@code precioLista}. 0 si ninguna regla aplica. */
     @Transactional(readOnly = true)
     public BigDecimal calcularDescuento(Producto producto, BigDecimal precioLista, LocalDateTime momento) {
+        return calcularDescuento(producto.getProductoMaster(), producto.getTienda() != null ? producto.getTienda().getCodti() : null,
+                precioLista, momento);
+    }
+
+    /** Igual, para un artículo vendido en una sucursal (un equipo no tiene un registro de producto por sucursal). */
+    @Transactional(readOnly = true)
+    public BigDecimal calcularDescuento(com.skycel.backend.domain.entity.ProductoMaster master, Integer codti,
+                                        BigDecimal precioLista, LocalDateTime momento) {
         if (precioLista == null || precioLista.signum() <= 0) return BigDecimal.ZERO;
-        TipoProducto tipo = producto.getProductoMaster() != null ? producto.getProductoMaster().getTipo() : null;
-        Integer idProdMaster = producto.getProductoMaster() != null ? producto.getProductoMaster().getIdprodmaster() : null;
-        Integer codti = producto.getTienda() != null ? producto.getTienda().getCodti() : null;
+        TipoProducto tipo = master != null ? master.getTipo() : null;
+        Integer idProdMaster = master != null ? master.getIdprodmaster() : null;
 
         List<DescuentoRegla> candidatas = repository.findByActivoTrue().stream()
                 .filter(r -> aplicaAlAlcance(r, tipo, idProdMaster, codti))

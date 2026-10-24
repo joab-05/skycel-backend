@@ -95,8 +95,8 @@ class ProductoServiceArbolTest {
     }
 
     @Test
-    void equipo_arma_el_nombre_con_el_camino_toma_el_tipo_de_la_principal_y_el_codigo_de_la_subcategoria_1() {
-        service.crearProducto(alta((short) 3, "A16 4/128gb Verde"));
+    void equipo_arma_el_nombre_con_el_camino_y_toma_el_tipo_de_la_principal() {
+        service.resolverMaster(alta((short) 3, "A16 4/128gb Verde"));
 
         ArgumentCaptor<ProductoMaster> master = ArgumentCaptor.forClass(ProductoMaster.class);
         verify(productoMasterRepository).save(master.capture());
@@ -104,12 +104,13 @@ class ProductoServiceArbolTest {
         assertThat(master.getValue().getNombreProducto()).isEqualTo("A16 4/128gb Verde");
         assertThat(master.getValue().getTipo()).isEqualTo(TipoProducto.CELULAR);
         assertThat(master.getValue().getCategoria()).isSameAs(samsung);
+    }
 
-        ArgumentCaptor<Producto> prod = ArgumentCaptor.forClass(Producto.class);
-        verify(productoRepository).save(prod.capture());
-        assertThat(prod.getValue().getCodpro()).isEqualTo("CEL-000007");
-        // el contador es el de la subcategoría 1 (Celular), no el de la marca
-        verify(categoriaFolioRepository).incrementar((short) 2);
+    @Test
+    void un_equipo_no_se_registra_como_producto_con_codigo() {
+        assertThatThrownBy(() -> service.crearProducto(alta((short) 3, "A16 4/128gb Verde")))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getReason()).contains("IMEI"));
+        verify(productoRepository, never()).save(any(Producto.class));
     }
 
     @Test
@@ -168,16 +169,6 @@ class ProductoServiceArbolTest {
     }
 
     @Test
-    void un_codigo_ya_usado_se_salta_y_toma_el_siguiente_folio() {
-        when(categoriaFolioRepository.obtenerUltimoFolioGenerado((short) 2)).thenReturn(7L, 8L);
-        when(productoRepository.findAllByCodpro("CEL-000007")).thenReturn(java.util.List.of(new Producto()));
-        service.crearProducto(alta((short) 3, "A16"));
-        ArgumentCaptor<Producto> prod = ArgumentCaptor.forClass(Producto.class);
-        verify(productoRepository).save(prod.capture());
-        assertThat(prod.getValue().getCodpro()).isEqualTo("CEL-000008");
-    }
-
-    @Test
     void el_color_va_aparte_de_la_descripcion_y_al_final_del_nombre() {
         Color verde = new Color();
         verde.setIdcolor((short) 5);
@@ -186,16 +177,13 @@ class ProductoServiceArbolTest {
         ProductoRequestDTO dto = alta((short) 3, "A16 4/128gb");
         dto.setIdColor((short) 5);
 
-        service.crearProducto(dto);
+        service.resolverMaster(dto);
 
         ArgumentCaptor<ProductoMaster> master = ArgumentCaptor.forClass(ProductoMaster.class);
         verify(productoMasterRepository).save(master.capture());
         assertThat(master.getValue().getNombreBase()).isEqualTo("Celular Samsung A16 4/128gb Verde");
         assertThat(master.getValue().getNombreProducto()).isEqualTo("A16 4/128gb");   // la descripción no lleva el color
         assertThat(master.getValue().getColor()).isSameAs(verde);
-        ArgumentCaptor<Producto> prod = ArgumentCaptor.forClass(Producto.class);
-        verify(productoRepository).save(prod.capture());
-        assertThat(prod.getValue().getColor()).isSameAs(verde);   // el producto lleva el color de su artículo
     }
 
     @Test
@@ -206,7 +194,7 @@ class ProductoServiceArbolTest {
         when(colorRepository.findById((short) 3)).thenReturn(Optional.of(azul));
         ProductoRequestDTO dto = alta((short) 3, "A16 4/128gb");
         dto.setIdColor((short) 3);
-        service.crearProducto(dto);
+        service.resolverMaster(dto);
 
         ArgumentCaptor<ProductoMaster> master = ArgumentCaptor.forClass(ProductoMaster.class);
         verify(productoMasterRepository).save(master.capture());
@@ -221,7 +209,7 @@ class ProductoServiceArbolTest {
         ProductoRequestDTO dto = alta((short) 3, null);
         dto.setIdDescripcion(9);
 
-        service.crearProducto(dto);
+        service.resolverMaster(dto);
 
         ArgumentCaptor<ProductoMaster> master = ArgumentCaptor.forClass(ProductoMaster.class);
         verify(productoMasterRepository).save(master.capture());

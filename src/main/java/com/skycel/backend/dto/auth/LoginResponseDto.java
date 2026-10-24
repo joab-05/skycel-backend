@@ -14,4 +14,6 @@ public class LoginResponseDto {
     private Integer codti;
     /** Solo un TECNICO: es el técnico encargado. */
     private Boolean tecnicoEncargado;
+    /** Los permisos de su rol (ver Permiso): JSystem y la web muestran u ocultan secciones y botones con ellos. */
+    private java.util.List<String> permisos;
 }

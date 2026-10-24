@@ -28,21 +28,21 @@ public class DescuentoController {
     private final DescuentoService descuentoService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('DESCUENTOS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> listar() {
         return ResponseEntityBuilder.ok(descuentoService.listar(), "descuentos");
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('DESCUENTOS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> crear(@RequestBody DescuentoReglaRequestDto dto) {
         return ResponseEntityBuilder.created(descuentoService.crear(dto), "descuento");
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('DESCUENTOS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> actualizar(
             @PathVariable Integer id, @RequestBody DescuentoReglaRequestDto dto) {
@@ -50,7 +50,7 @@ public class DescuentoController {
     }
 
     @PatchMapping("/{id}/activo")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('DESCUENTOS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> cambiarActivo(
             @PathVariable Integer id, @RequestParam boolean activo) {

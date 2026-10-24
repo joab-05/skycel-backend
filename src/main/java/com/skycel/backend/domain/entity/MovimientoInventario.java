@@ -27,9 +27,23 @@ public class MovimientoInventario {
     @Column(name = "idmov")
     private Long idmov;
 
+    /** El producto (accesorios y servicios); vacío en el movimiento de un equipo, que se identifica por su IMEI. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "idproducto", nullable = false)
+    @JoinColumn(name = "idproducto")
     private Producto producto;
+
+    /** Equipos: el IMEI o serie de la unidad que se movió. */
+    @Column(name = "imei", length = 20)
+    private String imei;
+
+    /** Equipos: el artículo de la unidad. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idprodmaster")
+    private ProductoMaster productoMaster;
+
+    /** La sucursal a la que corresponde el movimiento (para listar el historial de una tienda). */
+    @Column(name = "codti")
+    private Integer codti;
 
     @Column(name = "tipo", nullable = false, length = 20)
     private String tipo;

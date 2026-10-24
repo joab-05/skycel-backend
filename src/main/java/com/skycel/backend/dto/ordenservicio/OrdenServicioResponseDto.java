@@ -42,6 +42,8 @@ public class OrdenServicioResponseDto {
 
     private LocalDateTime fechaIngreso;
     private LocalDate     fechaPromesa;
+    private Integer       horasEstimadas;
+    private java.time.LocalDateTime fechaPromesaHora;
     private LocalDateTime fechaLista;
     private LocalDateTime fechaEntrega;
     private Integer       diasGarantia;

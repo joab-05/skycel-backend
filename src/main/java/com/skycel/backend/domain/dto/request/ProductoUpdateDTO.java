@@ -16,4 +16,6 @@ public class ProductoUpdateDTO {
     private Short      idProveedor;
     private Short      idSeccion;
     private Short      idMagnitud;
+    /** Corregir el código del producto (solo quien puede editar artículos): cambia en todas las sucursales que lo tienen. */
+    private String     nuevoCodpro;
 }

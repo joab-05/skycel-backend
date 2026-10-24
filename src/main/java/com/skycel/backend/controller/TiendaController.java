@@ -44,7 +44,7 @@ public class TiendaController {
      * Da de alta una sucursal nueva. Solo ROOT y ADMIN.
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    @PreAuthorize("@permisos.tiene('NEGOCIO_CONFIG')")
     public ResponseEntity<Tienda> crear(@Valid @RequestBody TiendaCreateDto request) {
         Tienda t = Tienda.builder()
                 .nombre(request.getNombre().trim())
@@ -61,7 +61,7 @@ public class TiendaController {
      * Datos de la sucursal que salen en su ticket (nombre, domicilio y teléfono). Solo ROOT y ADMIN.
      */
     @PatchMapping("/{codti}")
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    @PreAuthorize("@permisos.tiene('NEGOCIO_CONFIG')")
     public ResponseEntity<Tienda> actualizarDatos(@PathVariable Integer codti, @Valid @RequestBody TiendaDatosRequestDto request) {
         Tienda t = tiendaRepository.findById(codti)
                 .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Tienda no encontrada: " + codti));
@@ -76,7 +76,7 @@ public class TiendaController {
      * Incluye inactivas. Solo ROOT y ADMIN.
      */
     @GetMapping("/todas")
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    @PreAuthorize("@permisos.tiene('NEGOCIO_CONFIG')")
     public ResponseEntity<List<Tienda>> listarTodas() {
         return ResponseEntity.ok(tiendaRepository.findAll());
     }

@@ -23,8 +23,6 @@ import java.util.List;
 @Tag(name = "Devoluciones", description = "Devolución de productos vendidos: reembolso o cambio, con aprobación de un encargado")
 public class DevolucionController {
 
-    private static final String PERSONAL = "hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')";
-    private static final String SUPERIOR = "hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')";
 
     private final DevolucionService devolucionService;
 
@@ -32,7 +30,7 @@ public class DevolucionController {
             description = "Indica si la venta está en plazo (15 días) y, por renglón, cuánto queda por devolver.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/venta/{idventa}")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('DEVOLUCION_SOLICITAR')")
     public ResponseEntity<StandardApiResponse<VentaDevolvibleResponseDto>> consultarVenta(
             @PathVariable Integer idventa, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(devolucionService.consultarVenta(idventa, user.getUsername()), "venta");
@@ -42,7 +40,7 @@ public class DevolucionController {
             description = "Queda Pendiente hasta que un encargado de la tienda o un administrador la apruebe.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('DEVOLUCION_SOLICITAR')")
     public ResponseEntity<StandardApiResponse<DevolucionResponseDto>> solicitar(
             @Valid @RequestBody DevolucionRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.created(devolucionService.solicitar(request, user.getUsername()), "devolución");
@@ -52,7 +50,7 @@ public class DevolucionController {
             description = "La ejecuta: regresa lo devuelto al inventario y hace el reembolso o el cambio.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/aprobar")
-    @PreAuthorize(SUPERIOR)
+    @PreAuthorize("@permisos.tiene('DEVOLUCION_APROBAR')")
     public ResponseEntity<StandardApiResponse<DevolucionResponseDto>> aprobar(
             @PathVariable Integer id, @Valid @RequestBody(required = false) ResolverDevolucionDto request,
             @AuthenticationPrincipal UserDetails user) {
@@ -62,7 +60,7 @@ public class DevolucionController {
     @Operation(summary = "Rechazar una devolución", description = "El comentario con el motivo es obligatorio.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/rechazar")
-    @PreAuthorize(SUPERIOR)
+    @PreAuthorize("@permisos.tiene('DEVOLUCION_APROBAR')")
     public ResponseEntity<StandardApiResponse<DevolucionResponseDto>> rechazar(
             @PathVariable Integer id, @Valid @RequestBody ResolverDevolucionDto request,
             @AuthenticationPrincipal UserDetails user) {
@@ -74,7 +72,7 @@ public class DevolucionController {
                     "(1 Pendiente, 2 Procesada, 3 Rechazada).")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('DEVOLUCION_SOLICITAR')")
     public ResponseEntity<StandardApiResponse<List<DevolucionResponseDto>>> listar(
             @RequestParam(required = false) Integer codti, @RequestParam(required = false) Byte estado,
             @AuthenticationPrincipal UserDetails user) {
@@ -84,7 +82,7 @@ public class DevolucionController {
     @Operation(summary = "Consultar una devolución")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{id}")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('DEVOLUCION_SOLICITAR')")
     public ResponseEntity<StandardApiResponse<DevolucionResponseDto>> obtener(
             @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(devolucionService.obtener(id, user.getUsername()), "devolución");

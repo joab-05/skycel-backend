@@ -23,7 +23,6 @@ import java.util.List;
 @Tag(name = "Garantías", description = "Reclamos de garantía de productos vendidos, con viaje al proveedor")
 public class GarantiaController {
 
-    private static final String PERSONAL = "hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')";
 
     private final GarantiaService garantiaService;
 
@@ -31,7 +30,7 @@ public class GarantiaController {
             description = "Indique idventa y el imei (equipos) o el codpro (accesorios). Útil antes de recibir el equipo.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/elegibilidad")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('GARANTIAS')")
     public ResponseEntity<StandardApiResponse<ElegibilidadGarantiaResponseDto>> elegibilidad(
             @RequestParam Integer idventa, @RequestParam(required = false) String imei,
             @RequestParam(required = false) String codpro, @AuthenticationPrincipal UserDetails user) {
@@ -43,7 +42,7 @@ public class GarantiaController {
                     "Genera el folio de seguimiento (GAR-000001) y la fecha límite (30 días hábiles).")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('GARANTIAS')")
     public ResponseEntity<StandardApiResponse<GarantiaResponseDto>> crear(
             @Valid @RequestBody GarantiaRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.created(garantiaService.crear(request, user.getUsername()), "garantía");
@@ -55,7 +54,7 @@ public class GarantiaController {
                     "sus pasos (enviar, rechazar en sucursal, recibir de regreso y entregar); bodega y proveedor, un administrador.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/avanzar")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('GARANTIAS')")
     public ResponseEntity<StandardApiResponse<GarantiaResponseDto>> avanzar(
             @PathVariable Integer id, @Valid @RequestBody AvanceGarantiaRequestDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(garantiaService.avanzar(id, request, user.getUsername()), "garantía");
@@ -64,7 +63,7 @@ public class GarantiaController {
     @Operation(summary = "Consultar una garantía")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{id}")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('GARANTIAS')")
     public ResponseEntity<StandardApiResponse<GarantiaResponseDto>> obtener(
             @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(garantiaService.obtener(id, user.getUsername()), "garantía");
@@ -73,7 +72,7 @@ public class GarantiaController {
     @Operation(summary = "Consultar una garantía por su folio (GAR-000001)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/folio/{folio}")
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('GARANTIAS')")
     public ResponseEntity<StandardApiResponse<GarantiaResponseDto>> obtenerPorFolio(
             @PathVariable String folio, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(garantiaService.obtenerPorFolio(folio, user.getUsername()), "garantía");
@@ -84,7 +83,7 @@ public class GarantiaController {
                     "soloAbiertas (no entregadas) y vencidas (pasaron su fecha límite sin entregarse).")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping
-    @PreAuthorize(PERSONAL)
+    @PreAuthorize("@permisos.tiene('GARANTIAS')")
     public ResponseEntity<StandardApiResponse<List<GarantiaResponseDto>>> listar(
             @RequestParam(required = false) Integer codti,
             @RequestParam(required = false) Byte estado,

@@ -55,13 +55,28 @@ public class TraspasoService {
     private final TiendaRepository          tiendaRepository;
     private final UsuarioRepository         usuarioRepository;
     private final ProductoRepository        productoRepository;
+    private final ProductoMasterRepository  productoMasterRepository;
     private final ProductoImeiRepository    productoImeiRepository;
     private final ProductoService           productoService;
     private final MovimientoInventarioService movimientoInventarioService;
     private final NotificacionService       notificacionService;
 
-    /** Renglón ya resuelto para despachar: producto de la tienda origen, cantidad y, en equipos, sus IMEI. */
+    /** Renglón ya resuelto para despachar: producto de la tienda origen (sin código en un equipo), cantidad y, en equipos, sus IMEI. */
     private record LineaDespacho(String codpro, BigDecimal cantidad, List<String> imeis) {}
+
+    private static boolean sinCodigo(String codpro) {
+        return codpro == null || codpro.isBlank();
+    }
+
+    private static boolean esEquipo(TipoProducto tipo) {
+        return tipo == TipoProducto.CELULAR || tipo == TipoProducto.TABLET;
+    }
+
+    /** Identifica un renglón: el código (accesorios) o, en un equipo, su artículo. */
+    private static String claveDe(TraspasoDetalle d) {
+        return d.getCodpro() != null ? d.getCodpro()
+                : (d.getProductoMaster() != null ? "M" + d.getProductoMaster().getIdprodmaster() : "?");
+    }
 
     // ── Crear ────────────────────────────────────────────────────────────────
 
@@ -73,7 +88,7 @@ public class TraspasoService {
         validarDistintas(origen, destino);
 
         List<LineaDespacho> lineas = dto.getLineas().stream()
-                .map(l -> new LineaDespacho(l.getCodpro().trim(), l.getCantidad(), l.getImeis()))
+                .map(l -> new LineaDespacho(sinCodigo(l.getCodpro()) ? null : l.getCodpro().trim(), l.getCantidad(), l.getImeis()))
                 .collect(Collectors.toList());
         return toDto(despachar(origen, destino, usuario, lineas, null));
     }
@@ -91,6 +106,26 @@ public class TraspasoService {
 
         Set<String> vistos = new HashSet<>();
         for (TraspasoLineaRequestDto l : dto.getLineas()) {
+            if (sinCodigo(l.getCodpro())) {   // un equipo se pide por artículo y cantidad
+                if (l.getIdprodmaster() == null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el código del producto o, si es un equipo, su artículo.");
+                }
+                ProductoMaster master = productoMasterRepository.findById(l.getIdprodmaster())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Artículo no encontrado: " + l.getIdprodmaster()));
+                if (!esEquipo(master.getTipo())) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'" + master.getNombreBase() + "' no es un equipo: pídalo por su código.");
+                }
+                if (l.getImeis() != null && !l.getImeis().isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "En una solicitud no se indican los IMEI: los elige la tienda que surte.");
+                }
+                if (!vistos.add("M" + master.getIdprodmaster())) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El artículo '" + master.getNombreBase() + "' está repetido en la solicitud.");
+                }
+                detalleRepository.save(TraspasoDetalle.builder().traspaso(solicitud).productoMaster(master)
+                        .cantidad(BigDecimal.valueOf(enteroPositivo(l.getCantidad(), master.getNombreBase()))).build());
+                continue;
+            }
             String codpro = l.getCodpro().trim();
             if (!vistos.add(codpro)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El producto '" + codpro + "' está repetido en la solicitud.");
@@ -103,7 +138,12 @@ public class TraspasoService {
             if (p.getProductoMaster().getTipo() == TipoProducto.SERVICIO) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Un servicio no se puede traspasar: '" + codpro + "'.");
             }
-            if (p.getProductoMaster().getTipo() == TipoProducto.CELULAR) enteroPositivo(l.getCantidad(), codpro);
+            if (esEquipo(p.getProductoMaster().getTipo())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'" + p.getProductoMaster().getNombreBase() + "' es un equipo: pídalo por su artículo, sin código.");
+            }
+            if (l.getCantidad() == null || l.getCantidad().signum() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidad de '" + codpro + "' debe ser mayor a 0.");
+            }
             detalleRepository.save(TraspasoDetalle.builder().traspaso(solicitud).codpro(codpro).cantidad(l.getCantidad()).build());
         }
         notificacionService.notificarTienda(surte.getCodti(), "TRASPASO_SOLICITUD",
@@ -161,24 +201,26 @@ public class TraspasoService {
             if (falta.signum() > 0) {
                 registrarMov(d, ACCION_REPORTADO, falta, usuario, comentario);
             }
+            if (d.getImei() != null) {   // un equipo: la unidad cambia de sucursal
+                ProductoImei pi = imeiDe(d);
+                if (llego.signum() > 0) {
+                    pi.setTienda(t.getTiendaDestino());
+                    pi.setEstado(IMEI_DISPONIBLE);
+                    productoImeiRepository.save(pi);
+                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_ENTRADA", null, "Traspaso #" + id);
+                } else {
+                    pi.setEstado(IMEI_FALTANTE);
+                    productoImeiRepository.save(pi);
+                }
+                continue;
+            }
             Producto enOrigen = productoDe(d.getCodpro(), t.getTiendaOrigen().getCodti(), "la tienda origen");
-            Producto enDestino = null;
             if (llego.signum() > 0) {
-                enDestino = destinoPorOrigen.computeIfAbsent(enOrigen.getIdproducto(),
+                Producto enDestino = destinoPorOrigen.computeIfAbsent(enOrigen.getIdproducto(),
                         k -> productoEnDestino(enOrigen, t.getTiendaDestino()));
                 BigDecimal antes = stockDe(enDestino);
                 enDestino.setStock(antes.add(llego));
                 movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_ENTRADA", null, "Traspaso #" + id);
-            }
-            if (d.getImei() != null) {
-                ProductoImei pi = imeiDe(d);
-                if (enDestino != null) {
-                    pi.setProducto(enDestino);
-                    pi.setEstado(IMEI_DISPONIBLE);
-                } else {
-                    pi.setEstado(IMEI_FALTANTE);
-                }
-                productoImeiRepository.save(pi);
             }
         }
         destinoPorOrigen.values().forEach(productoRepository::save);
@@ -197,25 +239,26 @@ public class TraspasoService {
         Set<String> imeisYaReportados = new HashSet<>();
         for (RecepcionRequestDto.FaltanteDto f : dto.getFaltantes()) {
             String codpro = f.getCodpro() == null ? "" : f.getCodpro().trim();
-            List<TraspasoDetalle> delProducto = detalles.stream().filter(d -> d.getCodpro().equals(codpro)).toList();
-            if (delProducto.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El producto '" + codpro + "' no está en el envío.");
-            }
-            boolean esEquipo = delProducto.get(0).getImei() != null;
-            if (esEquipo) {
-                if (f.getImeis() == null || f.getImeis().isEmpty()) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique los IMEI que no llegaron de '" + codpro + "'.");
-                }
-                for (String imei : f.getImeis()) {
-                    TraspasoDetalle d = delProducto.stream().filter(x -> imei.equals(x.getImei())).findFirst()
+            if (f.getImeis() != null && !f.getImeis().isEmpty()) {   // equipos: se reportan por IMEI
+                for (String crudo : f.getImeis()) {
+                    String imei = crudo == null ? "" : crudo.trim().toUpperCase();
+                    TraspasoDetalle d = detalles.stream().filter(x -> imei.equals(x.getImei())).findFirst()
                             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                    "El IMEI '" + imei + "' no viene en el envío como '" + codpro + "'."));
+                                    "El IMEI '" + crudo + "' no viene en el envío."));
                     if (!imeisYaReportados.add(imei)) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI '" + imei + "' está repetido.");
                     }
                     falta.put(d.getIddetalle(), d.getCantidad());
                 }
             } else {
+                List<TraspasoDetalle> delProducto = detalles.stream().filter(d -> codpro.equals(d.getCodpro())).toList();
+                if (delProducto.isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "El producto '" + codpro + "' no está en el envío (un equipo se reporta por sus IMEI).");
+                }
+                if (delProducto.get(0).getImei() != null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique los IMEI que no llegaron de '" + codpro + "'.");
+                }
                 if (f.getCantidad() == null || f.getCantidad().signum() <= 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique la cantidad que no llegó de '" + codpro + "'.");
                 }
@@ -264,36 +307,41 @@ public class TraspasoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Un equipo se resuelve completo (1 unidad).");
         }
         String nota = dto.getNota() == null ? null : dto.getNota().trim();
-        Producto enOrigen = productoDe(d.getCodpro(), t.getTiendaOrigen().getCodti(), "la tienda origen");
+        boolean esUnidad = d.getImei() != null;
+        Producto enOrigen = esUnidad ? null : productoDe(d.getCodpro(), t.getTiendaOrigen().getCodti(), "la tienda origen");
 
         switch (accion) {
             case ACCION_TARDE -> {
                 validarOpera(usuario, t.getTiendaDestino().getCodti());
-                Producto enDestino = productoEnDestino(enOrigen, t.getTiendaDestino());
-                BigDecimal antes = stockDe(enDestino);
-                enDestino.setStock(antes.add(cantidad));
-                productoRepository.save(enDestino);
-                movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_FALTANTE", "Llegó tarde. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
-                d.setCantidadRecibida(d.getCantidadRecibida().add(cantidad));
-                if (d.getImei() != null) {
+                if (esUnidad) {
                     ProductoImei pi = imeiDe(d);
-                    pi.setProducto(enDestino);
+                    pi.setTienda(t.getTiendaDestino());
                     pi.setEstado(IMEI_DISPONIBLE);
                     productoImeiRepository.save(pi);
+                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_FALTANTE", "Llegó tarde. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
+                } else {
+                    Producto enDestino = productoEnDestino(enOrigen, t.getTiendaDestino());
+                    BigDecimal antes = stockDe(enDestino);
+                    enDestino.setStock(antes.add(cantidad));
+                    productoRepository.save(enDestino);
+                    movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_FALTANTE", "Llegó tarde. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
                 }
+                d.setCantidadRecibida(d.getCantidadRecibida().add(cantidad));
             }
             case ACCION_REINTEGRO -> {
                 validarOpera(usuario, t.getTiendaOrigen().getCodti());
-                BigDecimal antes = stockDe(enOrigen);
-                enOrigen.setStock(antes.add(cantidad));
-                productoRepository.save(enOrigen);
-                movimientoInventarioService.registrar(enOrigen, antes, "TRASPASO_FALTANTE", "Regresó al origen. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
-                d.setCantidadReintegrada(d.getCantidadReintegrada().add(cantidad));
-                if (d.getImei() != null) {
+                if (esUnidad) {
                     ProductoImei pi = imeiDe(d);
                     pi.setEstado(IMEI_DISPONIBLE);
                     productoImeiRepository.save(pi);
+                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_FALTANTE", "Regresó al origen. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
+                } else {
+                    BigDecimal antes = stockDe(enOrigen);
+                    enOrigen.setStock(antes.add(cantidad));
+                    productoRepository.save(enOrigen);
+                    movimientoInventarioService.registrar(enOrigen, antes, "TRASPASO_FALTANTE", "Regresó al origen. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
                 }
+                d.setCantidadReintegrada(d.getCantidadReintegrada().add(cantidad));
             }
             case ACCION_BAJA -> {
                 if (usuario.getRol() != Rol.ROOT && usuario.getRol() != Rol.ADMIN) {
@@ -352,13 +400,19 @@ public class TraspasoService {
 
     private FaltanteResponseDto toFaltanteDto(TraspasoDetalle d) {
         Traspaso t = d.getTraspaso();
-        Optional<Producto> p = productoRepository.findByCodproAndTienda_Codti(d.getCodpro(), t.getTiendaOrigen().getCodti());
+        String nombre;
+        if (d.getImei() != null) {
+            nombre = productoImeiRepository.findByImei(d.getImei()).map(u -> u.getProductoMaster().getNombreBase()).orElse(null);
+        } else {
+            nombre = productoRepository.findByCodproAndTienda_Codti(d.getCodpro(), t.getTiendaOrigen().getCodti())
+                    .map(x -> x.getProductoMaster().getNombreBase()).orElse(null);
+        }
         return FaltanteResponseDto.builder()
                 .iddetalle(d.getIddetalle()).idtraspaso(t.getIdtraspaso())
                 .codtiOrigen(t.getTiendaOrigen().getCodti()).nombreTiendaOrigen(t.getTiendaOrigen().getNombre())
                 .codtiDestino(t.getTiendaDestino().getCodti()).nombreTiendaDestino(t.getTiendaDestino().getNombre())
                 .codpro(d.getCodpro())
-                .nombreProducto(p.map(x -> x.getProductoMaster().getNombreBase()).orElse(null))
+                .nombreProducto(nombre)
                 .imei(d.getImei())
                 .cantidadEnviada(d.getCantidad()).cantidadRecibida(d.getCantidadRecibida())
                 .cantidadBaja(d.getCantidadBaja()).cantidadReintegrada(d.getCantidadReintegrada())
@@ -390,15 +444,17 @@ public class TraspasoService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Un envío ya recibido no se puede anular.");
             }
             for (TraspasoDetalle d : detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(id)) {
-                Producto p = productoDe(d.getCodpro(), t.getTiendaOrigen().getCodti(), "la tienda origen");
                 if (d.getImei() != null) {
                     productoImeiRepository.findByImei(d.getImei()).ifPresent(pi -> {
                         if (IMEI_EN_TRANSITO.equals(pi.getEstado())) {
                             pi.setEstado(IMEI_DISPONIBLE);
                             productoImeiRepository.save(pi);
+                            movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_ANULADO", null, "Traspaso #" + id);
                         }
                     });
+                    continue;
                 }
+                Producto p = productoDe(d.getCodpro(), t.getTiendaOrigen().getCodti(), "la tienda origen");
                 BigDecimal antes = stockDe(p);
                 p.setStock(antes.add(d.getCantidad()));
                 productoRepository.save(p);
@@ -437,19 +493,28 @@ public class TraspasoService {
         Map<String, List<String>> elegidas = new HashMap<>();
         if (dto != null && dto.getEquipos() != null) {
             for (AceptarSolicitudRequestDto.UnidadesElegidasDto e : dto.getEquipos()) {
-                elegidas.put(e.getCodpro() == null ? "" : e.getCodpro().trim(), e.getImeis() == null ? List.of() : e.getImeis());
+                String clave = !sinCodigo(e.getCodpro()) ? e.getCodpro().trim()
+                        : (e.getIdprodmaster() != null ? "M" + e.getIdprodmaster() : "");
+                elegidas.put(clave, e.getImeis() == null ? List.of() : e.getImeis());
             }
         }
-        Set<String> codigosPedidos = pedidos.stream().map(TraspasoDetalle::getCodpro).collect(Collectors.toSet());
-        for (String codpro : elegidas.keySet()) {
-            if (!codigosPedidos.contains(codpro)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El producto '" + codpro + "' no está en la solicitud.");
+        Set<String> pedidosClaves = pedidos.stream().map(TraspasoService::claveDe).collect(Collectors.toSet());
+        for (String clave : elegidas.keySet()) {
+            if (!pedidosClaves.contains(clave)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'" + clave + "' no está en la solicitud.");
             }
         }
 
-        List<LineaDespacho> lineas = pedidos.stream()
-                .map(d -> new LineaDespacho(d.getCodpro(), d.getCantidad(), elegidas.getOrDefault(d.getCodpro(), List.of())))
-                .collect(Collectors.toList());
+        List<LineaDespacho> lineas = new ArrayList<>();
+        for (TraspasoDetalle d : pedidos) {
+            List<String> imeis = elegidas.getOrDefault(claveDe(d), List.of());
+            if (d.getCodpro() == null && imeis.size() != d.getCantidad().intValue()) {
+                String nombre = d.getProductoMaster() != null ? d.getProductoMaster().getNombreBase() : "el equipo";
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Elija los " + d.getCantidad().intValue() + " IMEI que envía de '" + nombre + "'.");
+            }
+            lineas.add(new LineaDespacho(d.getCodpro(), d.getCantidad(), imeis));
+        }
         // quien surte (destino de la solicitud) es el origen del envío, y quien pidió (origen) lo recibe
         Traspaso envio = despachar(s.getTiendaDestino(), s.getTiendaOrigen(), usuario, lineas, s.getIdtraspaso());
 
@@ -509,29 +574,25 @@ public class TraspasoService {
 
         Set<String> imeisEnElEnvio = new HashSet<>();
         for (LineaDespacho l : lineas) {
-            Producto p = productoDe(l.codpro(), origen.getCodti(), "la tienda origen");
-            TipoProducto tipo = p.getProductoMaster().getTipo();
-            BigDecimal stock = stockDe(p);
             List<String> imeis = l.imeis() == null ? List.of() : l.imeis();
 
-            if (tipo == TipoProducto.SERVICIO) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Un servicio no se puede traspasar: '" + l.codpro() + "'.");
-            }
-            if (tipo == TipoProducto.CELULAR) {
-                int n = enteroPositivo(l.cantidad(), l.codpro());
-                if (imeis.size() != n) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "Debe indicar exactamente " + n + " IMEI para '" + l.codpro() + "' (uno por unidad).");
+            if (sinCodigo(l.codpro())) {   // equipos: viaja cada unidad, con su IMEI
+                if (imeis.isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique los IMEI de los equipos que se envían.");
                 }
-                for (String imei : imeis) {
+                if (l.cantidad() != null && imeis.size() != enteroPositivo(l.cantidad(), "los equipos")) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Debe indicar exactamente " + l.cantidad().intValue() + " IMEI (uno por unidad).");
+                }
+                for (String crudo : imeis) {
+                    String imei = crudo == null ? "" : crudo.trim().toUpperCase();
                     if (!imeisEnElEnvio.add(imei)) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI '" + imei + "' está repetido en el envío.");
                     }
                     ProductoImei pi = productoImeiRepository.findByImei(imei)
                             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "El IMEI '" + imei + "' no está registrado."));
-                    if (!pi.getProducto().getIdproducto().equals(p.getIdproducto())) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "El IMEI '" + imei + "' no pertenece a '" + l.codpro() + "' en la tienda origen.");
+                    if (pi.getTienda() == null || !pi.getTienda().getCodti().equals(origen.getCodti())) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI '" + imei + "' no está en la tienda origen.");
                     }
                     if (!IMEI_DISPONIBLE.equals(pi.getEstado())) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -539,17 +600,33 @@ public class TraspasoService {
                     }
                     pi.setEstado(IMEI_EN_TRANSITO);
                     productoImeiRepository.save(pi);
-                    detalleRepository.save(TraspasoDetalle.builder().traspaso(envio).codpro(l.codpro()).cantidad(BigDecimal.ONE).imei(imei).build());
+                    detalleRepository.save(TraspasoDetalle.builder().traspaso(envio).productoMaster(pi.getProductoMaster())
+                            .cantidad(BigDecimal.ONE).imei(imei).build());
+                    movimientoInventarioService.registrarEquipo(pi, -1, "TRASPASO_SALIDA", null, "Traspaso #" + envio.getIdtraspaso());
                 }
-            } else {
-                if (!imeis.isEmpty()) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "'" + l.codpro() + "' es un accesorio: no lleva IMEI.");
-                }
-                detalleRepository.save(TraspasoDetalle.builder().traspaso(envio).codpro(l.codpro()).cantidad(l.cantidad()).build());
+                continue;
             }
 
-            BigDecimal cantidad = tipo == TipoProducto.CELULAR ? BigDecimal.valueOf(imeis.size()) : l.cantidad();
+            Producto p = productoDe(l.codpro(), origen.getCodti(), "la tienda origen");
+            TipoProducto tipo = p.getProductoMaster().getTipo();
+            BigDecimal stock = stockDe(p);
+
+            if (tipo == TipoProducto.SERVICIO) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Un servicio no se puede traspasar: '" + l.codpro() + "'.");
+            }
+            if (esEquipo(tipo)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "'" + p.getProductoMaster().getNombreBase() + "' es un equipo: envíelo por sus IMEI, sin código.");
+            }
+            if (!imeis.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'" + l.codpro() + "' es un accesorio: no lleva IMEI.");
+            }
+            if (l.cantidad() == null || l.cantidad().signum() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidad de '" + l.codpro() + "' debe ser mayor a 0.");
+            }
+            detalleRepository.save(TraspasoDetalle.builder().traspaso(envio).codpro(l.codpro()).cantidad(l.cantidad()).build());
+
+            BigDecimal cantidad = l.cantidad();
             if (stock.compareTo(cantidad) < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Stock insuficiente de '" + l.codpro() + "' en la tienda origen. Disponible: " + stock + ", solicitado: " + cantidad);
@@ -688,21 +765,27 @@ public class TraspasoService {
         Map<String, BigDecimal> cantidadPorCodigo = new LinkedHashMap<>();
         Map<String, BigDecimal> recibidaPorCodigo = new LinkedHashMap<>();
         Map<String, BigDecimal> pendientePorCodigo = new LinkedHashMap<>();
+        Map<String, ProductoMaster> maestroPorClave = new HashMap<>();
         for (TraspasoDetalle d : detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(t.getIdtraspaso())) {
-            cantidadPorCodigo.merge(d.getCodpro(), d.getCantidad(), BigDecimal::add);
+            String clave = claveDe(d);
+            if (d.getCodpro() == null && d.getProductoMaster() != null) maestroPorClave.put(clave, d.getProductoMaster());
+            cantidadPorCodigo.merge(clave, d.getCantidad(), BigDecimal::add);
             if (t.getTipo() == TIPO_ENVIO && t.getEstado() == RECIBIDO) {
                 BigDecimal recibida = d.getCantidadRecibida() != null ? d.getCantidadRecibida() : d.getCantidad();
-                recibidaPorCodigo.merge(d.getCodpro(), recibida, BigDecimal::add);
-                pendientePorCodigo.merge(d.getCodpro(), pendienteDe(d), BigDecimal::add);
+                recibidaPorCodigo.merge(clave, recibida, BigDecimal::add);
+                pendientePorCodigo.merge(clave, pendienteDe(d), BigDecimal::add);
             }
-            if (d.getImei() != null) imeisPorCodigo.computeIfAbsent(d.getCodpro(), k -> new ArrayList<>()).add(d.getImei());
+            if (d.getImei() != null) imeisPorCodigo.computeIfAbsent(clave, k -> new ArrayList<>()).add(d.getImei());
         }
         for (Map.Entry<String, BigDecimal> e : cantidadPorCodigo.entrySet()) {
-            Optional<Producto> p = productoRepository.findByCodproAndTienda_Codti(e.getKey(), tiendaDelProducto);
+            ProductoMaster equipo = maestroPorClave.get(e.getKey());
+            Optional<Producto> p = equipo != null ? Optional.empty()
+                    : productoRepository.findByCodproAndTienda_Codti(e.getKey(), tiendaDelProducto);
             lineas.put(e.getKey(), TraspasoLineaResponseDto.builder()
-                    .codpro(e.getKey())
-                    .nombreProducto(p.map(x -> x.getProductoMaster().getNombreBase()).orElse(null))
-                    .tipoProducto(p.map(x -> x.getProductoMaster().getTipo().name()).orElse(null))
+                    .codpro(equipo != null ? null : e.getKey())
+                    .idprodmaster(equipo != null ? equipo.getIdprodmaster() : null)
+                    .nombreProducto(equipo != null ? equipo.getNombreBase() : p.map(x -> x.getProductoMaster().getNombreBase()).orElse(null))
+                    .tipoProducto(equipo != null ? equipo.getTipo().name() : p.map(x -> x.getProductoMaster().getTipo().name()).orElse(null))
                     .cantidad(e.getValue())
                     .imeis(imeisPorCodigo.get(e.getKey()))
                     .cantidadRecibida(recibidaPorCodigo.get(e.getKey()))

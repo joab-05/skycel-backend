@@ -76,12 +76,13 @@ public class GarantiaService {
     private final CategoriaFolioRepository    categoriaFolioRepository;
     private final NotificacionService         notificacionService;
     private final ProveedorRepository         proveedorRepository;
+    private final MovimientoInventarioService movimientoInventarioService;
 
     /** Tope razonable de días de garantía que se acepta capturar a mano (3 años). */
     private static final int MAX_DIAS_GARANTIA_ANTERIOR = 1095;
 
     /** Lo que se necesita saber de un producto vendido para reclamarle la garantía. */
-    private record Cobertura(Venta venta, Producto producto, ProductoMaster master, String imei, int dias, LocalDate fechaVenta, LocalDate vence) {}
+    private record Cobertura(Venta venta, Producto producto, ProductoImei unidad, ProductoMaster master, String imei, int dias, LocalDate fechaVenta, LocalDate vence) {}
 
     // ── Recibir un reclamo ───────────────────────────────────────────────────
 
@@ -90,6 +91,9 @@ public class GarantiaService {
         Usuario usuario = usuarioPorUsername(username);
         Tienda tienda = tiendaQueOpera(dto.getCodti(), usuario);
 
+        if (Boolean.TRUE.equals(dto.getVitrina())) {
+            return crearDeVitrina(dto, usuario, tienda);
+        }
         if (Boolean.TRUE.equals(dto.getVentaAnterior())) {
             return crearDeVentaAnterior(dto, usuario, tienda);
         }
@@ -101,7 +105,9 @@ public class GarantiaService {
         Cobertura c = evaluar(dto.getIdventa(), dto.getImei(), dto.getCodpro());
 
         // Un mismo equipo no puede tener dos reclamos abiertos a la vez
-        boolean yaAbierta = garantiaRepository.findByVenta_IdventaAndProducto_Idproducto(c.venta().getIdventa(), c.producto().getIdproducto())
+        boolean yaAbierta = (c.unidad() != null
+                ? garantiaRepository.findByImei(c.imei())
+                : garantiaRepository.findByVenta_IdventaAndProducto_Idproducto(c.venta().getIdventa(), c.producto().getIdproducto()))
                 .stream().anyMatch(g -> g.getEstadoActual() != ENTREGADO && Objects.equals(g.getImei(), c.imei()));
         if (yaAbierta) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -121,17 +127,59 @@ public class GarantiaService {
 
         LocalDate hoy = LocalDate.now();
         Garantia g = garantiaRepository.save(Garantia.builder()
-                .venta(c.venta()).producto(c.producto()).usuarioRecibe(usuario).tienda(tienda)
+                .venta(c.venta()).producto(c.producto()).productoMaster(c.master()).usuarioRecibe(usuario).tienda(tienda)
                 .folioSeguimiento(siguienteFolio())
                 .imei(c.imei())
                 .fallaReportada(dto.getFallaReportada().trim())
                 .diagnosticoInicial(trimOrNull(dto.getDiagnosticoInicial()))
                 .nombreContacto(nombre).telefonoContacto(telefono)
-                .proveedor(c.producto().getProveedor())
+                .proveedor(c.unidad() != null ? c.unidad().getProveedor() : c.producto().getProveedor())
                 .estadoActual(RECIBIDO_SUCURSAL)
                 .fechaLimiteSolucion(sumarDiasHabiles(hoy, DIAS_HABILES_SOLUCION))
                 .build());
         registrar(g, usuario, "Producto recibido en " + tienda.getNombre()
+                + (g.getDiagnosticoInicial() != null ? ". Estado: " + g.getDiagnosticoInicial() : ""));
+        return toDto(g);
+    }
+
+    /**
+     * Un equipo de vitrina (que aún no se vende) con una falla detectada: va con el proveedor igual que cualquier garantía,
+     * pero no hay venta ni cliente ni vigencia que revisar. La unidad sale de las existencias (queda EN_GARANTIA) y regresa
+     * a ellas, ya reparada o cambiada, cuando la garantía se entrega.
+     */
+    private GarantiaResponseDto crearDeVitrina(GarantiaRequestDto dto, Usuario usuario, Tienda tienda) {
+        String identificador = trimOrNull(dto.getImei());
+        if (identificador == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el IMEI o serie del equipo de vitrina (imei).");
+        }
+        ProductoImei unidad = productoImeiRepository.findByImei(identificador.toUpperCase())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI o serie '" + identificador + "' no está registrado en el inventario."));
+        if (!ProductoImei.DISPONIBLE.equals(unidad.getEstado())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El equipo '" + unidad.getImei() + "' no está en vitrina (estado: " + unidad.getEstado() + ").");
+        }
+        if (unidad.getTienda() == null || !unidad.getTienda().getCodti().equals(tienda.getCodti())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El equipo '" + unidad.getImei() + "' no está en la sucursal que recibe.");
+        }
+        if (garantiaRepository.findByImei(unidad.getImei()).stream().anyMatch(g -> g.getEstadoActual() != ENTREGADO)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya hay una garantía abierta para el equipo '" + unidad.getImei() + "'.");
+        }
+        LocalDate hoy = LocalDate.now();
+        Garantia g = garantiaRepository.save(Garantia.builder()
+                .vitrina(true).productoMaster(unidad.getProductoMaster())
+                .usuarioRecibe(usuario).tienda(tienda)
+                .folioSeguimiento(siguienteFolio())
+                .imei(unidad.getImei())
+                .fallaReportada(dto.getFallaReportada().trim())
+                .diagnosticoInicial(trimOrNull(dto.getDiagnosticoInicial()))
+                .nombreContacto(usuario.getNombreCompleto()).telefonoContacto("VITRINA")
+                .proveedor(unidad.getProveedor())
+                .estadoActual(RECIBIDO_SUCURSAL)
+                .fechaLimiteSolucion(sumarDiasHabiles(hoy, DIAS_HABILES_SOLUCION))
+                .build());
+        unidad.setEstado(ProductoImei.EN_GARANTIA);
+        productoImeiRepository.save(unidad);
+        movimientoInventarioService.registrarEquipo(unidad, -1, "GARANTIA_VITRINA", "Falla en vitrina: " + g.getFallaReportada(), g.getFolioSeguimiento());
+        registrar(g, usuario, "Equipo de vitrina apartado en " + tienda.getNombre()
                 + (g.getDiagnosticoInicial() != null ? ". Estado: " + g.getDiagnosticoInicial() : ""));
         return toDto(g);
     }
@@ -276,8 +324,16 @@ public class GarantiaService {
             }
             g.setImeiReemplazo(reemplazo);
         }
+        boolean vitrina = Boolean.TRUE.equals(g.getVitrina());
+        if (vitrina && hacia == CAMBIO_FISICO) {
+            if (reemplazo == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el IMEI o serie del equipo nuevo (imeiReemplazo): sustituye al de vitrina.");
+            }
+            cambiarUnidadDeVitrina(g, reemplazo);
+        }
 
         g.setEstadoActual(hacia);
+        if (vitrina && hacia == ENTREGADO) volverAVitrina(g);
         registrar(g, usuario, trimOrNull(dto.getComentario()) != null ? dto.getComentario().trim()
                 : estadoDisplay(hacia) + (reemplazo != null ? " (equipo nuevo: " + reemplazo + ")" : ""));
         GarantiaResponseDto resultado = toDto(garantiaRepository.save(g));
@@ -390,15 +446,16 @@ public class GarantiaService {
                     + " (" + dias + " días desde la venta del " + fechaVenta + ").");
         }
 
-        Producto producto;
+        Producto producto = null;
+        ProductoImei unidad = null;
         if (imeiBuscado != null) {
-            producto = productoImeiRepository.findByImei(imeiBuscado).map(ProductoImei::getProducto)
+            unidad = productoImeiRepository.findByImei(imeiBuscado.toUpperCase())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI '" + imeiBuscado + "' no está registrado en el inventario."));
         } else {
             producto = productoRepository.findByCodproAndTienda_Codti(codigoBuscado, venta.getTienda().getCodti())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "El producto '" + codigoBuscado + "' no existe en la tienda de la venta."));
         }
-        return new Cobertura(venta, producto, master, imeiBuscado, dias, fechaVenta, vence);
+        return new Cobertura(venta, producto, unidad, master, unidad != null ? unidad.getImei() : null, dias, fechaVenta, vence);
     }
 
     /** Suma días hábiles (lunes a viernes) a una fecha. No considera días festivos. */
@@ -481,11 +538,16 @@ public class GarantiaService {
     // ── Mapeo ────────────────────────────────────────────────────────────────
 
     private GarantiaResponseDto toDto(Garantia g) {
-        boolean anterior = Boolean.TRUE.equals(g.getVentaAnterior()) || g.getVenta() == null || g.getProducto() == null;
-        ProductoMaster master = anterior ? null : g.getProducto().getProductoMaster();
+        boolean vitrina = Boolean.TRUE.equals(g.getVitrina());
+        ProductoMaster master = g.getProductoMaster() != null ? g.getProductoMaster()
+                : (g.getProducto() != null ? g.getProducto().getProductoMaster() : null);
+        boolean anterior = !vitrina && (Boolean.TRUE.equals(g.getVentaAnterior()) || g.getVenta() == null || master == null);
         LocalDate fechaVenta;
         LocalDate vigenteHasta;
-        if (anterior) {
+        if (vitrina) {
+            fechaVenta = null;
+            vigenteHasta = null;
+        } else if (anterior) {
             fechaVenta = g.getFechaCompraAnterior();
             vigenteHasta = fechaVenta != null && g.getDiasGarantiaAnterior() != null ? fechaVenta.plusDays(g.getDiasGarantiaAnterior()) : null;
         } else {
@@ -497,9 +559,9 @@ public class GarantiaService {
 
         return GarantiaResponseDto.builder()
                 .idgarantia(g.getIdgarantia()).folio(g.getFolioSeguimiento())
-                .idventa(anterior ? null : g.getVenta().getIdventa())
-                .ventaAnterior(anterior).folioVentaAnterior(g.getFolioVentaAnterior())
-                .codpro(anterior ? null : g.getProducto().getCodpro())
+                .idventa(g.getVenta() != null ? g.getVenta().getIdventa() : null)
+                .ventaAnterior(anterior).vitrina(vitrina).folioVentaAnterior(g.getFolioVentaAnterior())
+                .codpro(g.getProducto() != null ? g.getProducto().getCodpro() : null)
                 .nombreProducto(nombreDelProducto(g))
                 .tipoProducto(anterior ? g.getTipoProductoAnterior() : master.getTipo().name())
                 .imei(g.getImei()).fechaVentaOriginal(fechaVenta).garantiaVigenteHasta(vigenteHasta)
@@ -523,10 +585,41 @@ public class GarantiaService {
 
     /** El nombre del producto: el del catálogo o, en una venta del sistema anterior, el que se capturó. */
     private String nombreDelProducto(Garantia g) {
+        if (g.getProductoMaster() != null) return g.getProductoMaster().getNombreBase();
         if (g.getProducto() != null && g.getProducto().getProductoMaster() != null) {
             return g.getProducto().getProductoMaster().getNombreBase();
         }
         return g.getNombreProductoAnterior();
+    }
+
+    /** Cambio físico de un equipo de vitrina: el que falló se devuelve al proveedor y entra el nuevo (apartado hasta la entrega). */
+    private void cambiarUnidadDeVitrina(Garantia g, String reemplazo) {
+        ProductoImei viejo = productoImeiRepository.findByImei(g.getImei())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "El equipo '" + g.getImei() + "' ya no existe."));
+        String id = EquipoService.normalizarIdentificador(reemplazo, viejo.getProductoMaster().getTipo());
+        if (productoImeiRepository.existsByImei(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El identificador '" + id + "' ya está registrado en el sistema.");
+        }
+        viejo.setEstado("DEVUELTO");
+        productoImeiRepository.save(viejo);
+        productoImeiRepository.save(ProductoImei.builder()
+                .productoMaster(viejo.getProductoMaster()).tienda(viejo.getTienda()).imei(id)
+                .tipoIdentificador(EquipoService.tipoDeIdentificador(id)).estado(ProductoImei.EN_GARANTIA)
+                .condicion("NUEVO").precioVenta(viejo.getPrecioVenta()).costo(viejo.getCosto())
+                .proveedor(viejo.getProveedor()).seccion(viejo.getSeccion()).rezagado(false).build());
+        g.setImeiReemplazo(id);
+    }
+
+    /** Al entregar una garantía de vitrina, el equipo (reparado o el que lo sustituyó) vuelve a las existencias. */
+    private void volverAVitrina(Garantia g) {
+        String imei = g.getImeiReemplazo() != null ? g.getImeiReemplazo() : g.getImei();
+        productoImeiRepository.findByImei(imei).ifPresent(u -> {
+            if (ProductoImei.EN_GARANTIA.equals(u.getEstado())) {
+                u.setEstado(ProductoImei.DISPONIBLE);
+                productoImeiRepository.save(u);
+                movimientoInventarioService.registrarEquipo(u, +1, "GARANTIA_VITRINA", "Regresa de garantía", g.getFolioSeguimiento());
+            }
+        });
     }
 
     private String estadoDisplay(Byte estado) {

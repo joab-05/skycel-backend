@@ -17,6 +17,8 @@ public class GarantiaResponseDto {
     private Integer idventa;
     /** true si el producto se vendió antes de este sistema (se capturó a mano). */
     private Boolean ventaAnterior;
+    /** Equipo de vitrina (nunca se vendió). */
+    private Boolean vitrina;
     private String  folioVentaAnterior;
 
     // ── Producto ──────────────────────────────────────────────────────────────

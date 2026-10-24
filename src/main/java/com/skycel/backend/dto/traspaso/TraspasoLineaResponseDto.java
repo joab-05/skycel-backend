@@ -10,6 +10,8 @@ import java.util.List;
 @Builder
 public class TraspasoLineaResponseDto {
     private String codpro;
+    /** Solo equipos: el artículo (un equipo no lleva código). */
+    private Integer idprodmaster;
     private String nombreProducto;
     /** CELULAR (equipo), ACCESORIO o SERVICIO */
     private String tipoProducto;

@@ -35,7 +35,7 @@ public class DescripcionController {
     @Operation(summary = "Crear una descripción", description = "Si ya existe una igual en la categoría (sin importar mayúsculas, acentos o espacios) devuelve esa.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<DescripcionResponseDTO> crear(@Valid @RequestBody DescripcionRequestDTO request) {
         if (request.getIdCategoria() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La categoría es obligatoria.");
@@ -46,7 +46,7 @@ public class DescripcionController {
     @Operation(summary = "Eliminar una descripción que ya no sirve", description = "Solo si ningún artículo activo la usa. Es lógica.")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<java.util.Map<String, String>> eliminar(@PathVariable Integer id) {
         descripcionService.eliminar(id);
         return ResponseEntity.ok(java.util.Map.of("mensaje", "Descripción eliminada."));
@@ -55,7 +55,7 @@ public class DescripcionController {
     @Operation(summary = "Cambiar el texto de una descripción", description = "Renombra también los artículos que la usan.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
     public ResponseEntity<DescripcionResponseDTO> renombrar(@PathVariable Integer id, @Valid @RequestBody DescripcionRequestDTO request) {
         return ResponseEntity.ok(descripcionService.renombrar(id, request.getNombre()));
     }

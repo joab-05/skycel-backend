@@ -34,7 +34,7 @@ public class ReporteController {
     private final ReporteResultadosService resultadosService;
 
     @GetMapping("/gerencial")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('REPORTES')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> gerencial(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
@@ -45,7 +45,7 @@ public class ReporteController {
     }
 
     @GetMapping("/equipos-rezagados")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('REPORTES')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> equiposRezagados(
             @RequestParam(required = false) Integer dias,
@@ -55,7 +55,7 @@ public class ReporteController {
     }
 
     @GetMapping("/caja-consolidada")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('REPORTES_CONSOLIDADOS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> cajaConsolidada(
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -63,7 +63,7 @@ public class ReporteController {
     }
 
     @GetMapping("/estado-resultados")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('REPORTES')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> estadoResultados(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
@@ -74,7 +74,7 @@ public class ReporteController {
     }
 
     @GetMapping("/ventas-por-dia")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('REPORTES')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> ventasPorDia(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
@@ -85,7 +85,7 @@ public class ReporteController {
     }
 
     @GetMapping("/ventas-por-categoria")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('REPORTES')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> ventasPorCategoria(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
@@ -96,7 +96,7 @@ public class ReporteController {
     }
 
     @GetMapping("/sin-movimiento")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('REPORTES')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> sinMovimiento(
             @RequestParam(required = false) Integer dias,

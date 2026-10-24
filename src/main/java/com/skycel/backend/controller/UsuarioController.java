@@ -30,7 +30,7 @@ public class UsuarioController {
     // ── GET /api/usuarios ─────────────────────────────────────────────────────
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    @PreAuthorize("@permisos.tiene('EMPLEADOS_ADMIN')")
     public ResponseEntity<List<UsuarioResponseDto>> listarTodos(
             @RequestParam(value = "soloActivos", defaultValue = "false") boolean soloActivos) {
 
@@ -55,7 +55,7 @@ public class UsuarioController {
     // ── GET /api/usuarios/{id} ────────────────────────────────────────────────
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    @PreAuthorize("@permisos.tiene('EMPLEADOS_ADMIN')")
     public ResponseEntity<UsuarioResponseDto> obtenerPorId(@PathVariable Integer id) {
         return ResponseEntity.ok(usuarioService.obtenerPorId(id));
     }
@@ -63,7 +63,7 @@ public class UsuarioController {
     // ── POST /api/usuarios ────────────────────────────────────────────────────
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    @PreAuthorize("@permisos.tiene('EMPLEADOS_ADMIN')")
     public ResponseEntity<UsuarioResponseDto> crear(@RequestBody UsuarioCreateDto dto) {
         UsuarioResponseDto creado = usuarioService.crear(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(creado);
@@ -72,7 +72,7 @@ public class UsuarioController {
     // ── PUT /api/usuarios/{id} ────────────────────────────────────────────────
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    @PreAuthorize("@permisos.tiene('EMPLEADOS_ADMIN')")
     public ResponseEntity<UsuarioResponseDto> actualizar(
             @PathVariable Integer id,
             @RequestBody UsuarioUpdateDto dto) {
@@ -94,7 +94,7 @@ public class UsuarioController {
     // ── DELETE /api/usuarios/{id} (soft delete) ───────────────────────────────
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT', 'ADMIN')")
+    @PreAuthorize("@permisos.tiene('EMPLEADOS_ADMIN')")
     public ResponseEntity<Void> desactivar(@PathVariable Integer id) {
         usuarioService.desactivar(id);
         return ResponseEntity.noContent().build();

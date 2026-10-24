@@ -22,7 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/nomina")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+@PreAuthorize("@permisos.tiene('NOMINA')")
 @SecurityRequirement(name = "Bearer Authentication")
 @Tag(name = "Nómina", description = "Períodos de nómina, percepciones, deducciones y pago")
 public class NominaController {

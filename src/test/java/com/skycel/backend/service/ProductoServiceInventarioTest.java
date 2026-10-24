@@ -1,11 +1,8 @@
 package com.skycel.backend.service;
 
-import com.skycel.backend.domain.dto.request.ImeiUpdateDTO;
 import com.skycel.backend.domain.dto.request.ProductoMasterUpdateDTO;
 import com.skycel.backend.domain.dto.request.ProductoRequestDTO;
 import com.skycel.backend.domain.dto.request.ProductoUpdateDTO;
-import com.skycel.backend.domain.dto.request.UnidadEquipoDTO;
-import com.skycel.backend.domain.dto.response.ImeiInfoDTO;
 import com.skycel.backend.domain.dto.response.ProductoMasterResponseDTO;
 import com.skycel.backend.domain.dto.response.ProductoResponseDTO;
 import com.skycel.backend.domain.entity.*;
@@ -35,8 +32,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * Pruebas de las reglas de inventario: códigos consecutivos de equipos, condición y costo por unidad,
- * compatibilidad, tiempo estimado, garantía y stock mínimo. Sin Spring ni base de datos.
+ * Pruebas de las reglas de inventario: códigos de accesorios, compatibilidad, tiempo estimado, garantía y stock mínimo. Sin Spring ni base de datos.
  */
 @ExtendWith(MockitoExtension.class)
 class ProductoServiceInventarioTest {
@@ -53,6 +49,7 @@ class ProductoServiceInventarioTest {
     @Mock private CategoriaFolioRepository categoriaFolioRepository;
     @Mock private ProductoMapper           productoMapper;
     @Mock private MovimientoInventarioService movimientoInventarioService;
+    @Mock private RenombradorCodigoProducto renombradorCodigo;
 
     @InjectMocks
     private ProductoService service;
@@ -94,15 +91,6 @@ class ProductoServiceInventarioTest {
         return dto;
     }
 
-    private UnidadEquipoDTO unidad(String imei, String condicion, String costo, String precio) {
-        UnidadEquipoDTO u = new UnidadEquipoDTO();
-        u.setImei(imei);
-        u.setCondicion(condicion);
-        u.setCostoUnitario(costo == null ? null : new BigDecimal(costo));
-        u.setPrecioVenta(precio == null ? null : new BigDecimal(precio));
-        return u;
-    }
-
     // ── Códigos consecutivos ─────────────────────────────────────────────────
 
     @Nested
@@ -110,18 +98,15 @@ class ProductoServiceInventarioTest {
     class CodigoEquipo {
 
         @Test
-        @DisplayName("es consecutivo (CEL-000007) con el contador propio de equipos, no aleatorio")
-        void codigoConsecutivo() {
-            when(categoriaFolioRepository.obtenerUltimoFolioGenerado((short) 0)).thenReturn(7L);
-            ProductoRequestDTO dto = requestSobreMaster(master(TipoProducto.CELULAR), "1");
-            dto.setImeis(List.of("350000000000011"));
-
-            service.crearProducto(dto);
-
-            verify(categoriaFolioRepository).incrementar((short) 0);
-            ArgumentCaptor<Producto> cap = ArgumentCaptor.forClass(Producto.class);
-            verify(productoRepository).save(cap.capture());
-            assertThat(cap.getValue().getCodpro()).isEqualTo("CEL-000007");
+        @DisplayName("un celular o una tablet ya no se registra como producto con código: se da de alta por IMEI")
+        void unEquipoNoLlevaCodigo() {
+            for (TipoProducto tipo : List.of(TipoProducto.CELULAR, TipoProducto.TABLET)) {
+                ProductoRequestDTO dto = requestSobreMaster(master(tipo), "1");
+                assertThatThrownBy(() -> service.crearProducto(dto))
+                        .isInstanceOf(ResponseStatusException.class)
+                        .hasMessageContaining("IMEI");
+            }
+            verify(productoRepository, never()).save(any());
         }
 
         @Test
@@ -137,146 +122,51 @@ class ProductoServiceInventarioTest {
         }
     }
 
-    // ── Condición y costo por unidad ─────────────────────────────────────────
+    // ── Corregir el código de un producto ────────────────────────────────────
 
     @Nested
-    @DisplayName("unidades de equipo: condición, costo y precio propios")
-    class Unidades {
+    @DisplayName("cambio de código (administrador)")
+    class CambioDeCodigo {
 
-        private ProductoRequestDTO celular(String stock) {
-            when(categoriaFolioRepository.obtenerUltimoFolioGenerado((short) 0)).thenReturn(1L);
-            return requestSobreMaster(master(TipoProducto.CELULAR), stock);
+        private Producto fila(int id, int codti) {
+            return Producto.builder().idproducto(id).codpro("ACC-000001").tienda(Tienda.builder().codti(codti).nombre("T" + codti).build())
+                    .productoMaster(master(TipoProducto.ACCESORIO)).stock(BigDecimal.TEN).build();
         }
 
         @Test
-        @DisplayName("lista simple de IMEIs: todas las unidades quedan NUEVO, sin costo ni precio propios")
-        void imeisSimples_sonNuevos() {
-            ProductoRequestDTO dto = celular("2");
-            dto.setImeis(List.of("350000000000011", "350000000000029"));
+        @DisplayName("el código nuevo se aplica en todas las sucursales del artículo y en los documentos que lo guardan")
+        void cambiaEnTodas() {
+            Producto zocalo = fila(1, 2), corpo = fila(2, 3);
+            when(productoRepository.findByCodproAndTienda_Codti("ACC-000001", 2)).thenReturn(Optional.of(zocalo));
+            when(productoRepository.findAllByCodpro("ACC-000001")).thenReturn(List.of(zocalo, corpo));
+            when(productoRepository.findAllByCodpro("FUNDA-A16")).thenReturn(List.of());
+            ProductoUpdateDTO dto = new ProductoUpdateDTO();
+            dto.setNuevoCodpro(" funda-a16 ");
 
-            service.crearProducto(dto);
+            service.actualizar("ACC-000001", 2, dto);
 
-            ArgumentCaptor<ProductoImei> cap = ArgumentCaptor.forClass(ProductoImei.class);
-            verify(productoImeiRepository, times(2)).save(cap.capture());
-            assertThat(cap.getAllValues()).allSatisfy(pi -> {
-                assertThat(pi.getCondicion()).isEqualTo("NUEVO");
-                assertThat(pi.getCostoUnitario()).isNull();
-                assertThat(pi.getPrecioVentaOverride()).isNull();
-                assertThat(pi.getEstado()).isEqualTo("DISPONIBLE");
-            });
+            assertThat(zocalo.getCodpro()).isEqualTo("FUNDA-A16");
+            assertThat(corpo.getCodpro()).isEqualTo("FUNDA-A16");
+            verify(renombradorCodigo).renombrar("ACC-000001", "FUNDA-A16");
         }
 
         @Test
-        @DisplayName("unidades con datos propios: un usado con su costo de compra y su precio")
-        void unidades_usadoConCostoYPrecio() {
-            ProductoRequestDTO dto = celular("2");
-            dto.setUnidades(List.of(
-                    unidad("350000000000011", "nuevo", null, null),
-                    unidad("350000000000029", "usado", "8000", "9500")));
+        @DisplayName("un código que ya usa otro producto: 409; con formato inválido: 400; y no se toca nada")
+        void invalidos() {
+            Producto zocalo = fila(1, 2);
+            when(productoRepository.findByCodproAndTienda_Codti("ACC-000001", 2)).thenReturn(Optional.of(zocalo));
+            when(productoRepository.findAllByCodpro("CAB-000009")).thenReturn(List.of(new Producto()));
+            ProductoUpdateDTO repetido = new ProductoUpdateDTO();
+            repetido.setNuevoCodpro("CAB-000009");
+            ProductoUpdateDTO raro = new ProductoUpdateDTO();
+            raro.setNuevoCodpro("a b");
 
-            service.crearProducto(dto);
-
-            ArgumentCaptor<ProductoImei> cap = ArgumentCaptor.forClass(ProductoImei.class);
-            verify(productoImeiRepository, times(2)).save(cap.capture());
-            ProductoImei nuevo = cap.getAllValues().get(0);
-            ProductoImei usado = cap.getAllValues().get(1);
-            assertThat(nuevo.getCondicion()).isEqualTo("NUEVO");
-            assertThat(usado.getCondicion()).isEqualTo("USADO");
-            assertThat(usado.getCostoUnitario()).isEqualByComparingTo("8000");
-            assertThat(usado.getPrecioVentaOverride()).isEqualByComparingTo("9500");
-        }
-
-        @Test
-        @DisplayName("enviar 'imeis' y 'unidades' a la vez: 400")
-        void ambasListas() {
-            ProductoRequestDTO dto = celular("1");
-            dto.setImeis(List.of("350000000000011"));
-            dto.setUnidades(List.of(unidad("350000000000029", null, null, null)));
-
-            assertThatThrownBy(() -> service.crearProducto(dto))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("no ambas");
-            verify(productoImeiRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("condición inválida: 400")
-        void condicionInvalida() {
-            ProductoRequestDTO dto = celular("1");
-            dto.setUnidades(List.of(unidad("350000000000011", "roto", null, null)));
-
-            assertThatThrownBy(() -> service.crearProducto(dto))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("Condición inválida");
-        }
-
-        @Test
-        @DisplayName("costo negativo o precio en 0: 400")
-        void costoOPrecioInvalidos() {
-            ProductoRequestDTO conCosto = celular("1");
-            conCosto.setUnidades(List.of(unidad("350000000000011", "usado", "-1", null)));
-            assertThatThrownBy(() -> service.crearProducto(conCosto))
-                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("costo");
-
-            ProductoRequestDTO conPrecio = celular("1");
-            conPrecio.setUnidades(List.of(unidad("350000000000011", "usado", "100", "0")));
-            assertThatThrownBy(() -> service.crearProducto(conPrecio))
-                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("precio");
-        }
-
-        @Test
-        @DisplayName("la cantidad de unidades debe coincidir con el stock")
-        void cantidadNoCoincide() {
-            ProductoRequestDTO dto = celular("3");
-            dto.setUnidades(List.of(unidad("350000000000011", null, null, null)));
-
-            assertThatThrownBy(() -> service.crearProducto(dto))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("exactamente 3");
-        }
-
-        @Test
-        @DisplayName("PATCH de una unidad disponible: cambia condición y costo, y la respuesta muestra el costo propio")
-        void actualizarImei() {
-            Producto p = Producto.builder().idproducto(1).preciopro(new BigDecimal("14000")).preciopub(new BigDecimal("16999")).build();
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(p).imei("350000000000011").estado("DISPONIBLE").build();
-            when(productoImeiRepository.findByImei("350000000000011")).thenReturn(Optional.of(pi));
-
-            ImeiUpdateDTO dto = new ImeiUpdateDTO();
-            dto.setCondicion("reacondicionado");
-            dto.setCostoUnitario(new BigDecimal("9000"));
-            ImeiInfoDTO r = service.actualizarImei("350000000000011", dto);
-
-            assertThat(pi.getCondicion()).isEqualTo("REACONDICIONADO");
-            assertThat(r.getCondicion()).isEqualTo("REACONDICIONADO");
-            assertThat(r.getCostoUnitario()).isEqualByComparingTo("9000");
-            assertThat(r.getTieneCostoPropio()).isTrue();
-            assertThat(r.getPrecioVenta()).isEqualByComparingTo("16999"); // sin precio propio: el del modelo
-        }
-
-        @Test
-        @DisplayName("sin costo propio, la unidad muestra el costo del modelo")
-        void costoDelModeloPorDefecto() {
-            Producto p = Producto.builder().idproducto(1).preciopro(new BigDecimal("14000")).preciopub(new BigDecimal("16999")).build();
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(p).imei("350000000000011").estado("DISPONIBLE").build();
-            when(productoImeiRepository.findByImei("350000000000011")).thenReturn(Optional.of(pi));
-
-            ImeiInfoDTO r = service.actualizarImei("350000000000011", new ImeiUpdateDTO());
-
-            assertThat(r.getCostoUnitario()).isEqualByComparingTo("14000");
-            assertThat(r.getTieneCostoPropio()).isFalse();
-            assertThat(r.getCondicion()).isEqualTo("NUEVO");
-        }
-
-        @Test
-        @DisplayName("una unidad vendida no se puede modificar: 400")
-        void unidadVendida() {
-            ProductoImei pi = ProductoImei.builder().id(1L).producto(new Producto()).imei("350000000000011").estado("VENDIDO").build();
-            when(productoImeiRepository.findByImei("350000000000011")).thenReturn(Optional.of(pi));
-
-            assertThatThrownBy(() -> service.actualizarImei("350000000000011", new ImeiUpdateDTO()))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("unidad disponible");
+            assertThatThrownBy(() -> service.actualizar("ACC-000001", 2, repetido))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+            assertThatThrownBy(() -> service.actualizar("ACC-000001", 2, raro))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+            assertThat(zocalo.getCodpro()).isEqualTo("ACC-000001");
+            verifyNoInteractions(renombradorCodigo);
         }
     }
 

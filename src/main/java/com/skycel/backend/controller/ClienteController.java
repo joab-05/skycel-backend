@@ -44,27 +44,27 @@ public class ClienteController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CLIENTE_EDITAR')")
     public ResponseEntity<StandardApiResponse<ClienteResponseDto>> crear(@RequestBody ClienteRequestDto dto) {
         return ResponseEntityBuilder.created(clienteService.crear(dto), "cliente");
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CLIENTE_EDITAR')")
     public ResponseEntity<StandardApiResponse<ClienteResponseDto>> actualizar(
             @PathVariable Integer id, @RequestBody ClienteRequestDto dto) {
         return ResponseEntityBuilder.updated(clienteService.actualizar(id, dto), "cliente");
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CLIENTE_DESACTIVAR')")
     public ResponseEntity<StandardApiResponse<Void>> desactivar(@PathVariable Integer id) {
         clienteService.desactivar(id);
         return ResponseEntityBuilder.deleted("cliente");
     }
 
     @PatchMapping("/{id}/puntos")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CLIENTE_EDITAR')")
     public ResponseEntity<StandardApiResponse<ClienteResponseDto>> sumarPuntos(
             @PathVariable Integer id, @RequestParam int cantidad) {
         return ResponseEntityBuilder.updated(clienteService.sumarPuntos(id, cantidad), "cliente");

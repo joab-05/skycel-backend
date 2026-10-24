@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 public class MovimientoInventarioService {
 
     private final MovimientoInventarioRepository repository;
+    private final com.skycel.backend.repository.ProductoImeiRepository productoImeiRepository;
     private final UsuarioRepository usuarioRepository;
 
     /**
@@ -45,7 +46,34 @@ public class MovimientoInventarioService {
         BigDecimal delta = despues.subtract(antes);
         if (delta.signum() == 0) return;
         repository.save(MovimientoInventario.builder()
-                .producto(p).tipo(tipo).cantidad(delta).stockAntes(antes).stockDespues(despues)
+                .producto(p).codti(p.getTienda() != null ? p.getTienda().getCodti() : null)
+                .tipo(tipo).cantidad(delta).stockAntes(antes).stockDespues(despues)
+                .motivo(motivo == null || motivo.isBlank() ? null : recortar(motivo.trim(), 255))
+                .referencia(referencia)
+                .fecha(fecha)
+                .usuario(usuarioActual())
+                .build());
+    }
+
+    /**
+     * Deja constancia de que una unidad de equipo entró (+1) o salió (-1) de las existencias de su sucursal. El stock de
+     * antes y después es el número de unidades DISPONIBLES de ese artículo en esa sucursal (la unidad ya debe tener su estado nuevo).
+     */
+    @Transactional
+    public void registrarEquipo(com.skycel.backend.domain.entity.ProductoImei u, int delta, String tipo, String motivo, String referencia) {
+        registrarEquipo(u, delta, tipo, motivo, referencia, null);
+    }
+
+    @Transactional
+    public void registrarEquipo(com.skycel.backend.domain.entity.ProductoImei u, int delta, String tipo, String motivo, String referencia,
+                                LocalDateTime fecha) {
+        if (delta == 0 || u.getProductoMaster() == null || u.getTienda() == null) return;
+        long despues = productoImeiRepository.countByProductoMaster_IdprodmasterAndTienda_CodtiAndEstado(
+                u.getProductoMaster().getIdprodmaster(), u.getTienda().getCodti(), com.skycel.backend.domain.entity.ProductoImei.DISPONIBLE);
+        repository.save(MovimientoInventario.builder()
+                .imei(u.getImei()).productoMaster(u.getProductoMaster()).codti(u.getTienda().getCodti())
+                .tipo(tipo).cantidad(BigDecimal.valueOf(delta))
+                .stockAntes(BigDecimal.valueOf(despues - delta)).stockDespues(BigDecimal.valueOf(despues))
                 .motivo(motivo == null || motivo.isBlank() ? null : recortar(motivo.trim(), 255))
                 .referencia(referencia)
                 .fecha(fecha)
@@ -71,9 +99,11 @@ public class MovimientoInventarioService {
 
     private MovimientoInventarioResponseDto toDto(MovimientoInventario m) {
         Producto p = m.getProducto();
+        com.skycel.backend.domain.entity.ProductoMaster master = p != null ? p.getProductoMaster() : m.getProductoMaster();
         return MovimientoInventarioResponseDto.builder()
                 .idmov(m.getIdmov()).fecha(m.getFecha())
-                .codpro(p.getCodpro()).nombreProducto(p.getProductoMaster().getNombreBase())
+                .codpro(p != null ? p.getCodpro() : null).imei(m.getImei())
+                .nombreProducto(master != null ? master.getNombreBase() : null)
                 .tipo(m.getTipo()).tipoDisplay(display(m.getTipo()))
                 .cantidad(m.getCantidad()).stockAntes(m.getStockAntes()).stockDespues(m.getStockDespues())
                 .motivo(m.getMotivo()).referencia(m.getReferencia())
@@ -94,6 +124,7 @@ public class MovimientoInventarioService {
             case "TRASPASO_ANULADO"  -> "Traspaso anulado";
             case "TRASPASO_FALTANTE" -> "Faltante de traspaso";
             case "DEVOLUCION"        -> "Devolución de venta";
+            case "GARANTIA_VITRINA"  -> "Garantía de vitrina";
             default                  -> tipo;
         };
     }

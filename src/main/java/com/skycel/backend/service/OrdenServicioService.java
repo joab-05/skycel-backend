@@ -112,6 +112,8 @@ public class OrdenServicioService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El cliente es obligatorio.");
         }
         validarFechaPromesa(dto.getFechaPromesa());
+        Integer horas = validarHoras(dto.getHorasEstimadas());
+        LocalDateTime promesaHora = horas != null ? (fechaRecepcion != null ? fechaRecepcion : LocalDateTime.now()).plusHours(horas) : null;
         String imei = validarImei(dto.getImei());
         if (dto.getIdTecnico() != null && !esSuperior(usuario)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -126,7 +128,9 @@ public class OrdenServicioService {
                 .accesoriosDejados(trimOrNull(dto.getAccesoriosDejados()))
                 .estadoFisico(trimOrNull(dto.getEstadoFisico()))
                 .fallaReportada(dto.getFallaReportada().trim())
-                .fechaPromesa(dto.getFechaPromesa())
+                .fechaPromesa(promesaHora != null ? promesaHora.toLocalDate() : dto.getFechaPromesa())
+                .horasEstimadas(horas)
+                .fechaPromesaHora(promesaHora)
                 .estado(RECIBIDA)
                 .claveOffline(clave)
                 .folioLocal(clave != null ? trimOrNull(dto.getFolioLocal()) : null)
@@ -163,9 +167,18 @@ public class OrdenServicioService {
         if (dto.getEstadoFisico() != null) orden.setEstadoFisico(trimOrNull(dto.getEstadoFisico()));
         if (dto.getFallaReportada() != null && !dto.getFallaReportada().isBlank()) orden.setFallaReportada(dto.getFallaReportada().trim());
         if (dto.getDiagnostico() != null) orden.setDiagnostico(trimOrNull(dto.getDiagnostico()));
-        if (dto.getFechaPromesa() != null) {
+        Integer horas = validarHoras(dto.getHorasEstimadas());
+        if (horas != null) {
+            // Un nuevo estimado se cuenta desde ahora (por ejemplo, tras el diagnóstico)
+            LocalDateTime promesaHora = LocalDateTime.now().plusHours(horas);
+            orden.setHorasEstimadas(horas);
+            orden.setFechaPromesaHora(promesaHora);
+            orden.setFechaPromesa(promesaHora.toLocalDate());
+        } else if (dto.getFechaPromesa() != null) {
             validarFechaPromesa(dto.getFechaPromesa());
             orden.setFechaPromesa(dto.getFechaPromesa());
+            orden.setHorasEstimadas(null);
+            orden.setFechaPromesaHora(null);
         }
         registrar(orden, usuario, dto.getDiagnostico() != null ? "Diagnóstico registrado" : "Datos de la orden actualizados");
         return toDto(ordenRepository.save(orden));
@@ -481,7 +494,7 @@ public class OrdenServicioService {
                 .folio(o.getFolio()).equipo(o.getMarca() + " " + o.getModelo()).imei(imei)
                 .sucursal(o.getTienda().getNombre())
                 .estado(estadoDisplay(o.getEstado())).mensaje(mensajeParaElCliente(o.getEstado()))
-                .fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa())
+                .fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).fechaPromesaHora(o.getFechaPromesaHora())
                 .fechaLista(o.getFechaLista()).fechaEntrega(o.getFechaEntrega())
                 .diasGarantia(entregada ? o.getDiasGarantia() : null).garantiaHasta(entregada ? o.getFechaGarantiaHasta() : null)
                 .avance(avance)
@@ -507,7 +520,7 @@ public class OrdenServicioService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El producto '" + codpro + "' no existe en la tienda de la orden."));
         ProductoMaster master = p.getProductoMaster();
-        if (master.getTipo() == TipoProducto.CELULAR) {
+        if (master.getTipo() == TipoProducto.CELULAR || master.getTipo() == TipoProducto.TABLET) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Un equipo no se agrega a una orden de servicio: solo servicios y refacciones (accesorios).");
         }
@@ -624,6 +637,15 @@ public class OrdenServicioService {
         return t;
     }
 
+    /** Horas estimadas de entrega: de 1 a 720 (30 días); vacío = sin estimado. */
+    private Integer validarHoras(Integer horas) {
+        if (horas == null) return null;
+        if (horas < 1 || horas > 720) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El tiempo estimado de entrega debe ser de 1 a 720 horas.");
+        }
+        return horas;
+    }
+
     private void validarFechaPromesa(LocalDate fecha) {
         if (fecha != null && fecha.isBefore(LocalDate.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha prometida no puede ser anterior a hoy.");
@@ -737,7 +759,7 @@ public class OrdenServicioService {
                 .accesoriosDejados(o.getAccesoriosDejados()).estadoFisico(o.getEstadoFisico())
                 .fallaReportada(o.getFallaReportada()).diagnostico(o.getDiagnostico())
                 .estado(o.getEstado()).estadoDisplay(estadoDisplay(o.getEstado()))
-                .folioLocal(o.getFolioLocal()).fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa())
+                .folioLocal(o.getFolioLocal()).fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).horasEstimadas(o.getHorasEstimadas()).fechaPromesaHora(o.getFechaPromesaHora())
                 .fechaLista(o.getFechaLista()).fechaEntrega(o.getFechaEntrega())
                 .diasGarantia(o.getDiasGarantia()).fechaGarantiaHasta(o.getFechaGarantiaHasta())
                 .idventa(o.getVenta() != null ? o.getVenta().getIdventa() : null)

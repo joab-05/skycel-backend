@@ -11,6 +11,12 @@ public class GarantiaRequestDto {
     /** Sucursal donde se recibe. Opcional: si se omite es la del usuario. */
     private Integer codti;
 
+    /**
+     * true si es un equipo de vitrina (aún sin vender) con una falla detectada: se indica solo su {@code imei}; no hay venta
+     * ni cliente.
+     */
+    private Boolean vitrina;
+
     /** La venta original del producto. Obligatoria, salvo que el producto se haya vendido con el sistema anterior. */
     private Integer idventa;
 

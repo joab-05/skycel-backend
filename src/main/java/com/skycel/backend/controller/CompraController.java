@@ -32,7 +32,7 @@ public class CompraController {
     private final CompraService compraService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('COMPRAS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> listar(
             @RequestParam(required = false) Integer codti,
@@ -42,21 +42,21 @@ public class CompraController {
     }
 
     @GetMapping("/resumen")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('COMPRAS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> resumen() {
         return ResponseEntityBuilder.ok(compraService.resumen(), "resumen");
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('COMPRAS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> obtener(@PathVariable Integer id) {
         return ResponseEntityBuilder.ok(compraService.obtener(id), "compra");
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('COMPRAS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> crear(
             @RequestBody CompraRequestDto dto, @AuthenticationPrincipal UserDetails userDetails) {
@@ -64,7 +64,7 @@ public class CompraController {
     }
 
     @PostMapping("/{id}/pago")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('COMPRAS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> registrarPago(
             @PathVariable Integer id,
@@ -80,7 +80,7 @@ public class CompraController {
     }
 
     @GetMapping("/{id}/historial")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('COMPRAS')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<List<Map<String, Object>>>> historial(@PathVariable Integer id) {
         return ResponseEntityBuilder.ok(compraService.historialPagos(id), "pagos");

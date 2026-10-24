@@ -433,6 +433,22 @@ class MovimientoCajaServiceTest {
     }
 
     @org.junit.jupiter.api.Test
+    @DisplayName("cancelar una venta en efectivo con la caja cerrada: 409 y no se registra nada (el efectivo sale del cajón)")
+    void cancelacionConCajaCerrada() {
+        CatMotivo motivoVenta = CatMotivo.builder().idmotivo(1).nombre("Venta").tipoMov((byte) 1).catSat((byte) 1).activo(true).build();
+        when(catMotivoRepository.findByNombre("Venta")).thenReturn(Optional.of(motivoVenta));
+        MovimientoCaja original = MovimientoCaja.builder().idmovimiento(30).caja(caja)
+                .monto(new BigDecimal("199.00")).tipo((byte) 1).build();
+        when(movimientoCajaRepository.findFirstByMotivo_IdmotivoAndObservaciones(1, "Venta #7"))
+                .thenReturn(Optional.of(original));
+        when(sesionCajaRepository.existsByCaja_IdCajaAndEstado(ID_CAJA, SesionCaja.ABIERTA)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.registrarCancelacionVenta(Venta.builder().idventa(7).caja(caja).build(), encargado))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(movimientoCajaRepository, never()).save(any());
+    }
+
+    @org.junit.jupiter.api.Test
     @DisplayName("con la caja cerrada no se puede registrar un movimiento manual")
     void manualConCajaCerrada() {
         when(sesionCajaRepository.existsByCaja_IdCajaAndEstado(ID_CAJA, SesionCaja.ABIERTA)).thenReturn(false);

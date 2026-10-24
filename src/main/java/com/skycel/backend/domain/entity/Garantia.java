@@ -43,6 +43,20 @@ public class Garantia {
     @JoinColumn(name = "idproducto")
     private Producto producto;
 
+    /** El artículo reclamado (equipos, que no tienen producto con código; en lo demás, el del producto). */
+    @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idprodmaster")
+    private ProductoMaster productoMaster;
+
+    /**
+     * Garantía de vitrina: un equipo que aún no se vende y al que se le detectó una falla. No hay venta ni cliente; mientras
+     * está fuera la unidad queda EN_GARANTIA (no cuenta como existencia) y vuelve a DISPONIBLE al entregarse.
+     */
+    @Builder.Default
+    @Column(name = "vitrina", nullable = false, columnDefinition = "TINYINT(1) NOT NULL DEFAULT 0")
+    private Boolean vitrina = false;
+
     // ── Ventas del sistema anterior ───────────────────────────────────────────
 
     /** true si el producto se vendió antes de este sistema: no hay venta ni producto aquí, se captura a mano. */

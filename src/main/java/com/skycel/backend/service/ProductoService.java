@@ -39,6 +39,7 @@ public class ProductoService {
     private final ProductoMapper           productoMapper;
     private final MovimientoInventarioService movimientoInventarioService;
     private final DescripcionService       descripcionService;
+    private final RenombradorCodigoProducto renombradorCodigo;
 
     /** Contador reservado para los equipos (CEL-000001...). categoria_folio no tiene FK real, así que 0 no choca con ninguna categoría. */
     private static final short FOLIO_EQUIPOS = 0;
@@ -103,16 +104,8 @@ public class ProductoService {
         return aDtos(productoRepository.findDisponiblesConDetalleByTienda(codti));
     }
 
-    /** Convierte una lista de productos cargando las unidades (IMEI) de todos los equipos en UNA sola consulta. */
     private List<ProductoResponseDTO> aDtos(List<Producto> productos) {
-        List<Integer> equipos = productos.stream()
-                .filter(p -> p.getProductoMaster() != null && esEquipoConImei(p.getProductoMaster().getTipo()))
-                .map(Producto::getIdproducto)
-                .collect(Collectors.toList());
-        Map<Integer, List<ProductoImei>> unidades = equipos.isEmpty() ? Map.of()
-                : productoImeiRepository.findByProducto_IdproductoInAndEstado(equipos, "DISPONIBLE").stream()
-                        .collect(Collectors.groupingBy(pi -> pi.getProducto().getIdproducto()));
-        return productos.stream().map(p -> toDto(p, unidades)).collect(Collectors.toList());
+        return productos.stream().map(this::toDto).collect(Collectors.toList());
     }
 
     // ── Crear ─────────────────────────────────────────────────────────────────
@@ -217,32 +210,8 @@ public class ProductoService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Ya existe el código '" + codpro + "' en esa tienda.");
 
-        // Validaciones especiales por tipo de producto
-        List<UnidadEquipoDTO> unidades = List.of();
-        if (esEquipoConImei(master.getTipo())) {
-            unidades = unidadesDe(dto.getImeis(), dto.getUnidades());
-            BigDecimal stock = dto.getStock() != null ? dto.getStock() : BigDecimal.ZERO;
-            int cantidad = stock.intValue();
-            if (stock.compareTo(BigDecimal.valueOf(cantidad)) != 0 || cantidad < 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El stock para equipos debe ser un número entero no negativo.");
-            }
-            if (cantidad > 0) {
-                if (unidades.size() != cantidad) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "Debe proporcionar exactamente " + cantidad + " IMEIs para el stock inicial.");
-                }
-                for (UnidadEquipoDTO u : unidades) {
-                    if (u.getImei() == null || !u.getImei().matches("[A-Za-z0-9]{5,20}")) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "El identificador '" + u.getImei() + "' debe tener entre 5 y 20 caracteres alfanuméricos (IMEI o número de serie).");
-                    }
-                    if (productoImeiRepository.existsByImei(u.getImei())) {
-                        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                                "El identificador '" + u.getImei() + "' ya está registrado en el sistema.");
-                    }
-                }
-            }
-        }
+        // Los celulares y tablets no son productos con código: se registran por su IMEI o serie (ver EquipoService)
+        exigirNoEsEquipo(master);
 
         Producto producto = productoMapper.toProductoEntity(dto);
         producto.setCodpro(codpro);
@@ -266,12 +235,24 @@ public class ProductoService {
         Producto saved = productoRepository.save(producto);
         movimientoInventarioService.registrar(saved, BigDecimal.ZERO, "ALTA", "Stock inicial", null);
 
-        // Registrar IMEIs si es celular y hay stock
-        for (UnidadEquipoDTO u : unidades) {
-            productoImeiRepository.save(nuevaUnidad(saved, u));
-        }
-
         return toDto(saved);
+    }
+
+    /**
+     * El artículo de un alta: uno que ya existe ({@code idProductoMaster}) o el que sale del árbol de categorías
+     * (categoría + nombre + color; si ya existe con ese nombre completo se reutiliza). La usan los equipos.
+     */
+    @Transactional
+    public ProductoMaster resolverMaster(ProductoRequestDTO dto) {
+        if (dto.getIdProductoMaster() != null) {
+            return productoMasterRepository.findById(Math.toIntExact(dto.getIdProductoMaster()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Artículo no encontrado: " + dto.getIdProductoMaster()));
+        }
+        if (dto.getIdCategoria() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Indique el artículo (idProductoMaster) o su categoría y su nombre.");
+        }
+        return resolverMasterDelArbol(dto);
     }
 
     /**
@@ -357,7 +338,8 @@ public class ProductoService {
     public ProductoResponseDTO actualizar(String codpro, Integer codti, boolean aTodasLasSucursales, ProductoUpdateDTO dto) {
         ProductoResponseDTO resultado = actualizar(codpro, codti, dto);
         if (aTodasLasSucursales && (dto.getPrecioVenta() != null || dto.getPrecioCompra() != null)) {
-            for (Producto otro : productoRepository.findAllByCodpro(codpro)) {
+            String vigente = resultado.getCodpro() != null ? resultado.getCodpro() : codpro;   // por si el código se acaba de corregir
+            for (Producto otro : productoRepository.findAllByCodpro(vigente)) {
                 if (otro.getIdproducto().equals(resultado.getIdproducto())) continue;
                 if (dto.getPrecioCompra() != null) otro.setPreciopro(dto.getPrecioCompra());
                 if (dto.getPrecioVenta() != null) otro.setPreciopub(dto.getPrecioVenta());
@@ -376,6 +358,7 @@ public class ProductoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El precio de compra no puede ser negativo.");
         }
         Producto p = porCodigo(codpro, codti);
+        if (dto.getNuevoCodpro() != null && !dto.getNuevoCodpro().isBlank()) renombrarCodigo(p, dto.getNuevoCodpro());
 
         if (dto.getPrecioCompra() != null) p.setPreciopro(dto.getPrecioCompra());
         if (dto.getPrecioVenta()  != null) p.setPreciopub(dto.getPrecioVenta());
@@ -387,6 +370,30 @@ public class ProductoService {
         if (dto.getStockMinimo()  != null) p.setStockMinimo(validarStockMinimo(dto.getStockMinimo(), p.getProductoMaster().getTipo()));
 
         return toDto(productoRepository.save(p));
+    }
+
+    /**
+     * Cambia el código de un producto en todas las sucursales que lo tienen (el código identifica al artículo, es el mismo en
+     * cada tienda) y en los documentos que lo guardan. No puede chocar con el de otro artículo.
+     */
+    private void renombrarCodigo(Producto p, String solicitado) {
+        String nuevo = solicitado.trim().toUpperCase();
+        String viejo = p.getCodpro();
+        if (nuevo.equals(viejo)) return;
+        if (!nuevo.matches("[A-Z0-9._-]{3,25}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El código debe tener de 3 a 25 caracteres: letras, números, punto, guion o guion bajo.");
+        }
+        if (!productoRepository.findAllByCodpro(nuevo).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El código '" + nuevo + "' ya lo usa otro producto.");
+        }
+        for (Producto fila : productoRepository.findAllByCodpro(viejo)) {
+            if (!fila.getProductoMaster().getIdprodmaster().equals(p.getProductoMaster().getIdprodmaster())) continue;
+            fila.setCodpro(nuevo);
+            productoRepository.save(fila);
+        }
+        productoRepository.flush();
+        renombradorCodigo.renombrar(viejo, nuevo);
     }
 
     /** Atributos del artículo que no dependen de la tienda: compatibilidad, tiempo estimado y garantía. */
@@ -480,13 +487,6 @@ public class ProductoService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
-    public ProductoResponseDTO obtenerProductoPorImei(String imei) {
-        ProductoImei pi = productoImeiRepository.findByImei(imei)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "El IMEI '" + imei + "' no está registrado."));
-        return toDto(pi.getProducto());
-    }
-
     // ── Ajustar stock ─────────────────────────────────────────────────────────
 
     @Transactional
@@ -508,115 +508,11 @@ public class ProductoService {
         BigDecimal cantidad    = dto.getCantidad() != null ? dto.getCantidad() : BigDecimal.ZERO;
 
         if (esEquipoConImei(tipoProd)) {
-            int cantInt = cantidad.intValue();
-            if (cantidad.compareTo(BigDecimal.valueOf(cantInt)) != 0 || cantInt < 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidad para celulares debe ser un número entero no negativo.");
-            }
-
-            List<UnidadEquipoDTO> unidades = unidadesDe(dto.getImeis(), dto.getUnidades());
-            List<String> imeis = unidades.stream().map(UnidadEquipoDTO::getImei).collect(Collectors.toList());
-
-            if (cantInt > 0) {
-                if (unidades.size() != cantInt) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "Debe proporcionar exactamente " + cantInt + " IMEIs para esta operación.");
-                }
-
-                // Validar los IMEIs/números de serie proporcionados
-                for (String imei : imeis) {
-                    if (imei == null || !imei.matches("[A-Za-z0-9]{5,20}")) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "El identificador '" + imei + "' debe tener entre 5 y 20 caracteres alfanuméricos (IMEI o número de serie).");
-                    }
-                }
-            }
-
-            switch (dto.getTipo().toUpperCase()) {
-                case "ENTRADA" -> {
-                    // Validar que no existan
-                    for (String imei : imeis) {
-                        if (productoImeiRepository.existsByImei(imei)) {
-                            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                                    "El IMEI '" + imei + "' ya está registrado en el sistema.");
-                        }
-                    }
-                    // Insertar
-                    for (UnidadEquipoDTO u : unidades) {
-                        productoImeiRepository.save(nuevaUnidad(p, u));
-                    }
-                    p.setStock(stockActual.add(cantidad));
-                }
-                case "SALIDA" -> {
-                    // Validar que existan y estén DISPONIBLES para este producto
-                    for (String imei : imeis) {
-                        ProductoImei pi = productoImeiRepository.findByImei(imei)
-                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                                        "El IMEI '" + imei + "' no existe."));
-                        if (!pi.getProducto().getIdproducto().equals(p.getIdproducto())) {
-                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                    "El IMEI '" + imei + "' no pertenece a este producto.");
-                        }
-                        if (!"DISPONIBLE".equals(pi.getEstado())) {
-                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                    "El IMEI '" + imei + "' no está disponible (Estado: " + pi.getEstado() + ").");
-                        }
-                    }
-                    // Dar de baja / Marcar como VENDIDO o DEBAJA
-                    String nuevoEstado = "DEBAJA";
-                    if (dto.getComentario() != null && dto.getComentario().toUpperCase().contains("VENTA")) {
-                        nuevoEstado = "VENDIDO";
-                    }
-                    for (String imei : imeis) {
-                        ProductoImei pi = productoImeiRepository.findByImei(imei).get();
-                        pi.setEstado(nuevoEstado);
-                        productoImeiRepository.save(pi);
-                    }
-                    BigDecimal nuevo = stockActual.subtract(cantidad);
-                    if (nuevo.compareTo(BigDecimal.ZERO) < 0) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "Stock insuficiente. Actual: " + stockActual + ", Salida solicitada: " + cantidad);
-                    }
-                    p.setStock(nuevo);
-                }
-                case "AJUSTE" -> {
-                    // Para AJUSTE:
-                    // 1. Validar que los IMEIs no pertenezcan a otro producto
-                    for (String imei : imeis) {
-                        productoImeiRepository.findByImei(imei).ifPresent(pi -> {
-                            if (!pi.getProducto().getIdproducto().equals(p.getIdproducto())) {
-                                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                                        "El IMEI '" + imei + "' pertenece a otro producto.");
-                            }
-                        });
-                    }
-                    // 2. Dar de baja todos los IMEIs actualmente DISPONIBLES de este producto
-                    List<ProductoImei> actuales = productoImeiRepository.findByProducto_IdproductoAndEstado(p.getIdproducto(), "DISPONIBLE");
-                    for (ProductoImei pi : actuales) {
-                        pi.setEstado("DEBAJA");
-                        productoImeiRepository.save(pi);
-                    }
-                    // 3. Registrar los nuevos, reactivando los que ya existían o insertando nuevos
-                    for (UnidadEquipoDTO u : unidades) {
-                        Optional<ProductoImei> piOpt = productoImeiRepository.findByImei(u.getImei());
-                        if (piOpt.isPresent()) {
-                            ProductoImei pi = piOpt.get();
-                            pi.setEstado("DISPONIBLE");
-                            // Si se enviaron datos propios de la unidad, se actualizan; si no, se conservan los que tenía
-                            if (u.getCondicion() != null) pi.setCondicion(normalizarCondicion(u.getCondicion()));
-                            if (u.getCostoUnitario() != null) pi.setCostoUnitario(u.getCostoUnitario());
-                            if (u.getPrecioVenta() != null) pi.setPrecioVentaOverride(u.getPrecioVenta());
-                            productoImeiRepository.save(pi);
-                        } else {
-                            productoImeiRepository.save(nuevaUnidad(p, u));
-                        }
-                    }
-                    p.setStock(cantidad);
-                }
-                default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Tipo de ajuste inválido. Use ENTRADA, SALIDA o AJUSTE.");
-            }
-        } else {
-            // Producto estándar (ACCESORIO)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Los celulares y tablets se manejan por su IMEI o serie (altas, bajas y correcciones en Equipos), no por cantidad.");
+        }
+        // Producto estándar (ACCESORIO)
+        {
             switch (dto.getTipo().toUpperCase()) {
                 case "ENTRADA" -> p.setStock(stockActual.add(cantidad));
                 case "SALIDA"  -> {
@@ -664,51 +560,6 @@ public class ProductoService {
         productoRepository.save(p);
     }
 
-    // ── Precio por IMEI ─────────────────────────────────────────────────────
-
-    @Transactional
-    public ImeiInfoDTO actualizarPrecioImei(String imei, ImeiPrecioUpdateDTO dto) {
-        ProductoImei pi = productoImeiRepository.findByImei(imei)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "El IMEI '" + imei + "' no está registrado."));
-
-        if (!"DISPONIBLE".equals(pi.getEstado())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Solo se puede ajustar el precio de un IMEI disponible (estado actual: " + pi.getEstado() + ").");
-        }
-
-        BigDecimal nuevoPrecio = dto.getPrecioVenta();
-        if (nuevoPrecio != null && nuevoPrecio.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El precio debe ser mayor a 0.");
-        }
-
-        pi.setPrecioVentaOverride(nuevoPrecio); // null = quitar el override, vuelve al precio del modelo
-        pi = productoImeiRepository.save(pi);
-
-        return toImeiInfo(pi, pi.getProducto());
-    }
-
-    /** Corrige la condición o el costo de una unidad disponible. */
-    @Transactional
-    public ImeiInfoDTO actualizarImei(String imei, ImeiUpdateDTO dto) {
-        ProductoImei pi = productoImeiRepository.findByImei(imei)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "El IMEI '" + imei + "' no está registrado."));
-
-        if (!"DISPONIBLE".equals(pi.getEstado())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Solo se puede modificar una unidad disponible (estado actual: " + pi.getEstado() + ").");
-        }
-        if (dto.getCondicion() != null) pi.setCondicion(normalizarCondicion(dto.getCondicion()));
-        if (dto.getCostoUnitario() != null) {
-            if (dto.getCostoUnitario().signum() < 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El costo no puede ser negativo.");
-            }
-            pi.setCostoUnitario(dto.getCostoUnitario());
-        }
-        return toImeiInfo(productoImeiRepository.save(pi), pi.getProducto());
-    }
-
     // ── Mapeo enriquecido ─────────────────────────────────────────────────────
 
     private ProductoResponseDTO toDto(Producto p) {
@@ -716,7 +567,7 @@ public class ProductoService {
     }
 
     /** @param unidadesPrecargadas las unidades disponibles por producto ya leídas (null = leerlas de este producto). */
-    private ProductoResponseDTO toDto(Producto p, Map<Integer, List<ProductoImei>> unidadesPrecargadas) {
+    private ProductoResponseDTO toDto(Producto p, Object sinUsar) {
         ProductoResponseDTO dto = productoMapper.toProductoResponse(p);
         // Campos adicionales que el mapper no cubre
         if (p.getTienda() != null) {
@@ -759,16 +610,6 @@ public class ProductoService {
         dto.setStockMinimo(minimo);
         dto.setBajoStock(!esServicio && minimo.signum() > 0 && stock.compareTo(minimo) <= 0);
 
-        if (p.getProductoMaster() != null && esEquipoConImei(p.getProductoMaster().getTipo())) {
-            List<ProductoImei> unidades = unidadesPrecargadas != null
-                    ? unidadesPrecargadas.getOrDefault(p.getIdproducto(), List.of())
-                    : productoImeiRepository.findByProducto_IdproductoAndEstado(p.getIdproducto(), "DISPONIBLE");
-            List<ImeiInfoDTO> availableImeis = unidades
-                    .stream()
-                    .map(pi -> toImeiInfo(pi, p))
-                    .collect(Collectors.toList());
-            dto.setImeisDisponibles(availableImeis);
-        }
         dto.setActivo(p.getActivo());
 
         // Descuento automático vigente ahora mismo (ver DescuentoService): nunca lo aplica un vendedor a mano,
@@ -782,76 +623,12 @@ public class ProductoService {
         return dto;
     }
 
-    /** Datos de una unidad: precio y costo efectivos (propios si los tiene, si no los del modelo) y su condición. */
-    private ImeiInfoDTO toImeiInfo(ProductoImei pi, Producto p) {
-        boolean precioPropio = pi.getPrecioVentaOverride() != null;
-        boolean costoPropio = pi.getCostoUnitario() != null;
-        return new ImeiInfoDTO(
-                pi.getImei(),
-                precioPropio ? pi.getPrecioVentaOverride() : p.getPreciopub(),
-                precioPropio,
-                pi.getCondicion() != null ? pi.getCondicion() : "NUEVO",
-                costoPropio ? pi.getCostoUnitario() : p.getPreciopro(),
-                costoPropio);
-    }
-
-    // ── Unidades de equipo (IMEI / serie) ─────────────────────────────────────
-
-    /**
-     * Unifica las dos formas de enviar unidades: la lista simple `imeis` (todas nuevas, con el costo
-     * y el precio del modelo) o `unidades`, con condición, costo y precio propios. Devuelve siempre
-     * una lista (vacía si no se envió ninguna). No se aceptan ambas a la vez.
-     */
-    private List<UnidadEquipoDTO> unidadesDe(List<String> imeis, List<UnidadEquipoDTO> unidades) {
-        boolean hayImeis = imeis != null && !imeis.isEmpty();
-        boolean hayUnidades = unidades != null && !unidades.isEmpty();
-        if (hayImeis && hayUnidades) {
+    /** Un artículo de tipo celular o tablet no se registra como producto: se da de alta por IMEI o serie. */
+    private void exigirNoEsEquipo(ProductoMaster master) {
+        if (esEquipoConImei(master.getTipo())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Envíe 'imeis' o 'unidades', no ambas.");
+                    "'" + master.getNombreBase() + "' es un equipo: los celulares y tablets se dan de alta por su IMEI o serie (Equipos), no como producto con código.");
         }
-        if (hayUnidades) {
-            for (UnidadEquipoDTO u : unidades) {
-                normalizarCondicion(u.getCondicion());
-                if (u.getCostoUnitario() != null && u.getCostoUnitario().signum() < 0) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El costo de la unidad no puede ser negativo.");
-                }
-                if (u.getPrecioVenta() != null && u.getPrecioVenta().signum() <= 0) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El precio de la unidad debe ser mayor a 0.");
-                }
-            }
-            return unidades;
-        }
-        List<UnidadEquipoDTO> simples = new ArrayList<>();
-        if (hayImeis) {
-            for (String imei : imeis) {
-                UnidadEquipoDTO u = new UnidadEquipoDTO();
-                u.setImei(imei);
-                simples.add(u);
-            }
-        }
-        return simples;
-    }
-
-    private ProductoImei nuevaUnidad(Producto p, UnidadEquipoDTO u) {
-        return ProductoImei.builder()
-                .producto(p)
-                .imei(u.getImei())
-                .estado("DISPONIBLE")
-                .condicion(normalizarCondicion(u.getCondicion()))
-                .costoUnitario(u.getCostoUnitario())
-                .precioVentaOverride(u.getPrecioVenta())
-                .build();
-    }
-
-    /** Mayúsculas y validación; sin valor equivale a NUEVO. */
-    private String normalizarCondicion(String condicion) {
-        if (condicion == null || condicion.isBlank()) return "NUEVO";
-        String c = condicion.trim().toUpperCase();
-        if (!CONDICIONES.contains(c)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Condición inválida: '" + condicion + "'. Use NUEVO, USADO o REACONDICIONADO.");
-        }
-        return c;
     }
 
     // ── Validaciones de atributos ─────────────────────────────────────────────

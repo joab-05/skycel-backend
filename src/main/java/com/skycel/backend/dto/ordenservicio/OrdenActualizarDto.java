@@ -29,4 +29,7 @@ public class OrdenActualizarDto {
     private String diagnostico;
 
     private LocalDate fechaPromesa;
+
+    /** Nuevo tiempo estimado de entrega en horas (1 a 720), contado desde ahora. */
+    private Integer horasEstimadas;
 }

@@ -54,7 +54,7 @@ public class ConfiguracionController {
     @Operation(summary = "Cambiar el logo", description = "Cuerpo: la imagen PNG o JPEG (hasta 2 MB). Se reduce a 512 px y se guarda como PNG.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping(value = "/logo", consumes = {"image/png", "image/jpeg"})
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('NEGOCIO_CONFIG')")
     public ResponseEntity<java.util.Map<String, Object>> cambiarLogo(@RequestBody byte[] imagen, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntity.ok(java.util.Map.of("version", configuracionService.guardarLogo(imagen, user.getUsername())));
     }
@@ -62,7 +62,7 @@ public class ConfiguracionController {
     @Operation(summary = "Quitar el logo", description = "Cada aplicación vuelve a su ícono por omisión.")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/logo")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('NEGOCIO_CONFIG')")
     public ResponseEntity<java.util.Map<String, String>> quitarLogo(@AuthenticationPrincipal UserDetails user) {
         configuracionService.quitarLogo(user.getUsername());
         return ResponseEntity.ok(java.util.Map.of("mensaje", "Logo quitado."));
@@ -71,7 +71,7 @@ public class ConfiguracionController {
     @Operation(summary = "Guardar los datos del negocio")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/negocio")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('NEGOCIO_CONFIG')")
     public ResponseEntity<StandardApiResponse<ConfiguracionNegocioDto>> actualizar(
             @Valid @RequestBody ConfiguracionNegocioDto request, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.updated(configuracionService.actualizar(request, user.getUsername()), "datos del negocio");

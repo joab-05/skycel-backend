@@ -49,7 +49,7 @@ public class CajaController {
     @Operation(summary = "Da de alta una caja nueva en una sucursal")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    @PreAuthorize("@permisos.tiene('CAJA_CONFIG')")
     public ResponseEntity<StandardApiResponse<CajaResponseDto>> crear(@Valid @RequestBody CajaRequestDto request) {
         return ResponseEntityBuilder.created(cajaService.crear(request), "caja");
     }
@@ -57,7 +57,7 @@ public class CajaController {
     @Operation(summary = "Registrar un movimiento manual de efectivo (fondo, gasto, retiro, etc.)")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{idCaja}/movimientos")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CAJA_MOVIMIENTOS')")
     public ResponseEntity<StandardApiResponse<MovimientoCajaResponseDto>> registrarMovimiento(
             @PathVariable Integer idCaja,
             @Valid @RequestBody MovimientoCajaRequestDto request,
@@ -69,7 +69,7 @@ public class CajaController {
     @Operation(summary = "Movimientos de una caja (por defecto, los de hoy)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{idCaja}/movimientos")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CAJA_MOVIMIENTOS')")
     public ResponseEntity<StandardApiResponse<List<MovimientoCajaResponseDto>>> listarMovimientos(
             @PathVariable Integer idCaja,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime desde,
@@ -82,7 +82,7 @@ public class CajaController {
     @Operation(summary = "Saldo de una caja (entradas - salidas)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{idCaja}/saldo")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA')")
+    @PreAuthorize("@permisos.tiene('CAJA_MOVIMIENTOS')")
     public ResponseEntity<StandardApiResponse<SaldoCajaResponseDto>> saldo(
             @PathVariable Integer idCaja, @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(movimientoCajaService.saldo(idCaja, userDetails.getUsername()), "saldo");
@@ -94,7 +94,7 @@ public class CajaController {
             description = "Si está abierta: el turno con su resumen en vivo. Si está cerrada: abierta=false y el fondo sugerido para abrir.")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{idCaja}/sesion")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')")
+    @PreAuthorize("@permisos.tiene('CAJA_OPERAR')")
     public ResponseEntity<StandardApiResponse<SesionCajaResponseDto>> sesionActual(
             @PathVariable Integer idCaja, @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(sesionCajaService.actual(idCaja, userDetails.getUsername()), "sesion de caja");
@@ -103,7 +103,7 @@ public class CajaController {
     @Operation(summary = "Abrir la caja con su fondo inicial")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{idCaja}/abrir")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')")
+    @PreAuthorize("@permisos.tiene('CAJA_OPERAR')")
     public ResponseEntity<StandardApiResponse<SesionCajaResponseDto>> abrir(
             @PathVariable Integer idCaja, @Valid @RequestBody AbrirCajaRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -113,7 +113,7 @@ public class CajaController {
     @Operation(summary = "Cerrar la caja: genera y guarda el corte")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{idCaja}/cerrar")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')")
+    @PreAuthorize("@permisos.tiene('CAJA_OPERAR')")
     public ResponseEntity<StandardApiResponse<SesionCajaResponseDto>> cerrar(
             @PathVariable Integer idCaja, @Valid @RequestBody CerrarCajaRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -123,7 +123,7 @@ public class CajaController {
     @Operation(summary = "Historial de turnos (cortes) de la caja, el más reciente primero")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{idCaja}/sesiones")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')")
+    @PreAuthorize("@permisos.tiene('CAJA_OPERAR')")
     public ResponseEntity<StandardApiResponse<List<SesionCajaResponseDto>>> sesiones(
             @PathVariable Integer idCaja, @RequestParam(defaultValue = "60") int limite,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -133,7 +133,7 @@ public class CajaController {
     @Operation(summary = "Un turno con su corte completo")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/sesiones/{idsesion}")
-    @PreAuthorize("hasAnyRole('ROOT','ADMIN','ENCARGADO_TIENDA','VENDEDOR')")
+    @PreAuthorize("@permisos.tiene('CAJA_OPERAR')")
     public ResponseEntity<StandardApiResponse<SesionCajaResponseDto>> sesion(
             @PathVariable Integer idsesion, @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(sesionCajaService.obtener(idsesion, userDetails.getUsername()), "turno de caja");

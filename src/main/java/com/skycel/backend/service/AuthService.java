@@ -24,6 +24,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
     private final UsuarioSesionRepository usuarioSesionRepository;
+    private final PermisoService permisoService;
 
     @Transactional
     public LoginResponseDto authenticate(LoginRequestDto requestDto, HttpServletRequest request) {
@@ -60,6 +61,7 @@ public class AuthService {
                 .rol(usuario.getRol().name())
                 .codti(usuario.getTienda().getCodti())
                 .tecnicoEncargado(Boolean.TRUE.equals(usuario.getTecnicoEncargado()))
+                .permisos(permisoService.deRol(usuario.getRol()))
                 .build();
     }
 

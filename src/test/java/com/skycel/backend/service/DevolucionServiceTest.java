@@ -102,7 +102,7 @@ class DevolucionServiceTest {
 
         pAccesorio = Producto.builder().idproducto(1).codpro("FUN-000001").tienda(zocalo).productoMaster(mAccesorio).stock(new BigDecimal("10")).build();
         pCelular = Producto.builder().idproducto(2).codpro("CEL-000004").tienda(zocalo).productoMaster(mCelular).stock(BigDecimal.ZERO).build();
-        imei = ProductoImei.builder().imei("350000000000011").producto(pCelular).estado("VENDIDO").build();
+        imei = ProductoImei.builder().imei("350000000000011").productoMaster(mCelular).tienda(zocalo).estado("VENDIDO").build();
         lenient().when(productoRepository.findByCodproAndTienda_Codti("FUN-000001", 2)).thenReturn(Optional.of(pAccesorio));
         lenient().when(productoImeiRepository.findByImei("350000000000011")).thenReturn(Optional.of(imei));
 
@@ -335,20 +335,18 @@ class DevolucionServiceTest {
         }
 
         @Test
-        @DisplayName("un equipo devuelto en buen estado vuelve DISPONIBLE; uno dañado se da de baja sin tocar el stock")
+        @DisplayName("un equipo devuelto en buen estado vuelve DISPONIBLE (con su historial); uno dañado se da de baja")
         void equipos() {
             int id = service.solicitar(reembolso(linea(11, 1, true)), "yamilet").getIddevolucion();
             service.aprobar(id, null, "abigail");
             assertThat(imei.getEstado()).isEqualTo("DISPONIBLE");
-            assertThat(pCelular.getStock()).isEqualByComparingTo("1");
+            verify(movimientoInventarioService).registrarEquipo(eq(imei), eq(+1), eq("DEVOLUCION"), anyString(), eq("DEV-000001"));
 
             imei.setEstado("VENDIDO");
-            pCelular.setStock(BigDecimal.ZERO);
             detalles.clear();
             int id2 = service.solicitar(reembolso(linea(11, 1, false)), "yamilet").getIddevolucion();
             service.aprobar(id2, null, "abigail");
             assertThat(imei.getEstado()).isEqualTo("DEBAJA");
-            assertThat(pCelular.getStock()).isEqualByComparingTo("0");
         }
 
         @Test
