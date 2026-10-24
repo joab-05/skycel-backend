@@ -34,6 +34,9 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     List<Producto> findByTienda_CodtiAndActivoTrue(Integer codti);
 
+    /** Los productos activos de una sección de una sucursal (para el inventario físico). */
+    List<Producto> findByTienda_CodtiAndSeccion_IdseccionAndActivoTrue(Integer codti, Short idseccion);
+
     /**
      * Los productos activos de una tienda con TODO lo que el DTO necesita (tienda, artículo, categoría, color,
      * proveedor, magnitud y sección) en una sola consulta. Sin esto, listar ~2,000 productos hacía ~2,000 consultas

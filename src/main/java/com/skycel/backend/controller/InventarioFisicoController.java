@@ -68,7 +68,7 @@ public class InventarioFisicoController {
     }
 
     @PostMapping("/{idinventario}/detalle/{iddetalleInv}/resolver")
-    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_CONFIRMAR')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> resolverDetalle(
             @PathVariable Integer idinventario,
@@ -80,12 +80,54 @@ public class InventarioFisicoController {
     }
 
     @PostMapping("/{idinventario}/finalizar")
-    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_CONFIRMAR')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> finalizar(
             @PathVariable Integer idinventario,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(service.finalizar(idinventario, userDetails.getUsername()), "auditoria");
+    }
+
+    @PutMapping("/{idinventario}/detalle/{iddetalleInv}/conteo")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> corregirConteo(
+            @PathVariable Integer idinventario, @PathVariable Integer iddetalleInv, @RequestParam Integer conteo,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.corregirConteo(idinventario, iddetalleInv, conteo, userDetails.getUsername()), "detalle");
+    }
+
+    @DeleteMapping("/{idinventario}/unidad/{imei}")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> quitarUnidad(
+            @PathVariable Integer idinventario, @PathVariable String imei, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.quitarUnidad(idinventario, imei, userDetails.getUsername()), "detalle");
+    }
+
+    @PostMapping("/{idinventario}/ajustar-todo")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_CONFIRMAR')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> ajustarTodo(
+            @PathVariable Integer idinventario, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.ajustarTodo(idinventario, userDetails.getUsername()), "resultado");
+    }
+
+    @PostMapping("/{idinventario}/devolver")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_CONFIRMAR')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> devolver(
+            @PathVariable Integer idinventario, @RequestParam(required = false) String comentario,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.devolver(idinventario, comentario, userDetails.getUsername()), "auditoria");
+    }
+
+    @PostMapping("/{idinventario}/cancelar")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> cancelar(
+            @PathVariable Integer idinventario, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.cancelar(idinventario, userDetails.getUsername()), "auditoria");
     }
 
     @GetMapping("/tienda/{codti}/activa")

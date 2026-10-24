@@ -26,8 +26,18 @@ public class InventarioAuditoriaDetalle {
 
     @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "idseccion", nullable = false)
-    private Seccion seccion;
+    @JoinColumn(name = "idseccion")
+    private Seccion seccion;   // vacía en un artículo de equipos: esos se cuentan por IMEI, no por sección
+
+    /** El artículo, solo cuando son equipos (celulares o tablets): ahí {@code codpro} es un identificador interno «EQ…». */
+    @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idprodmaster")
+    private ProductoMaster productoMaster;
+
+    /** Por qué se justificó la diferencia en vez de ajustar las existencias. */
+    @Column(name = "motivo", length = 255)
+    private String motivo;
 
     @Column(name = "codpro", nullable = false, length = 25)
     private String codpro;

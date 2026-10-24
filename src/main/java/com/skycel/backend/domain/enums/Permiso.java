@@ -35,7 +35,8 @@ public enum Permiso {
     // ── Inventario ────────────────────────────────────────────────────────────
     INVENTARIO_AJUSTAR("Ajustar existencias de accesorios, marcar rezagados y ver los movimientos de inventario", "Inventario", Set.of(ADMIN, ENCARGADO_TIENDA)),
     INVENTARIO_EDITAR("Registrar y editar artículos, precios, códigos e IMEI", "Inventario", Set.of(ADMIN)),
-    INVENTARIO_FISICO("Hacer el inventario físico (conteo)", "Inventario", Set.of(ADMIN, ENCARGADO_TIENDA)),
+    INVENTARIO_FISICO("Hacer el inventario físico (contar y enviarlo a revisión)", "Inventario", Set.of(ADMIN, ENCARGADO_TIENDA)),
+    INVENTARIO_CONFIRMAR("Revisar y confirmar el inventario físico: al cerrarlo cambian las existencias", "Inventario", Set.of(ADMIN)),
     TRASPASOS("Enviar, pedir y recibir traspasos", "Inventario", Set.of(ADMIN, ENCARGADO_TIENDA)),
     CATALOGOS_EDITAR("Editar categorías, colores, proveedores y demás catálogos", "Inventario", Set.of(ADMIN)),
     COSTOS_VER("Ver cuánto costó la mercancía", "Inventario", Set.of(ADMIN, ENCARGADO_TIENDA)),

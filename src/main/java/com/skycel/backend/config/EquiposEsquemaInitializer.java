@@ -32,6 +32,7 @@ public class EquiposEsquemaInitializer implements CommandLineRunner {
             {"movimiento_inventario", "idproducto"},
             {"traspaso_detalle", "codpro"},
             {"compra_detalle", "idproducto"},
+            {"inventario_auditoria_detalle", "idseccion"},
     };
 
     private final JdbcTemplate jdbc;

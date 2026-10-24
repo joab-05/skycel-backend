@@ -33,6 +33,11 @@ public class InventarioAuditoria {
     @JoinColumn(name = "idusuario_encargado_tienda", nullable = false)
     private Usuario usuarioEncargadoTienda;
 
+    /** Quien confirmó el inventario (administrador) y con eso aplicó los ajustes a las existencias. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idusuario_confirma")
+    private Usuario usuarioConfirma;
+
     @Column(name = "estado", nullable = false, columnDefinition = "TINYINT DEFAULT 0")
     private Byte estado;
 
