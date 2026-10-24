@@ -161,8 +161,11 @@ public class CompraService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "'" + l.getCodpro() + "' es un servicio: no maneja inventario, no se compra.");
             }
-            boolean esEquipo = producto.getProductoMaster().getTipo() == TipoProducto.CELULAR
-                    || producto.getProductoMaster().getTipo() == TipoProducto.TABLET;
+            if (producto.getProductoMaster().getTipo() == TipoProducto.CELULAR || producto.getProductoMaster().getTipo() == TipoProducto.TABLET) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "'" + l.getCodpro() + "' es un equipo: se compra por artículo y IMEI (idprodmaster y unidades), sin código.");
+            }
+            boolean esEquipo = false;
 
             BigDecimal cantidad;
             BigDecimal costoTotalLinea;

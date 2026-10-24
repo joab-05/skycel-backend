@@ -43,6 +43,8 @@ class CompraServiceTest {
     @Mock private ProductoRepository    productoRepository;
     @Mock private UsuarioRepository     usuarioRepository;
     @Mock private ProductoService       productoService;
+    @Mock private EquipoService         equipoService;
+    @Mock private ProductoMasterRepository productoMasterRepository;
     @Mock private MovimientoCajaService movimientoCajaService;
 
     @InjectMocks
@@ -139,13 +141,17 @@ class CompraServiceTest {
     }
 
     @Test
-    @DisplayName("crear: equipo con IMEI manda las unidades y NO toca el costo del modelo")
-    void crear_equipoConImeis() {
-        when(productoRepository.findByCodproAndTienda_Codti("CEL-001", 2)).thenReturn(Optional.of(equipo("CEL-001", 2)));
+    @DisplayName("crear: equipos por artículo e IMEI se dan de alta como unidades (con su costo) y suman al total de la compra")
+    void crear_equipoPorImei() {
+        ProductoMaster celular = ProductoMaster.builder().idprodmaster(2).tipo(TipoProducto.CELULAR).nombreBase("Redmi 13C").build();
+        com.skycel.backend.dto.equipo.EquipoResponseDto alta = com.skycel.backend.dto.equipo.EquipoResponseDto.builder().idprodmaster(2).build();
+        when(equipoService.registrar(any(), eq("admin"))).thenReturn(List.of(alta, alta));
+        when(productoMasterRepository.findById(2)).thenReturn(Optional.of(celular));
         CompraRequestDto dto = new CompraRequestDto();
         dto.setIdProveedor((short) 5); dto.setCodti(2);
         CompraLineaRequestDto linea = new CompraLineaRequestDto();
-        linea.setCodpro("CEL-001");
+        linea.setIdprodmaster(2);
+        linea.setPrecioVenta(new BigDecimal("2500"));
         UnidadEquipoDTO u1 = new UnidadEquipoDTO(); u1.setImei("111111111111111"); u1.setCostoUnitario(new BigDecimal("1500"));
         UnidadEquipoDTO u2 = new UnidadEquipoDTO(); u2.setImei("222222222222222"); u2.setCostoUnitario(new BigDecimal("1600"));
         linea.setUnidades(List.of(u1, u2));
@@ -153,13 +159,45 @@ class CompraServiceTest {
 
         Map<String, Object> r = service.crear(dto, "admin");
 
-        ArgumentCaptor<StockAjusteDTO> cap = ArgumentCaptor.forClass(StockAjusteDTO.class);
-        verify(productoService).ajustarStock(eq("CEL-001"), eq(2), cap.capture());
-        assertThat(cap.getValue().getCantidad()).isEqualByComparingTo("2");
+        ArgumentCaptor<com.skycel.backend.dto.equipo.EquipoRequestDto> cap = ArgumentCaptor.forClass(com.skycel.backend.dto.equipo.EquipoRequestDto.class);
+        verify(equipoService).registrar(cap.capture(), eq("admin"));
+        assertThat(cap.getValue().getIdProductoMaster()).isEqualTo(2);
+        assertThat(cap.getValue().getCodti()).isEqualTo(2);
+        assertThat(cap.getValue().getPrecioVenta()).isEqualByComparingTo("2500");
+        assertThat(cap.getValue().getIdProveedor()).isEqualTo((short) 5);
         assertThat(cap.getValue().getUnidades()).hasSize(2);
-        assertThat(u1.getCondicion()).isEqualTo("NUEVO"); // se completa si no se manda
-        verify(productoService, never()).actualizar(any(), any(), any());
+        verify(productoService, never()).ajustarStock(any(), any(), any());
         assertThat(r.get("montoTotal")).isEqualTo(new BigDecimal("3100"));
+    }
+
+    @Test
+    @DisplayName("crear: un equipo ya no se compra por código de producto -> 400")
+    void crear_equipoPorCodigo_rechaza() {
+        when(productoRepository.findByCodproAndTienda_Codti("CEL-001", 2)).thenReturn(Optional.of(equipo("CEL-001", 2)));
+        CompraRequestDto dto = new CompraRequestDto();
+        dto.setIdProveedor((short) 5); dto.setCodti(2);
+        CompraLineaRequestDto linea = new CompraLineaRequestDto();
+        linea.setCodpro("CEL-001"); linea.setCantidad(BigDecimal.ONE); linea.setCostoUnitario(BigDecimal.TEN);
+        dto.setLineas(List.of(linea));
+
+        assertThatThrownBy(() -> service.crear(dto, "admin"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    @DisplayName("crear: un equipo sin costo en alguna unidad -> 400")
+    void crear_equipoSinCosto_rechaza() {
+        CompraRequestDto dto = new CompraRequestDto();
+        dto.setIdProveedor((short) 5); dto.setCodti(2);
+        CompraLineaRequestDto linea = new CompraLineaRequestDto();
+        linea.setIdprodmaster(2);
+        UnidadEquipoDTO u = new UnidadEquipoDTO(); u.setImei("111111111111111");
+        linea.setUnidades(List.of(u));
+        dto.setLineas(List.of(linea));
+
+        assertThatThrownBy(() -> service.crear(dto, "admin"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verifyNoInteractions(equipoService);
     }
 
     @Test
