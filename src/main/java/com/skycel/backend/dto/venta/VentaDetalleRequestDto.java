@@ -38,4 +38,7 @@ public class VentaDetalleRequestDto {
 
     /** Solo junto con enganchePayjoy: plazo en semanas que PayJoy le dio al cliente. */
     private Integer plazoSemanasPayjoy;
+
+    /** El plazo de PayJoy en meses: 3, 6, 9 o 12. Si viene, de aquí se calculan las semanas. */
+    private Integer plazoMesesPayjoy;
 }

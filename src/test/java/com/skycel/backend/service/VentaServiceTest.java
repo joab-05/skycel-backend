@@ -58,6 +58,7 @@ class VentaServiceTest {
     @Mock private DescuentoService descuentoService;
     @Mock private PromocionEquipoService promocionEquipoService;
     @Mock private SolicitudDescuentoService solicitudDescuentoService;
+    @Mock private ConfiguracionNegocioService configuracionNegocioService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -87,6 +88,8 @@ class VentaServiceTest {
         // Sin reglas de descuento salvo que una prueba diga lo contrario: el precio de sistema es el de lista.
         lenient().when(descuentoService.calcularDescuento(any(), any(), any())).thenReturn(BigDecimal.ZERO);
         lenient().when(descuentoService.calcularDescuento(any(), any(), any(), any())).thenReturn(BigDecimal.ZERO);
+        // La tarjeta está habilitada salvo que una prueba diga lo contrario (por omisión el negocio no la acepta).
+        lenient().when(configuracionNegocioService.aceptaTarjeta()).thenReturn(true);
         // Sin promoción de equipo salvo que una prueba diga lo contrario.
         lenient().when(promocionEquipoService.calcularConPrevios(any(), any())).thenAnswer(inv ->
                 java.util.Collections.nCopies(((List<?>) inv.getArgument(0)).size(), PromocionEquipoService.Beneficio.NINGUNO));
@@ -446,6 +449,49 @@ class VentaServiceTest {
 
             verify(cuentaPorCobrarService, never()).crearDesdeVenta(any(), any(), any());
             verify(movimientoCajaService).registrarVentaEfectivo(any(Venta.class), eq(vendedor));
+        }
+
+        @Test
+        @DisplayName("el plazo se da en meses (3, 6, 9 o 12) y de ahí salen las semanas: 6 meses = 26 semanas")
+        void plazoEnMeses() {
+            celularDisponible("123456789012345");
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), null);
+            linea.setPlazoMesesPayjoy(6);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+            request.setMetodoPago((byte) 1);
+
+            VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
+
+            assertThat(response.getDetalles().get(0).getPlazoMesesPayjoy()).isEqualTo(6);
+            assertThat(response.getDetalles().get(0).getPlazoSemanasPayjoy()).isEqualTo(26);
+        }
+
+        @Test
+        @DisplayName("un plazo que no es de 3, 6, 9 o 12 meses: 400")
+        void plazoNoValido() {
+            celularDisponible("123456789012345");
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), null);
+            linea.setPlazoMesesPayjoy(5);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+            request.setMetodoPago((byte) 1);
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("3, 6, 9 o 12 meses");
+        }
+
+        @Test
+        @DisplayName("sin plazo (ni en meses ni en semanas): 400")
+        void sinPlazo() {
+            celularDisponible("123456789012345");
+            VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), null);
+            VentaRequestDto request = ventaBase(List.of(linea));
+            request.setTipoVenta((byte) 1);
+            request.setMetodoPago((byte) 1);
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("plazo");
         }
 
         @Test
@@ -1347,6 +1393,72 @@ class VentaServiceTest {
 
             assertThat(resp.getNombreCliente()).isEqualTo("Rosa Meza");
             verify(cuentaPorCobrarService).crearDesdeVenta(any(Venta.class), eq(new BigDecimal("20")), isNull());
+        }
+    }
+
+    @Nested
+    @DisplayName("crear — tarjeta deshabilitada")
+    class TarjetaDeshabilitada {
+
+        private void accesorioEnStock() {
+            ProductoMaster master = masterAccesorio();
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(master, BigDecimal.TEN)));
+        }
+
+        @Test
+        @DisplayName("sin tarjeta habilitada, una venta con tarjeta se rechaza (400)")
+        void conTarjeta_seRechaza() {
+            when(configuracionNegocioService.aceptaTarjeta()).thenReturn(false);
+            VentaRequestDto request = ventaBase(List.of(lineaAccesorio((short) 1)));
+            request.setMetodoPago((byte) 2);
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no se aceptan pagos con tarjeta");
+            verify(ventaRepository, never()).save(any(Venta.class));
+        }
+
+        @Test
+        @DisplayName("tampoco vale una parte con tarjeta dentro de un pago mixto")
+        void mixtoConTarjeta_seRechaza() {
+            when(configuracionNegocioService.aceptaTarjeta()).thenReturn(false);
+            VentaRequestDto request = ventaBase(List.of(lineaAccesorio((short) 1)));
+            request.setMetodoPago((byte) 4);
+            com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto p1 = new com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto();
+            p1.setMetodoPago((byte) 1);
+            p1.setMonto(new BigDecimal("5"));
+            com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto p2 = new com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto();
+            p2.setMetodoPago((byte) 2);
+            p2.setMonto(new BigDecimal("10"));
+            request.setPagos(List.of(p1, p2));
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("tarjeta");
+        }
+
+        @Test
+        @DisplayName("efectivo y transferencia siguen funcionando")
+        void efectivoYTransferencia() {
+            lenient().when(configuracionNegocioService.aceptaTarjeta()).thenReturn(false);
+            accesorioEnStock();
+            VentaRequestDto request = ventaBase(List.of(lineaAccesorio((short) 1)));
+            request.setMetodoPago((byte) 3);
+
+            assertThat(ventaService.crear(request, ID_VENDEDOR).getTotal()).isEqualByComparingTo("15");
+        }
+
+        @Test
+        @DisplayName("una venta hecha sin conexión ya ocurrió: no se rechaza aunque la tarjeta esté apagada")
+        void sinConexion_noSeRechaza() {
+            lenient().when(configuracionNegocioService.aceptaTarjeta()).thenReturn(false);
+            accesorioEnStock();
+            VentaRequestDto request = ventaBase(List.of(lineaAccesorio((short) 1)));
+            request.setMetodoPago((byte) 2);
+            request.setClaveOffline("clave-tarjeta-1");
+            request.setSinConexion(true);
+
+            assertThat(ventaService.crear(request, ID_VENDEDOR).getTotal()).isEqualByComparingTo("15");
         }
     }
 

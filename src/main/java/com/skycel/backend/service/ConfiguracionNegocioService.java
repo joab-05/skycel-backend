@@ -28,6 +28,12 @@ public class ConfiguracionNegocioService {
         return dias != null ? dias : DIAS_DEVOLUCION_POR_OMISION;
     }
 
+    /** ¿Se aceptan pagos con tarjeta? (por omisión no). */
+    @Transactional
+    public boolean aceptaTarjeta() {
+        return Boolean.TRUE.equals(cargar().getAceptaTarjeta());
+    }
+
     /** Guarda los datos del negocio (solo ROOT/ADMIN, lo exige el controlador). */
     @Transactional
     public ConfiguracionNegocioDto actualizar(ConfiguracionNegocioDto dto, String username) {
@@ -40,6 +46,7 @@ public class ConfiguracionNegocioService {
         c.setTicketPie(limpio(dto.getTicketPie()));
         c.setTicketLeyenda(limpio(dto.getTicketLeyenda()));
         c.setDiasDevolucion(dto.getDiasDevolucion());
+        if (dto.getAceptaTarjeta() != null) c.setAceptaTarjeta(dto.getAceptaTarjeta());
         c.setActualizadoPor(username);
         return toDto(repository.save(c));
     }
@@ -132,6 +139,7 @@ public class ConfiguracionNegocioService {
                 .nombreComercial(c.getNombreComercial()).razonSocial(c.getRazonSocial()).rfc(c.getRfc())
                 .email(c.getEmail()).sitioWeb(c.getSitioWeb()).ticketPie(c.getTicketPie()).ticketLeyenda(c.getTicketLeyenda())
                 .diasDevolucion(c.getDiasDevolucion() != null ? c.getDiasDevolucion() : DIAS_DEVOLUCION_POR_OMISION)
+                .aceptaTarjeta(Boolean.TRUE.equals(c.getAceptaTarjeta()))
                 .fechaActualizacion(c.getFechaActualizacion()).actualizadoPor(c.getActualizadoPor()).build();
     }
 }

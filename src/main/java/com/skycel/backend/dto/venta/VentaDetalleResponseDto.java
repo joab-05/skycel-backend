@@ -22,5 +22,6 @@ public class VentaDetalleResponseDto {
     private Boolean esRegalo;
     private BigDecimal enganchePayjoy;
     private Integer plazoSemanasPayjoy;
+    private Integer plazoMesesPayjoy;
     private Boolean precioAutorizado;
 }

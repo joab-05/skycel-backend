@@ -49,6 +49,11 @@ public class ConfiguracionNegocio {
     private Integer diasDevolucion;
 
     /** Logo del negocio, ya normalizado (PNG de hasta 512 px). null = se usa el ícono por omisión de cada aplicación. */
+    /** ¿Se aceptan pagos con tarjeta? Por ahora no: solo efectivo y transferencia. Se habilita cuando el negocio lo decida. */
+    @Column(name = "acepta_tarjeta", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Builder.Default
+    private Boolean aceptaTarjeta = false;
+
     @Column(name = "logo", columnDefinition = "MEDIUMBLOB")
     private byte[] logo;
 

@@ -67,6 +67,10 @@ public class VentaDetalle {
     private BigDecimal enganchePayjoy;
 
     /** Plazo en semanas que PayJoy le dio al cliente para liquidar el resto de ESTE equipo. Null si no es PayJoy. */
+    /** El plazo que se le dio al cliente: 3, 6, 9 o 12 meses (de ahí salen las semanas de abajo). */
+    @Column(name = "plazo_meses_payjoy")
+    private Integer plazoMesesPayjoy;
+
     @Column(name = "plazo_semanas_payjoy")
     private Integer plazoSemanasPayjoy;
 

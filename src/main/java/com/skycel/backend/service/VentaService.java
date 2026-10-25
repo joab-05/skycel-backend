@@ -48,7 +48,10 @@ public class VentaService {
     private static final byte ESTADO_COMPLETADA = 1;
     private static final byte ESTADO_CANCELADA  = 2;
     private static final byte METODO_EFECTIVO   = 1;
+    private static final byte METODO_TARJETA    = 2;
     private static final byte METODO_TRANSFERENCIA = 3;
+    /** Los plazos de un crédito PayJoy, en meses. */
+    static final java.util.List<Integer> PLAZOS_PAYJOY_MESES = java.util.List.of(3, 6, 9, 12);
     private static final byte METODO_MIXTO      = 4;
     /** Solo en el desglose de una venta de una orden de servicio: lo que el cliente ya pagó como anticipo. */
     private static final byte METODO_ANTICIPO   = 6;
@@ -79,6 +82,7 @@ public class VentaService {
     private final DescuentoService descuentoService;
     private final PromocionEquipoService promocionEquipoService;
     private final SolicitudDescuentoService solicitudDescuentoService;
+    private final ConfiguracionNegocioService configuracionNegocioService;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
@@ -176,6 +180,12 @@ public class VentaService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La venta debe tener al menos un artículo.");
         }
 
+        // Por ahora no se acepta tarjeta (se habilita desde la configuración del negocio). Lo que arma una orden de servicio y lo que
+        // ya ocurrió sin conexión no se rechaza aquí.
+        if (!desdeOrden && !offline && usaTarjeta(dto) && !configuracionNegocioService.aceptaTarjeta()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Por ahora no se aceptan pagos con tarjeta: cobra en efectivo o por transferencia.");
+        }
+
         byte tipoVenta = dto.getTipoVenta() != null ? dto.getTipoVenta() : TIPO_VENTA_NORMAL;
         boolean esPayjoy = tipoVenta == TIPO_VENTA_CREDITO_PAYJOY;
         if (esPayjoy) {
@@ -271,6 +281,7 @@ public class VentaService {
                     .imei(linea.imei)
                     .enganchePayjoy(linea.enganchePayjoy)
                     .plazoSemanasPayjoy(linea.plazoSemanasPayjoy)
+                    .plazoMesesPayjoy(linea.plazoMesesPayjoy)
                     .promoTipo(linea.promoTipo)
                     .precioAutorizado(linea.precioAutorizado())
                     .build();
@@ -512,6 +523,7 @@ public class VentaService {
         Boolean esRegalo;
         BigDecimal enganchePayjoy;     // solo venta a crédito PayJoy
         Integer plazoSemanasPayjoy;    // solo venta a crédito PayJoy
+        Integer plazoMesesPayjoy;      // solo venta a crédito PayJoy
         VentaDetalleRequestDto solicitud;   // lo que pidió el cliente del servicio para esta línea
         SolicitudDescuento descuentoAprobado;   // el descuento que un administrador aprobó para esta línea, si lo trae
         String promoTipo;              // CHIP, MICA o PROTECTOR si la línea recibió la promoción de equipo
@@ -613,11 +625,17 @@ public class VentaService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El enganche de '" + master.getNombreBase() + "' debe ser menor al precio del equipo.");
             }
-            if (d.getPlazoSemanasPayjoy() == null || d.getPlazoSemanasPayjoy() <= 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el plazo en semanas de '" + master.getNombreBase() + "'.");
+            if (d.getPlazoMesesPayjoy() != null) {
+                if (!PLAZOS_PAYJOY_MESES.contains(d.getPlazoMesesPayjoy()))
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El plazo de PayJoy es de 3, 6, 9 o 12 meses.");
+                linea.plazoMesesPayjoy = d.getPlazoMesesPayjoy();
+                linea.plazoSemanasPayjoy = Math.round(d.getPlazoMesesPayjoy() * 52f / 12f);   // 13, 26, 39 o 52 semanas
+            } else if (d.getPlazoSemanasPayjoy() == null || d.getPlazoSemanasPayjoy() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el plazo de PayJoy de '" + master.getNombreBase() + "' (3, 6, 9 o 12 meses).");
+            } else {
+                linea.plazoSemanasPayjoy = d.getPlazoSemanasPayjoy();   // equipos viejos que mandan semanas
             }
             linea.enganchePayjoy = d.getEnganchePayjoy();
-            linea.plazoSemanasPayjoy = d.getPlazoSemanasPayjoy();
         }
         return linea;
     }
@@ -701,6 +719,11 @@ public class VentaService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El descuento aprobado de '" + l.productoMaster.getNombreBase()
                         + "' es para " + l.descuentoAprobado.getCantidad() + " pieza(s); el carrito lleva " + total + ".");
         }
+    }
+
+    private static boolean usaTarjeta(VentaRequestDto dto) {
+        if (dto.getMetodoPago() != null && dto.getMetodoPago() == METODO_TARJETA) return true;
+        return dto.getPagos() != null && dto.getPagos().stream().anyMatch(p -> p.getMetodoPago() != null && p.getMetodoPago() == METODO_TARJETA);
     }
 
     /** Valida el precio y el regalo de la línea contra lo que cobra el sistema, y calcula su subtotal. */
@@ -866,6 +889,7 @@ public class VentaService {
                 .esRegalo(d.getEsRegalo())
                 .enganchePayjoy(d.getEnganchePayjoy())
                 .plazoSemanasPayjoy(d.getPlazoSemanasPayjoy())
+                .plazoMesesPayjoy(d.getPlazoMesesPayjoy())
                 .precioAutorizado(d.getPrecioAutorizado())
                 .build();
     }

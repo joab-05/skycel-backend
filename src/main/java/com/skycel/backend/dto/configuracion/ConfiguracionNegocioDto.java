@@ -41,6 +41,9 @@ public class ConfiguracionNegocioDto {
     @Max(value = 365, message = "Los días para devoluciones no pueden pasar de 365")
     private Integer diasDevolucion;
 
+    /** ¿Se aceptan pagos con tarjeta? Si no viene al guardar, se conserva lo que había. */
+    private Boolean aceptaTarjeta;
+
     // Solo lectura
     private LocalDateTime fechaActualizacion;
     private String actualizadoPor;
