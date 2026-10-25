@@ -2,6 +2,7 @@ package com.skycel.backend.dto.compra;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -19,5 +20,12 @@ public class CompraRequestDto {
 
     private String observaciones;
 
-    private List<CompraLineaRequestDto> lineas; // al menos una
+    /**
+     * Lo que se debe al proveedor por esta compra. Basta con el monto: la mercancía se da de alta aparte, en Inventario, que ya
+     * guarda el proveedor, la fecha y la hora de cada entrada. Si se mandan {@code lineas}, el total sale de ellas.
+     */
+    private BigDecimal montoTotal;
+
+    /** Opcional (las compras de antes): el detalle de la mercancía, que además la ingresa al inventario. */
+    private List<CompraLineaRequestDto> lineas;
 }

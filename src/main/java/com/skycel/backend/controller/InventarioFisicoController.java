@@ -33,8 +33,9 @@ public class InventarioFisicoController {
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> aperturar(
             @RequestParam Integer codti,
             @RequestParam(required = false) Integer idusuarioEncargado,
+            @RequestParam(required = false) java.util.List<Short> categorias,
             @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntityBuilder.ok(service.abrir(codti, idusuarioEncargado, userDetails.getUsername()), "auditoria");
+        return ResponseEntityBuilder.ok(service.abrir(codti, idusuarioEncargado, categorias, userDetails.getUsername()), "auditoria");
     }
 
     @PostMapping("/{idinventario}/escanear")

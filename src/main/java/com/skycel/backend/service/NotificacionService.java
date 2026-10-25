@@ -45,6 +45,12 @@ public class NotificacionService {
         }
     }
 
+    /** Avisa a una sola persona. */
+    @Transactional
+    public void notificarUsuario(Usuario destino, String tipo, String titulo, String ruta) {
+        crear(destino, tipo, titulo, ruta);
+    }
+
     private void crear(Usuario destino, String tipo, String titulo, String ruta) {
         notificacionRepository.save(Notificacion.builder()
                 .usuarioDestino(destino).tipo(tipo).titulo(titulo).ruta(ruta).leida(false).build());

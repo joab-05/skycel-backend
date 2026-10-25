@@ -41,7 +41,8 @@ public class AuditoriaService {
             "producto-master", ProductoMaster.class,
             "usuario", Usuario.class,
             "tienda", Tienda.class,
-            "descuento", com.skycel.backend.domain.entity.DescuentoRegla.class
+            "descuento", com.skycel.backend.domain.entity.DescuentoRegla.class,
+            "promocion-equipo", com.skycel.backend.domain.entity.PromocionEquipo.class
     );
 
     /** Campos que nunca se muestran, aunque sean simples (por nombre exacto, en cualquier entidad). */

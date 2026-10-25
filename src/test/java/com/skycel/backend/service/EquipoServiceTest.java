@@ -151,12 +151,20 @@ class EquipoServiceTest {
         @Test
         @DisplayName("un usado con su costo y su precio propios")
         void usadoConCostoYPrecio() {
-            service.registrar(alta(1, unidad("350000000000011", "usado", "800", "1500")), "admin");
+            service.registrar(alta(1, unidad("350000000000011", "seminuevo", "800", "1500")), "admin");
 
             ProductoImei u = unidades.get("350000000000011");
-            assertThat(u.getCondicion()).isEqualTo("USADO");
+            assertThat(u.getCondicion()).isEqualTo("SEMINUEVO");
             assertThat(u.getCosto()).isEqualByComparingTo("800");
             assertThat(u.getPrecioVenta()).isEqualByComparingTo("1500");
+        }
+
+        @Test
+        @DisplayName("«usado» se sigue aceptando (así se llamaba) y queda como SEMINUEVO")
+        void usadoEsSeminuevo() {
+            service.registrar(alta(1, unidad("350000000000011", "usado", "800", "1500")), "admin");
+
+            assertThat(unidades.get("350000000000011").getCondicion()).isEqualTo("SEMINUEVO");
         }
 
         @Test
@@ -198,9 +206,9 @@ class EquipoServiceTest {
             sinPrecio.setPrecioVenta(null);
             assertThatThrownBy(() -> service.registrar(sinPrecio, "admin"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("precio");
-            assertThatThrownBy(() -> service.registrar(alta(1, unidad("350000000000011", "usado", "100", "0")), "admin"))
+            assertThatThrownBy(() -> service.registrar(alta(1, unidad("350000000000011", "seminuevo", "100", "0")), "admin"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("precio");
-            assertThatThrownBy(() -> service.registrar(alta(1, unidad("350000000000011", "usado", "-1", null)), "admin"))
+            assertThatThrownBy(() -> service.registrar(alta(1, unidad("350000000000011", "seminuevo", "-1", null)), "admin"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("costo");
             assertThatThrownBy(() -> service.registrar(alta(1, unidad("350000000000011", "roto", null, null)), "admin"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Condición inválida");

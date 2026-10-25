@@ -75,6 +75,13 @@ public class Venta {
     private String claveOffline;
 
     /** Folio provisional del ticket impreso sin conexión (p. ej. OFF-ZOC1-000123): con él se localiza la venta. */
+    /**
+     * Identifica el carrito de una misma operación: el punto de venta parte un carrito en varias ventas (una por forma de pago) y las
+     * liga con este código. La promoción de equipo cuenta los equipos y lo ya regalado de todas las ventas de la operación.
+     */
+    @Column(name = "id_operacion", length = 64)
+    private String idOperacion;
+
     @Column(name = "folio_local", length = 40)
     private String folioLocal;
 

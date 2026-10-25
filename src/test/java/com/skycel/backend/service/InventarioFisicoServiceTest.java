@@ -40,6 +40,7 @@ class InventarioFisicoServiceTest {
     @Mock private ProductoImeiRepository imeiRepository;
     @Mock private NotificacionService notificacionService;
     @Mock private PermisoService permisoService;
+    @Mock private CategoriaRepository categoriaRepository;
 
     @InjectMocks
     private InventarioFisicoService service;
@@ -114,6 +115,104 @@ class InventarioFisicoServiceTest {
     void aperturar_encargadoOtraSucursal_lanza403() {
         assertThatThrownBy(() -> service.abrir(2, null, "enc9"))
                 .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    // ── Alcance por categorías ───────────────────────────────────────────────
+
+    private Categoria micas() {
+        Categoria accesorios = Categoria.builder().idcat((short) 1).nombre("Accesorios").build();
+        return Categoria.builder().idcat((short) 7).nombre("Micas").categoriaSuperior(accesorios).build();
+    }
+
+    private InventarioAuditoria auditoriaSoloMicas() {
+        InventarioAuditoria a = auditoriaAbierta();
+        a.setAlcance("7");
+        lenient().when(categoriaRepository.findById((short) 7)).thenReturn(Optional.of(micas()));
+        return a;
+    }
+
+    private Producto accesorioDe(String codpro, Categoria categoria, BigDecimal stock, Seccion seccion) {
+        ProductoMaster master = ProductoMaster.builder().idprodmaster(9).tipo(TipoProducto.ACCESORIO).nombreBase("Mica " + codpro)
+                .categoria(categoria).build();
+        return Producto.builder().idproducto(60).codpro(codpro).tienda(zocalo).productoMaster(master).stock(stock).seccion(seccion).build();
+    }
+
+    @Test
+    @DisplayName("aperturar con categorías: guarda el alcance (solo micas, solo equipos...)")
+    void aperturar_conAlcance() {
+        when(auditoriaRepository.findFirstByTienda_CodtiAndEstadoInOrderByFechaInicioDesc(eq2(2), any())).thenReturn(Optional.empty());
+        when(categoriaRepository.findById((short) 7)).thenReturn(Optional.of(micas()));
+
+        Map<String, Object> r = service.abrir(2, null, List.of((short) 7), "admin");
+
+        assertThat(r.get("alcance")).isEqualTo("Micas");
+    }
+
+    @Test
+    @DisplayName("aperturar con una categoría que no existe: 400")
+    void aperturar_categoriaInexistente() {
+        when(auditoriaRepository.findFirstByTienda_CodtiAndEstadoInOrderByFechaInicioDesc(eq2(2), any())).thenReturn(Optional.empty());
+        when(categoriaRepository.findById((short) 99)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.abrir(2, null, List.of((short) 99), "admin"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no existe");
+    }
+
+    @Test
+    @DisplayName("aperturar con una categoría de servicios: 400 (no tienen conteo físico)")
+    void aperturar_conServicios() {
+        when(auditoriaRepository.findFirstByTienda_CodtiAndEstadoInOrderByFechaInicioDesc(eq2(2), any())).thenReturn(Optional.empty());
+        Categoria servicios = Categoria.builder().idcat((short) 20).nombre("Servicios").tipo(TipoProducto.SERVICIO).build();
+        Categoria cambio = Categoria.builder().idcat((short) 21).nombre("Cambio de pantalla").categoriaSuperior(servicios).build();
+        when(categoriaRepository.findById((short) 21)).thenReturn(Optional.of(cambio));
+
+        assertThatThrownBy(() -> service.abrir(2, null, List.of((short) 21), "admin"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("servicios");
+    }
+
+    @Test
+    @DisplayName("escanear con alcance: un artículo de otra categoría se rechaza (400)")
+    void escanear_fueraDelAlcance() {
+        InventarioAuditoria soloMicas = auditoriaSoloMicas();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(soloMicas));
+        Categoria cargadores = Categoria.builder().idcat((short) 8).nombre("Cargadores").build();
+        when(productoRepository.findByCodproAndTienda_Codti("CAR-1", 2)).thenReturn(Optional.of(accesorioDe("CAR-1", cargadores, BigDecimal.TEN, null)));
+
+        assertThatThrownBy(() -> service.escanear(10, "CAR-1", null, "admin"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no pertenece").hasMessageContaining("Micas");
+    }
+
+    @Test
+    @DisplayName("escanear con alcance: un artículo de la categoría se cuenta aunque no tenga sección")
+    void escanear_dentroDelAlcance_sinSeccion() {
+        InventarioAuditoria soloMicas = auditoriaSoloMicas();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(soloMicas));
+        when(productoRepository.findByCodproAndTienda_Codti("MIC-1", 2)).thenReturn(Optional.of(accesorioDe("MIC-1", micas(), new BigDecimal("4"), null)));
+        when(detalleRepository.findByInventarioAuditoria_IdinventarioAndCodpro(10, "MIC-1")).thenReturn(Optional.empty());
+
+        Map<String, Object> r = service.escanear(10, "MIC-1", null, "admin");
+
+        assertThat(r.get("conteo")).isEqualTo((short) 1);
+    }
+
+    @Test
+    @DisplayName("cerrarConteo con alcance: lo que hay en esas categorías y no se contó queda en 0; lo de otras categorías no se toca")
+    void cerrarConteo_conAlcance() {
+        InventarioAuditoria a = auditoriaSoloMicas();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findByInventarioAuditoria_IdinventarioOrderByIddetalleInvAsc(10)).thenReturn(new java.util.ArrayList<>());
+        Categoria cargadores = Categoria.builder().idcat((short) 8).nombre("Cargadores").build();
+        when(productoRepository.findByTienda_CodtiAndActivoTrue(2)).thenReturn(List.of(
+                accesorioDe("MIC-1", micas(), new BigDecimal("4"), null),
+                accesorioDe("CAR-1", cargadores, new BigDecimal("6"), null)));
+        when(imeiRepository.deLaSucursal(eq(2), any())).thenReturn(List.of());
+
+        Map<String, Object> r = service.cerrarConteo(10, "admin");
+
+        assertThat(r.get("totalFaltantes")).isEqualTo(1);
+        org.mockito.ArgumentCaptor<InventarioAuditoriaDetalle> cap = org.mockito.ArgumentCaptor.forClass(InventarioAuditoriaDetalle.class);
+        verify(detalleRepository, atLeastOnce()).save(cap.capture());
+        assertThat(cap.getAllValues()).extracting(InventarioAuditoriaDetalle::getCodpro).containsExactly("MIC-1");
     }
 
     // ── Escanear ─────────────────────────────────────────────────────────────

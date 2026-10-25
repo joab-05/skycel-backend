@@ -56,6 +56,8 @@ public class EquiposEsquemaInitializer implements CommandLineRunner {
                     WHERE pi.idprodmaster IS NULL
                     """);
             jdbc.update("UPDATE producto_imei SET rezagado = 0 WHERE rezagado IS NULL");
+            int seminuevos = jdbc.update("UPDATE producto_imei SET condicion = 'SEMINUEVO' WHERE condicion = 'USADO'");
+            if (seminuevos > 0) log.info("Equipos: {} unidades «usado» pasaron a «seminuevo»", seminuevos);
             jdbc.update("""
                     UPDATE producto_imei
                     SET tipo_identificador = CASE WHEN imei REGEXP '^[0-9]{15}$' THEN 'IMEI' ELSE 'SERIE' END

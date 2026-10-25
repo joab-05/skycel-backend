@@ -69,6 +69,10 @@ public class VentaRequestDto {
     @jakarta.validation.constraints.Size(max = 64, message = "La clave no puede exceder los 64 caracteres")
     private String claveOffline;
 
+    /** Código del carrito cuando el punto de venta lo parte en varias ventas (una por forma de pago); todas llevan el mismo. */
+    @jakarta.validation.constraints.Size(max = 64, message = "El código de la operación no puede exceder los 64 caracteres")
+    private String idOperacion;
+
     /** Folio provisional del ticket impreso sin conexión (OFF-...). */
     @jakarta.validation.constraints.Size(max = 40, message = "El folio local no puede exceder los 40 caracteres")
     private String folioLocal;

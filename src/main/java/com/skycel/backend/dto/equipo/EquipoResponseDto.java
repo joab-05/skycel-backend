@@ -32,6 +32,10 @@ public class EquipoResponseDto {
     private Integer codti;
     private String nombreTienda;
 
+    /** La sección del local donde está (null = sin asignar). */
+    private Short idSeccion;
+    private String nombreSeccion;
+
     /** DISPONIBLE, EN_GARANTIA, VENDIDO, TRASPASADO (en camino), DEVUELTO, DEBAJA. */
     private String estado;
     private String condicion;

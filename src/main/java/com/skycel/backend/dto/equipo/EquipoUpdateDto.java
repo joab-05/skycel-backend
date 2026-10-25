@@ -13,7 +13,7 @@ public class EquipoUpdateDto {
     private Integer idProductoMaster;
     private BigDecimal precioVenta;
     private BigDecimal costo;
-    /** NUEVO, USADO o REACONDICIONADO. */
+    /** NUEVO, SEMINUEVO o REACONDICIONADO. */
     private String condicion;
     private Short idProveedor;
     private Short idSeccion;

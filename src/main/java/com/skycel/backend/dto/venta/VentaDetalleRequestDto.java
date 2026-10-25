@@ -27,6 +27,9 @@ public class VentaDetalleRequestDto {
     /** IMEI del equipo, si aplica */
     private String imei;
 
+    /** Descuento puntual que un administrador aprobó para esta línea (ver solicitudes de descuento). */
+    private Integer idSolicitudDescuento;
+
     /** ¿El artículo es un regalo (precio 0 autorizado)? */
     private Boolean esRegalo = false;
 

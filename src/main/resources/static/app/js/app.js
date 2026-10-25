@@ -4051,13 +4051,13 @@ async function pantallaProductoEditar(param) {
     ${esEquipo && p.imeisDisponibles?.length ? `
     <div class="tarjeta">
       <h2>Unidades disponibles (${p.imeisDisponibles.length})</h2>
-      <div class="ayuda">Cada unidad puede tener su propio costo y precio (por ejemplo un equipo usado). Sin precio propio se cobra el del modelo.</div>
+      <div class="ayuda">Cada unidad puede tener su propio costo y precio (por ejemplo un equipo seminuevo). Sin precio propio se cobra el del modelo.</div>
       ${p.imeisDisponibles.map((u, idx) => `
         <div class="unidad-edit" data-idx="${idx}">
           <div class="unidad-imei">${escapar(u.imei)} ${u.tienePrecioPropio ? '<span class="pastilla reparacion">Precio propio</span>' : ''}</div>
           <div class="fila">
             <div><label>Condición</label>
-              <select class="ue-condicion">${['NUEVO', 'USADO', 'REACONDICIONADO'].map(c => `<option ${u.condicion === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+              <select class="ue-condicion">${['NUEVO', 'SEMINUEVO', 'REACONDICIONADO'].map(c => `<option ${u.condicion === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
             <div><label>Costo</label><input class="ue-costo" type="number" inputmode="decimal" step="0.01" min="0" value="${u.costoUnitario ?? ''}"></div>
             <div><label>Precio</label><input class="ue-precio" type="number" inputmode="decimal" step="0.01" min="0.01" value="${u.precioVenta ?? ''}"></div>
           </div>

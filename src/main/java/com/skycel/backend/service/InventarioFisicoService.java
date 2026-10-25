@@ -56,11 +56,19 @@ public class InventarioFisicoService {
     private final MovimientoInventarioService movimientoInventarioService;
     private final NotificacionService notificacionService;
     private final PermisoService permisoService;
+    private final CategoriaRepository categoriaRepository;
 
     // ── Contar (encargado) ───────────────────────────────────────────────────
 
-    @Transactional
     public Map<String, Object> abrir(Integer codti, Integer idusuarioEncargado, String username) {
+        return abrir(codti, idusuarioEncargado, null, username);
+    }
+
+    /**
+     * @param categorias las categorías que cubre el inventario (por ejemplo solo equipos, o solo micas); vacío = sin alcance
+     */
+    @Transactional
+    public Map<String, Object> abrir(Integer codti, Integer idusuarioEncargado, List<Short> categorias, String username) {
         Usuario auditor = usuarioPorUsername(username);
         Tienda tienda = tiendaRepository.findById(codti)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sucursal no encontrada: " + codti));
@@ -81,6 +89,7 @@ public class InventarioFisicoService {
                 .usuarioEncargadoTienda(encargado)
                 .estado(ESTADO_ABIERTO)
                 .fechaInicio(LocalDateTime.now())
+                .alcance(alcanceDeCategorias(categorias))
                 .totalFaltantes(0)
                 .totalSobrantes(0)
                 .build());
@@ -105,7 +114,12 @@ public class InventarioFisicoService {
                     "El código o IMEI '" + leido + "' no existe en " + a.getTienda().getNombre() + ".");
         }
         Producto p = producto.get();
-        if (p.getSeccion() == null)
+        Set<Short> alcance = alcanceDe(a);
+        if (!alcance.isEmpty()) {
+            if (!enAlcance(p.getProductoMaster(), alcance))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'" + leido + "' no pertenece a lo que cubre este inventario ("
+                        + nombresDelAlcance(alcance) + ").");
+        } else if (p.getSeccion() == null)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "'" + leido + "' no tiene una sección asignada. Asígnale una en Inventario > Catálogos antes de inventariarlo.");
 
@@ -128,6 +142,10 @@ public class InventarioFisicoService {
         if (unidadRepository.findByInventarioAuditoria_IdinventarioAndImei(idinventario, u.getImei()).isPresent())
             throw new ResponseStatusException(HttpStatus.CONFLICT, "El equipo '" + u.getImei() + "' ya se contó en este inventario.");
         ProductoMaster master = u.getProductoMaster();
+        Set<Short> alcance = alcanceDe(a);
+        if (!alcance.isEmpty() && !enAlcance(master, alcance))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El equipo '" + u.getImei() + "' (" + master.getNombreBase()
+                    + ") no pertenece a lo que cubre este inventario (" + nombresDelAlcance(alcance) + ").");
         boolean enSistema = ProductoImei.DISPONIBLE.equals(u.getEstado()) && u.getTienda() != null
                 && u.getTienda().getCodti().equals(a.getTienda().getCodti());
 
@@ -200,13 +218,15 @@ public class InventarioFisicoService {
 
         List<InventarioAuditoriaDetalle> filas = new ArrayList<>(
                 detalleRepository.findByInventarioAuditoria_IdinventarioOrderByIddetalleInvAsc(idinventario));
+        Set<Short> alcance = alcanceDe(a);
+        if (!alcance.isEmpty()) agregarFaltantesDelAlcance(a, alcance, filas);
         // En las secciones que se contaron, lo que no se escaneó es lo que no se encontró
         Set<String> yaContados = filas.stream().map(InventarioAuditoriaDetalle::getCodpro).collect(Collectors.toSet());
         Map<Short, Seccion> secciones = new LinkedHashMap<>();
         for (InventarioAuditoriaDetalle d : filas) {
             if (d.getSeccion() != null) secciones.putIfAbsent(d.getSeccion().getIdseccion(), d.getSeccion());
         }
-        for (Seccion s : secciones.values()) {
+        for (Seccion s : alcance.isEmpty() ? secciones.values() : List.<Seccion>of()) {
             for (Producto p : productoRepository.findByTienda_CodtiAndSeccion_IdseccionAndActivoTrue(a.getTienda().getCodti(), s.getIdseccion())) {
                 if (yaContados.contains(p.getCodpro())) continue;
                 if (p.getProductoMaster() != null && p.getProductoMaster().getTipo() == TipoProducto.SERVICIO) continue;
@@ -474,6 +494,66 @@ public class InventarioFisicoService {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    // ── Alcance (qué categorías cubre el inventario) ─────────────────────────
+
+    private String alcanceDeCategorias(List<Short> categorias) {
+        if (categorias == null || categorias.isEmpty()) return null;
+        List<Short> ids = categorias.stream().filter(Objects::nonNull).distinct().toList();
+        for (Short id : ids) {
+            Categoria c = categoriaRepository.findById(id)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "La categoría " + id + " no existe."));
+            if (c.ruta().get(0).getTipo() == TipoProducto.SERVICIO)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los servicios no se inventarían: no tienen existencias que contar.");
+        }
+        return ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+    }
+
+    private static Set<Short> alcanceDe(InventarioAuditoria a) {
+        if (a.getAlcance() == null || a.getAlcance().isBlank()) return Set.of();
+        return Arrays.stream(a.getAlcance().split(",")).map(String::trim).filter(x -> !x.isEmpty()).map(Short::valueOf)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** ¿El artículo está en alguna de esas categorías (o en una subcategoría de ellas)? */
+    private static boolean enAlcance(ProductoMaster m, Set<Short> alcance) {
+        if (m == null || m.getCategoria() == null) return false;
+        return m.getCategoria().ruta().stream().anyMatch(c -> alcance.contains(c.getIdcat()));
+    }
+
+    private String nombresDelAlcance(Set<Short> alcance) {
+        return alcance.stream().map(id -> categoriaRepository.findById(id).map(Categoria::getNombre).orElse("#" + id))
+                .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * Con alcance, lo que está en el sistema dentro de esas categorías y no se contó queda en 0: así un inventario «solo de micas» o
+     * «solo de equipos» marca como faltante lo que no apareció, sin tocar el resto de la tienda.
+     */
+    private void agregarFaltantesDelAlcance(InventarioAuditoria a, Set<Short> alcance, List<InventarioAuditoriaDetalle> filas) {
+        Integer codti = a.getTienda().getCodti();
+        Set<String> yaContados = filas.stream().map(InventarioAuditoriaDetalle::getCodpro).collect(Collectors.toSet());
+        for (Producto p : productoRepository.findByTienda_CodtiAndActivoTrue(codti)) {
+            if (yaContados.contains(p.getCodpro())) continue;
+            ProductoMaster m = p.getProductoMaster();
+            if (m == null || m.getTipo() == TipoProducto.SERVICIO || m.getTipo() == TipoProducto.CELULAR || m.getTipo() == TipoProducto.TABLET) continue;
+            if (!enAlcance(m, alcance) || stockComoShort(p.getStock()) == 0) continue;
+            filas.add(detalleRepository.save(InventarioAuditoriaDetalle.builder()
+                    .inventarioAuditoria(a).seccion(p.getSeccion()).codpro(p.getCodpro()).conteo((short) 0)
+                    .stockSistema(stockComoShort(p.getStock())).estado(DETALLE_PENDIENTE).build()));
+        }
+        Map<Integer, List<ProductoImei>> porArticulo = new LinkedHashMap<>();
+        for (ProductoImei u : imeiRepository.deLaSucursal(codti, List.of(ProductoImei.DISPONIBLE))) {
+            porArticulo.computeIfAbsent(u.getProductoMaster().getIdprodmaster(), k -> new ArrayList<>()).add(u);
+        }
+        for (List<ProductoImei> unidades : porArticulo.values()) {
+            ProductoMaster m = unidades.get(0).getProductoMaster();
+            if (yaContados.contains(claveEquipo(m)) || !enAlcance(m, alcance)) continue;
+            filas.add(detalleRepository.save(InventarioAuditoriaDetalle.builder()
+                    .inventarioAuditoria(a).productoMaster(m).codpro(claveEquipo(m)).conteo((short) 0)
+                    .stockSistema((short) unidades.size()).estado(DETALLE_PENDIENTE).build()));
+        }
+    }
+
     private static String claveEquipo(ProductoMaster m) {
         return "EQ" + m.getIdprodmaster();
     }
@@ -548,6 +628,8 @@ public class InventarioFisicoService {
         m.put("estadoDisplay", nombreEstado(a.getEstado()));
         m.put("fechaInicio", a.getFechaInicio());
         m.put("fechaFin", a.getFechaFin());
+        Set<Short> alcance = alcanceDe(a);
+        m.put("alcance", alcance.isEmpty() ? "" : nombresDelAlcance(alcance));
         m.put("totalFaltantes", a.getTotalFaltantes());
         m.put("totalSobrantes", a.getTotalSobrantes());
         m.put("totalArticulos", filas.size());

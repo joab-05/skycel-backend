@@ -36,6 +36,11 @@ public interface ProductoImeiRepository extends JpaRepository<ProductoImei, Long
     /** Las unidades de un artículo en ese estado, de todas las sucursales. */
     List<ProductoImei> findByProductoMaster_IdprodmasterAndEstado(Integer idprodmaster, String estado);
 
+    /** Pasa todos los equipos de una sección a otra. Devuelve cuántos movió. */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE ProductoImei pi SET pi.seccion = :destino WHERE pi.seccion.idseccion = :origen")
+    int moverDeSeccion(@Param("origen") Short origen, @Param("destino") com.skycel.backend.domain.entity.Seccion destino);
+
     /** Valor de las unidades disponibles por sucursal: a costo y a precio de venta. Filas: codti, nombre, unidades, costo, precio. */
     @Query("""
             SELECT pi.tienda.codti, pi.tienda.nombre, COUNT(pi), COALESCE(SUM(pi.costo), 0), COALESCE(SUM(pi.precioVenta), 0)

@@ -44,7 +44,7 @@ public class ProductoService {
     /** Contador reservado para los equipos (CEL-000001...). categoria_folio no tiene FK real, así que 0 no choca con ninguna categoría. */
     private static final short FOLIO_EQUIPOS = 0;
     /** Condiciones admitidas de una unidad de equipo. */
-    private static final Set<String> CONDICIONES = Set.of("NUEVO", "USADO", "REACONDICIONADO");
+    private static final Set<String> CONDICIONES = Set.of("NUEVO", "SEMINUEVO", "REACONDICIONADO");
 
     // ──────────────────────────────────────────────────────────────────────────
     // PRODUCTO MASTER

@@ -13,6 +13,9 @@ public interface VentaRepository extends JpaRepository<Venta, Integer> {
     /** La venta que ya se registró con esa clave (idempotencia de las ventas hechas sin conexión). */
     java.util.Optional<Venta> findByClaveOffline(String claveOffline);
 
+    /** Las ventas de un mismo carrito (el punto de venta lo parte por forma de pago). */
+    java.util.List<Venta> findByIdOperacion(String idOperacion);
+
     java.util.Optional<Venta> findByFolioLocal(String folioLocal);
 
     List<Venta> findByTienda_CodtiAndFechaVentaBetweenOrderByFechaVentaDesc(

@@ -14,7 +14,7 @@ public class UnidadEquipoDTO {
     /** IMEI o número de serie (5 a 20 caracteres alfanuméricos). */
     private String imei;
 
-    /** NUEVO (por defecto), USADO o REACONDICIONADO. */
+    /** NUEVO (por defecto), SEMINUEVO o REACONDICIONADO. */
     private String condicion;
 
     /** Costo de compra de esta unidad. Si se omite se usa el costo del modelo. */

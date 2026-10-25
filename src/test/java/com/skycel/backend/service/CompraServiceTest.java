@@ -129,6 +129,32 @@ class CompraServiceTest {
     }
 
     @Test
+    @DisplayName("crear: solo con el monto total (sin productos) queda como cuenta por pagar y no toca el inventario")
+    void crear_soloMontoTotal() {
+        CompraRequestDto dto = new CompraRequestDto();
+        dto.setIdProveedor((short) 5);
+        dto.setCodti(2);
+        dto.setMontoTotal(new BigDecimal("1500.00"));
+
+        Map<String, Object> r = service.crear(dto, "admin");
+
+        assertThat(r.get("montoTotal")).isEqualTo(new BigDecimal("1500.00"));
+        assertThat(r.get("estadoDisplay")).isEqualTo("Pendiente");
+        verifyNoInteractions(productoService, equipoService);
+    }
+
+    @Test
+    @DisplayName("crear: sin productos y sin monto total, 400")
+    void crear_sinMonto_rechaza() {
+        CompraRequestDto dto = new CompraRequestDto();
+        dto.setIdProveedor((short) 5);
+        dto.setCodti(2);
+
+        assertThatThrownBy(() -> service.crear(dto, "admin"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("monto total");
+    }
+
+    @Test
     @DisplayName("crear: la fecha de vencimiento se calcula con los días de crédito del proveedor")
     void crear_fechaVencimientoPorDiasCredito() {
         when(productoRepository.findByCodproAndTienda_Codti("CAB-001", 2)).thenReturn(Optional.of(accesorio("CAB-001", 2)));

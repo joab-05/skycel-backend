@@ -184,6 +184,22 @@ public class CatalogoController {
         return ResponseEntityBuilder.created(catalogoService.crearSeccion(request), "seccion");
     }
 
+    @Operation(summary = "Renombrar sección", description = "Cambia el nombre de una sección del local")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PutMapping("/secciones/{id}")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
+    public ResponseEntity<StandardApiResponse<SeccionResponseDTO>> renombrarSeccion(@PathVariable Short id, @RequestParam String nombre) {
+        return ResponseEntityBuilder.updated(catalogoService.renombrarSeccion(id, nombre), "seccion");
+    }
+
+    @Operation(summary = "Pasar todo a otra sección", description = "Mueve los accesorios y equipos de una sección a otra de la misma sucursal")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/secciones/{id}/mover")
+    @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")
+    public ResponseEntity<StandardApiResponse<java.util.Map<String, Object>>> moverSeccion(@PathVariable Short id, @RequestParam Short destino) {
+        return ResponseEntityBuilder.updated(catalogoService.moverSeccion(id, destino), "seccion");
+    }
+
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{tipo}/{id}")
     @PreAuthorize("@permisos.tiene('CATALOGOS_EDITAR')")

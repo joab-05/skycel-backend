@@ -15,6 +15,8 @@ import com.skycel.backend.domain.dto.request.SeccionRequestDTO;
 import com.skycel.backend.domain.entity.*;
 import com.skycel.backend.domain.mapper.CatalogoMapper;
 import com.skycel.backend.repository.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import com.skycel.backend.shared.exception.RecursoDuplicadoException;
 import com.skycel.backend.shared.exception.RecursoNoEncontradoException;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,7 @@ public class CatalogoService {
     private final CategoriaService categoriaService;
     private final ProductoRepository productoRepository;
     private final ProductoMasterRepository productoMasterRepository;
+    private final ProductoImeiRepository productoImeiRepository;
 
     // ==========================================
     // === LECTURAS (Solo activos) + CACHE    ===
@@ -253,6 +256,44 @@ public class CatalogoService {
                 .orElseThrow(() -> new RuntimeException("Tienda no encontrada con código: " + dto.getCodti()));
         seccion.setTienda(tienda);
         return catalogoMapper.toSeccionResponse(seccionRepository.save(seccion));
+    }
+
+    /** Cambia el nombre de una sección (no puede repetirse en la misma sucursal). */
+    @CacheEvict(value = "seccionesCache", allEntries = true)
+    @Transactional
+    public SeccionResponseDTO renombrarSeccion(Short id, String nombre) {
+        Seccion seccion = seccionRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sección no encontrada: " + id));
+        if (nombre == null || nombre.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escribe el nombre de la sección.");
+        String limpio = nombre.trim();
+        if (limpio.length() > 50) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre no puede pasar de 50 letras.");
+        boolean repetida = seccionRepository.findByActivoTrue().stream().anyMatch(s -> !s.getIdseccion().equals(id)
+                && s.getTienda().getCodti().equals(seccion.getTienda().getCodti()) && s.getNombre().equalsIgnoreCase(limpio));
+        if (repetida) throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya hay una sección «" + limpio + "» en esa sucursal.");
+        seccion.setNombre(limpio);
+        return catalogoMapper.toSeccionResponse(seccionRepository.save(seccion));
+    }
+
+    /** Pasa todo lo que está en una sección (accesorios y equipos) a otra de la misma sucursal. */
+    @CacheEvict(value = "seccionesCache", allEntries = true)
+    @Transactional
+    public java.util.Map<String, Object> moverSeccion(Short origen, Short destino) {
+        if (origen.equals(destino))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elige una sección distinta a la de origen.");
+        Seccion de = seccionRepository.findById(origen)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sección no encontrada: " + origen));
+        Seccion a = seccionRepository.findById(destino)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sección no encontrada: " + destino));
+        if (!de.getTienda().getCodti().equals(a.getTienda().getCodti()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Las dos secciones deben ser de la misma sucursal.");
+        int productos = productoRepository.moverDeSeccion(origen, a);
+        int equipos = productoImeiRepository.moverDeSeccion(origen, a);
+        java.util.Map<String, Object> r = new java.util.LinkedHashMap<>();
+        r.put("productos", productos);
+        r.put("equipos", equipos);
+        r.put("destino", a.getNombre());
+        return r;
     }
 
     @CacheEvict(value = {"coloresCache", "magnitudesCache", "proveedoresCache", "seccionesCache", "categoriasCache"}, allEntries = true)

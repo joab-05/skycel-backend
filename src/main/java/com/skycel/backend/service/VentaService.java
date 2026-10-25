@@ -77,6 +77,8 @@ public class VentaService {
     private final DevolucionRepository devolucionRepository;
     private final com.skycel.backend.service.ClienteService clienteService;
     private final DescuentoService descuentoService;
+    private final PromocionEquipoService promocionEquipoService;
+    private final SolicitudDescuentoService solicitudDescuentoService;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
@@ -189,12 +191,18 @@ public class VentaService {
         // 1) Resolver y validar cada línea SIN mutar nada todavía, para poder
         //    fallar rápido antes de tocar stock/IMEIs.
         List<LineaResuelta> lineas = new ArrayList<>();
-        BigDecimal total = BigDecimal.ZERO;
         for (VentaDetalleRequestDto d : dto.getDetalles()) {
-            LineaResuelta linea = resolverLinea(d, tienda, vendedor, desdeOrden, offline, esPayjoy);
-            lineas.add(linea);
+            lineas.add(resolverLinea(d, tienda, offline, esPayjoy));
+        }
+        // La promoción de equipo (chip, mica y protector) depende de toda la venta: se aplica con todas las líneas ya resueltas.
+        // Las ventas que arman una orden de servicio o una devolución traen sus precios ya acordados y no la llevan.
+        if (!desdeOrden) aplicarPromocionEquipo(lineas, previosDeLaOperacion(dto, tienda, vendedor));
+        BigDecimal total = BigDecimal.ZERO;
+        for (LineaResuelta linea : lineas) {
+            validarPrecioYRegalo(linea, vendedor, tienda.getCodti(), desdeOrden, offline);
             total = total.add(linea.subtotal);
         }
+        validarCantidadesDeDescuentos(lineas);
         if (total.signum() == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "La venta no puede ser de $0: agregue al menos un artículo con precio.");
@@ -238,6 +246,7 @@ public class VentaService {
                 .observaciones(observacionesConAvisos(dto.getObservaciones(), lineas))
                 .fechaVenta(fechaOffline)
                 .claveOffline(conClave ? dto.getClaveOffline().trim() : null)
+                .idOperacion(dto.getIdOperacion() != null && !dto.getIdOperacion().isBlank() ? dto.getIdOperacion().trim() : null)
                 .folioLocal(!offline ? null : (dto.getFolioLocal() != null && !dto.getFolioLocal().isBlank()
                         ? dto.getFolioLocal().trim().toUpperCase()
                         : "OFF-" + dto.getClaveOffline().trim().replace("-", "").substring(0, Math.min(8, dto.getClaveOffline().trim().replace("-", "").length())).toUpperCase()))
@@ -262,10 +271,15 @@ public class VentaService {
                     .imei(linea.imei)
                     .enganchePayjoy(linea.enganchePayjoy)
                     .plazoSemanasPayjoy(linea.plazoSemanasPayjoy)
+                    .promoTipo(linea.promoTipo)
                     .precioAutorizado(linea.precioAutorizado())
                     .build();
             detallesGuardados.add(ventaDetalleRepository.save(detalle));
         }
+        // Los descuentos aprobados sirven una sola vez: quedan ligados a esta venta
+        final Integer idVentaGuardada = venta.getIdventa();
+        lineas.stream().filter(l -> l.descuentoAprobado != null).map(l -> l.descuentoAprobado.getIdsolicitud()).distinct()
+                .forEach(id -> solicitudDescuentoService.marcarUsada(id, idVentaGuardada));
 
         // 4) Solo el efectivo mueve la caja (tarjeta/transferencia/PayJoy no entran al cajón).
         if (venta.getMetodoPago() != null && venta.getMetodoPago() == METODO_EFECTIVO) {
@@ -498,11 +512,16 @@ public class VentaService {
         Boolean esRegalo;
         BigDecimal enganchePayjoy;     // solo venta a crédito PayJoy
         Integer plazoSemanasPayjoy;    // solo venta a crédito PayJoy
+        VentaDetalleRequestDto solicitud;   // lo que pidió el cliente del servicio para esta línea
+        SolicitudDescuento descuentoAprobado;   // el descuento que un administrador aprobó para esta línea, si lo trae
+        String promoTipo;              // CHIP, MICA o PROTECTOR si la línea recibió la promoción de equipo
+        boolean regaloPorPromocion;    // la promoción de equipo la deja en $0: es un regalo que no necesita autorización
 
         boolean precioAutorizado() { return avisoPrecio != null; }
     }
 
-    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, Usuario vendedor, boolean desdeOrden, boolean sinConexion, boolean esPayjoy) {
+    /** Los datos de la línea y el precio del sistema (sin promoción); el precio cobrado se valida en {@link #validarPrecioYRegalo}. */
+    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, boolean sinConexion, boolean esPayjoy) {
         // Un equipo se vende por su IMEI: la unidad ya sabe de qué artículo es
         ProductoImei unidadPedida = d.getImei() != null && !d.getImei().isBlank()
                 ? productoImeiRepository.findByImei(d.getImei().trim().toUpperCase()).orElse(null) : null;
@@ -517,6 +536,7 @@ public class VentaService {
                 : unidadPedida.getProductoMaster();
 
         LineaResuelta linea = new LineaResuelta();
+        linea.solicitud = d;
         linea.productoMaster = master;
         linea.cantidadSolicitada = d.getCantidad();
         linea.esRegalo = Boolean.TRUE.equals(d.getEsRegalo());
@@ -599,7 +619,98 @@ public class VentaService {
             linea.enganchePayjoy = d.getEnganchePayjoy();
             linea.plazoSemanasPayjoy = d.getPlazoSemanasPayjoy();
         }
-        validarRegalo(linea, vendedor, desdeOrden);
+        return linea;
+    }
+
+    /**
+     * Aplica la promoción de equipo (un chip de regalo y descuento en una mica y un protector por cada equipo vendido) al precio del
+     * sistema de cada línea. Una línea solo puede quedar con promoción completa o sin ella: si la promoción alcanza solo para
+     * algunas de sus piezas, el punto de venta debe mandarlas en renglones separados.
+     */
+    /**
+     * Lo que ya cuentan para la promoción las otras ventas del mismo carrito (el punto de venta lo parte por forma de pago): los
+     * equipos vendidos y las piezas que ya recibieron la promoción. Solo valen las ventas completadas de este mismo vendedor y sucursal.
+     */
+    private PromocionEquipoService.Previos previosDeLaOperacion(VentaRequestDto dto, Tienda tienda, Usuario vendedor) {
+        if (dto.getIdOperacion() == null || dto.getIdOperacion().isBlank()) return PromocionEquipoService.Previos.NINGUNOS;
+        int equipos = 0, chips = 0, micas = 0, protectores = 0;
+        for (Venta v : ventaRepository.findByIdOperacion(dto.getIdOperacion().trim())) {
+            if (v.getEstado() == null || v.getEstado() != ESTADO_COMPLETADA) continue;
+            if (!v.getTienda().getCodti().equals(tienda.getCodti())
+                    || !v.getUsuarioVendedor().getIdusuario().equals(vendedor.getIdusuario())) continue;
+            for (VentaDetalle d : ventaDetalleRepository.findByVenta_Idventa(v.getIdventa())) {
+                TipoProducto t = d.getProductoMaster().getTipo();
+                if (t == TipoProducto.CELULAR || t == TipoProducto.TABLET) equipos += d.getCantidad();
+                if ("CHIP".equals(d.getPromoTipo())) chips += d.getCantidad();
+                else if ("MICA".equals(d.getPromoTipo())) micas += d.getCantidad();
+                else if ("PROTECTOR".equals(d.getPromoTipo())) protectores += d.getCantidad();
+            }
+        }
+        return new PromocionEquipoService.Previos(equipos, chips, micas, protectores);
+    }
+
+    private void aplicarPromocionEquipo(List<LineaResuelta> lineas, PromocionEquipoService.Previos previos) {
+        List<PromocionEquipoService.EntradaLinea> entradas = lineas.stream()
+                .map(l -> new PromocionEquipoService.EntradaLinea(l.productoMaster.getTipo(),
+                        PromocionEquipoService.ruta(l.productoMaster.getCategoria()), l.precioUnitarioBase, l.cantidadSolicitada))
+                .toList();
+        List<PromocionEquipoService.Beneficio> beneficios = promocionEquipoService.calcularConPrevios(entradas, previos);
+        for (int i = 0; i < lineas.size(); i++) {
+            LineaResuelta linea = lineas.get(i);
+            PromocionEquipoService.Beneficio b = beneficios.get(i);
+            if (b.piezas() == 0) continue;
+            if (b.piezas() < linea.cantidadSolicitada) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La promoción de equipo alcanza para " + b.piezas()
+                        + " pieza(s) de '" + linea.productoMaster.getNombreBase() + "': mándelas en un renglón aparte del resto.");
+            }
+            linea.precioUnitarioBase = linea.precioUnitarioBase.subtract(b.descuentoPorPieza());
+            linea.regaloPorPromocion = linea.precioUnitarioBase.signum() == 0;
+            linea.promoTipo = b.tipo();
+        }
+    }
+
+    /**
+     * Si la línea trae un descuento que un administrador aprobó, lo resta del precio del sistema. Sin conexión, un descuento que no
+     * se puede validar simplemente no se aplica (el precio cobrado distinto queda anotado como en cualquier venta sin conexión).
+     */
+    private void aplicarDescuentoAprobado(LineaResuelta linea, Usuario vendedor, Integer codti, boolean sinConexion) {
+        Integer id = linea.solicitud.getIdSolicitudDescuento();
+        if (id == null) return;
+        SolicitudDescuento s;
+        try {
+            s = solicitudDescuentoService.validarParaVenta(id, vendedor, codti, linea.productoMaster, linea.imei);
+        } catch (ResponseStatusException e) {
+            if (sinConexion) return;
+            throw e;
+        }
+        BigDecimal conDescuento = linea.precioUnitarioBase.subtract(s.getDescuentoPorPieza());
+        if (conDescuento.signum() <= 0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El descuento aprobado de '" + linea.productoMaster.getNombreBase()
+                    + "' no puede dejar el precio en $0 o menos.");
+        linea.precioUnitarioBase = conDescuento;
+        linea.descuentoAprobado = s;
+    }
+
+    /** Un descuento aprobado alcanza para las piezas que se pidieron, sumando todas las líneas que lo usan. */
+    private void validarCantidadesDeDescuentos(List<LineaResuelta> lineas) {
+        java.util.Map<Integer, Integer> usadas = new java.util.HashMap<>();
+        for (LineaResuelta l : lineas) {
+            if (l.descuentoAprobado == null) continue;
+            int total = usadas.merge(l.descuentoAprobado.getIdsolicitud(), (int) l.cantidadSolicitada, Integer::sum);
+            if (total > l.descuentoAprobado.getCantidad())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El descuento aprobado de '" + l.productoMaster.getNombreBase()
+                        + "' es para " + l.descuentoAprobado.getCantidad() + " pieza(s); el carrito lleva " + total + ".");
+        }
+    }
+
+    /** Valida el precio y el regalo de la línea contra lo que cobra el sistema, y calcula su subtotal. */
+    private void validarPrecioYRegalo(LineaResuelta linea, Usuario vendedor, Integer codti, boolean desdeOrden, boolean sinConexion) {
+        VentaDetalleRequestDto d = linea.solicitud;
+        ProductoMaster master = linea.productoMaster;
+        aplicarDescuentoAprobado(linea, vendedor, codti, sinConexion);
+        // Un artículo que la promoción deja en $0 es un regalo aunque el punto de venta no lo haya marcado, y no necesita autorización.
+        if (linea.regaloPorPromocion && linea.precioUnitarioFinal.signum() == 0) linea.esRegalo = true;
+        validarRegalo(linea, vendedor, desdeOrden || linea.regaloPorPromocion);
         // El precio lo pone el sistema (el del producto en Inventario o el propio de la unidad): ni un vendedor ni un
         // administrador lo cambian al vender; solo se cambia en Inventario. Excepciones: un regalo ($0, autorizado), las líneas
         // que arma una orden de servicio o una devolución, y una venta hecha SIN CONEXIÓN, que puede traer el precio de antes
@@ -614,7 +725,6 @@ public class VentaService {
             linea.avisoPrecio = master.getNombreBase() + " (sistema $" + precioSistema + ", cobrado $" + precioCobrado + ")";
         }
         linea.subtotal = linea.precioUnitarioFinal.multiply(BigDecimal.valueOf(linea.cantidadSolicitada));
-        return linea;
     }
 
     /** Observaciones de la venta más, si las hay, los avisos de precio distinto al del sistema (ventas sin conexión). */

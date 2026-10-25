@@ -426,7 +426,7 @@ class TraspasoServiceTest {
         @DisplayName("equipos: cada IMEI pasa a la sucursal destino, DISPONIBLE, conservando su condición y costo")
         void equipos() {
             ProductoImei usado = equipo(almacen, "350000000000011");
-            usado.setCondicion("USADO");
+            usado.setCondicion("SEMINUEVO");
             usado.setCosto(new BigDecimal("1900"));
             equipo(almacen, "350000000000029");
             int id = service.crearEnvio(envio(1, 2, lineaEquipos(null, "350000000000011", "350000000000029")), "root").getIdtraspaso();
@@ -436,7 +436,7 @@ class TraspasoServiceTest {
 
             assertThat(usado.getTienda()).isSameAs(zocalo);
             assertThat(usado.getEstado()).isEqualTo("DISPONIBLE");
-            assertThat(usado.getCondicion()).isEqualTo("USADO");
+            assertThat(usado.getCondicion()).isEqualTo("SEMINUEVO");
             assertThat(usado.getCosto()).isEqualByComparingTo("1900");
             assertThat(imeis.get("350000000000029").getTienda()).isSameAs(zocalo);
             verify(movimientoInventarioService).registrarEquipo(usado, +1, "TRASPASO_ENTRADA", null, "Traspaso #" + id);

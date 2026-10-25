@@ -32,7 +32,7 @@ public class EquipoService {
 
     private static final Pattern IMEI_15 = Pattern.compile("\\d{15}");
     private static final Pattern SERIE = Pattern.compile("[A-Za-z0-9]{5,20}");
-    private static final Set<String> CONDICIONES = Set.of("NUEVO", "USADO", "REACONDICIONADO");
+    private static final Set<String> CONDICIONES = Set.of("NUEVO", "SEMINUEVO", "REACONDICIONADO");
     /** Estados que se muestran en el inventario: lo que está en la tienda o apartado en garantía. */
     private static final List<String> EN_INVENTARIO = List.of(ProductoImei.DISPONIBLE, ProductoImei.EN_GARANTIA);
 
@@ -75,8 +75,9 @@ public class EquipoService {
     private static String normalizarCondicion(String condicion) {
         if (condicion == null || condicion.isBlank()) return "NUEVO";
         String c = condicion.trim().toUpperCase();
+        if (c.equals("USADO")) c = "SEMINUEVO";   // así se llamaba antes
         if (!CONDICIONES.contains(c)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Condición inválida: '" + condicion + "'. Use NUEVO, USADO o REACONDICIONADO.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Condición inválida: '" + condicion + "'. Use NUEVO, SEMINUEVO o REACONDICIONADO.");
         }
         return c;
     }
@@ -374,6 +375,7 @@ public class EquipoService {
                 .diasEnExistencia(u.getFechaRegistro() != null ? ChronoUnit.DAYS.between(u.getFechaRegistro(), LocalDateTime.now()) : null);
         if (m.getColor() != null) b.colorArticulo(m.getColor().getNombre());
         if (u.getTienda() != null) b.codti(u.getTienda().getCodti()).nombreTienda(u.getTienda().getNombre());
+        if (u.getSeccion() != null) b.idSeccion(u.getSeccion().getIdseccion()).nombreSeccion(u.getSeccion().getNombre());
         if (u.getProveedor() != null) {
             b.idProveedor(u.getProveedor().getIdproveedor());
             b.nombreProveedor(u.getProveedor().getNombreCorto() != null ? u.getProveedor().getNombreCorto() : u.getProveedor().getNombreFiscal());

@@ -34,6 +34,11 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     List<Producto> findByTienda_CodtiAndActivoTrue(Integer codti);
 
+    /** Pasa todos los productos de una sección a otra. Devuelve cuántos movió. */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Producto p SET p.seccion = :destino WHERE p.seccion.idseccion = :origen")
+    int moverDeSeccion(@Param("origen") Short origen, @Param("destino") com.skycel.backend.domain.entity.Seccion destino);
+
     /** Los productos activos de una sección de una sucursal (para el inventario físico). */
     List<Producto> findByTienda_CodtiAndSeccion_IdseccionAndActivoTrue(Integer codti, Short idseccion);
 

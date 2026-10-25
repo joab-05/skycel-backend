@@ -91,8 +91,9 @@ public class CompraService {
 
         if (dto.getIdProveedor() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indica el proveedor.");
         if (dto.getCodti() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indica la sucursal que recibe.");
-        if (dto.getLineas() == null || dto.getLineas().isEmpty())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La compra necesita al menos un producto.");
+        boolean sinDetalle = dto.getLineas() == null || dto.getLineas().isEmpty();
+        if (sinDetalle && (dto.getMontoTotal() == null || dto.getMontoTotal().signum() <= 0))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indica el monto total de la compra.");
 
         if (!esAdmin(usuario) && (usuario.getTienda() == null || !usuario.getTienda().getCodti().equals(dto.getCodti()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes registrar compras para tu propia tienda.");
@@ -121,7 +122,8 @@ public class CompraService {
 
         BigDecimal total = BigDecimal.ZERO;
         List<CompraDetalle> lineas = new ArrayList<>();
-        for (CompraLineaRequestDto l : dto.getLineas()) {
+        // Sin detalle: la compra es solo lo que se debe al proveedor; la mercancía se ingresa aparte, en Inventario
+        for (CompraLineaRequestDto l : sinDetalle ? List.<CompraLineaRequestDto>of() : dto.getLineas()) {
             if (l.getCodpro() == null || l.getCodpro().isBlank()) {
                 if (l.getIdprodmaster() == null && l.getIdCategoria() == null)
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta el código de un producto en la compra (o el artículo, si es un equipo).");
@@ -216,7 +218,7 @@ public class CompraService {
         }
 
         compra.setLineas(lineas);
-        compra.setMontoTotal(total);
+        compra.setMontoTotal(sinDetalle ? dto.getMontoTotal() : total);
         actualizarEstado(compra);
         return toMap(compraRepository.save(compra));
     }

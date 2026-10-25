@@ -56,6 +56,8 @@ class VentaServiceTest {
     @Mock private com.skycel.backend.repository.DevolucionRepository devolucionRepository;
     @Mock private ClienteService clienteService;
     @Mock private DescuentoService descuentoService;
+    @Mock private PromocionEquipoService promocionEquipoService;
+    @Mock private SolicitudDescuentoService solicitudDescuentoService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -85,6 +87,9 @@ class VentaServiceTest {
         // Sin reglas de descuento salvo que una prueba diga lo contrario: el precio de sistema es el de lista.
         lenient().when(descuentoService.calcularDescuento(any(), any(), any())).thenReturn(BigDecimal.ZERO);
         lenient().when(descuentoService.calcularDescuento(any(), any(), any(), any())).thenReturn(BigDecimal.ZERO);
+        // Sin promoción de equipo salvo que una prueba diga lo contrario.
+        lenient().when(promocionEquipoService.calcularConPrevios(any(), any())).thenAnswer(inv ->
+                java.util.Collections.nCopies(((List<?>) inv.getArgument(0)).size(), PromocionEquipoService.Beneficio.NINGUNO));
 
         // save(...) devuelve la misma entidad recibida, como haría JPA con un save simple.
         lenient().when(ventaRepository.save(any(Venta.class))).thenAnswer(inv -> {
@@ -1342,6 +1347,208 @@ class VentaServiceTest {
 
             assertThat(resp.getNombreCliente()).isEqualTo("Rosa Meza");
             verify(cuentaPorCobrarService).crearDesdeVenta(any(Venta.class), eq(new BigDecimal("20")), isNull());
+        }
+    }
+
+    @Nested
+    @DisplayName("crear — descuento aprobado por un administrador")
+    class DescuentoAprobado {
+
+        private ProductoMaster accesorioEnStock() {
+            ProductoMaster master = masterAccesorio();
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(master, BigDecimal.TEN)));
+            return master;
+        }
+
+        private SolicitudDescuento aprobada(ProductoMaster master, String descuento, int cantidad) {
+            return SolicitudDescuento.builder().idsolicitud(9).tienda(tienda).solicitante(vendedor).productoMaster(master)
+                    .cantidad((short) cantidad).precioLista(new BigDecimal("15")).descuentoPorPieza(new BigDecimal(descuento))
+                    .estado(SolicitudDescuento.APROBADA).motivo("cliente frecuente").build();
+        }
+
+        private VentaDetalleRequestDto conSolicitud(short cantidad, String precio) {
+            VentaDetalleRequestDto d = lineaAccesorio(cantidad);
+            d.setPrecioUnitarioFinal(new BigDecimal(precio));
+            d.setIdSolicitudDescuento(9);
+            return d;
+        }
+
+        @Test
+        @DisplayName("la línea se cobra con el descuento aprobado y la solicitud queda usada en esa venta")
+        void aplicaYMarcaUsada() {
+            ProductoMaster master = accesorioEnStock();
+            when(solicitudDescuentoService.validarParaVenta(eq(9), any(), eq(CODTI), any(), any())).thenReturn(aprobada(master, "5", 2));
+
+            VentaResponseDto r = ventaService.crear(ventaBase(List.of(conSolicitud((short) 2, "10"))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("20");
+            verify(solicitudDescuentoService).marcarUsada(9, 500);
+        }
+
+        @Test
+        @DisplayName("cobrar sin el descuento aprobado también se rechaza: el precio lo fija el sistema")
+        void precioSinDescuento_seRechaza() {
+            ProductoMaster master = accesorioEnStock();
+            when(solicitudDescuentoService.validarParaVenta(eq(9), any(), eq(CODTI), any(), any())).thenReturn(aprobada(master, "5", 2));
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(conSolicitud((short) 2, "15"))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("10.00");
+        }
+
+        @Test
+        @DisplayName("más piezas de las que cubre la aprobación: 400")
+        void masPiezasQueLaAprobacion() {
+            ProductoMaster master = accesorioEnStock();
+            when(solicitudDescuentoService.validarParaVenta(eq(9), any(), eq(CODTI), any(), any())).thenReturn(aprobada(master, "5", 1));
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(conSolicitud((short) 2, "10"))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("es para 1 pieza");
+        }
+
+        @Test
+        @DisplayName("una aprobación inválida (ya usada, de otro vendedor, vencida) se rechaza")
+        void aprobacionInvalida() {
+            accesorioEnStock();
+            when(solicitudDescuentoService.validarParaVenta(eq(9), any(), eq(CODTI), any(), any()))
+                    .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "El descuento ya se usó en otra venta."));
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(conSolicitud((short) 1, "10"))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("ya se usó");
+            verify(ventaRepository, never()).save(any(Venta.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("crear — promoción de equipo (chip, mica y protector)")
+    class PromocionEquipo {
+
+        private static final String IMEI = "123456789012345";
+
+        /** Un celular y un accesorio de $15 (cable) en el mismo carrito. */
+        private void celularYAccesorio() {
+            ProductoMaster celular = masterCelular();
+            ProductoMaster accesorio = masterAccesorio();
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(celular).tienda(tienda)
+                    .precioVenta(new BigDecimal("199")).costo(new BigDecimal("100")).imei(IMEI).estado("DISPONIBLE").build();
+            when(productoMasterRepository.findById(1)).thenReturn(Optional.of(celular));
+            when(productoImeiRepository.findByImei(IMEI)).thenReturn(Optional.of(pi));
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(accesorio));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(accesorio, BigDecimal.TEN)));
+        }
+
+        private void promocion(int piezas, String descuento) {
+            doReturn(List.of(PromocionEquipoService.Beneficio.NINGUNO,
+                    new PromocionEquipoService.Beneficio(piezas, new BigDecimal(descuento))))
+                    .when(promocionEquipoService).calcularConPrevios(any(), any());
+        }
+
+        private VentaDetalleRequestDto accesorio(short cantidad, String precio) {
+            VentaDetalleRequestDto d = lineaAccesorio(cantidad);
+            d.setPrecioUnitarioFinal(new BigDecimal(precio));
+            return d;
+        }
+
+        @Test
+        @DisplayName("descuento: la línea se cobra con el descuento de la promoción")
+        void conDescuento() {
+            celularYAccesorio();
+            promocion(1, "5");
+
+            VentaResponseDto r = ventaService.crear(ventaBase(List.of(lineaCelular(IMEI), accesorio((short) 1, "10"))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("209");   // 199 + (15 - 5)
+        }
+
+        @Test
+        @DisplayName("regalo: un vendedor vende sin autorización lo que la promoción deja en $0, y queda marcado como regalo")
+        void regaloPorPromocion() {
+            celularYAccesorio();
+            promocion(1, "15");
+
+            VentaResponseDto r = ventaService.crear(ventaBase(List.of(lineaCelular(IMEI), accesorio((short) 1, "0"))), ID_VENDEDOR);
+
+            assertThat(r.getTotal()).isEqualByComparingTo("199");
+            ArgumentCaptor<VentaDetalle> cap = ArgumentCaptor.forClass(VentaDetalle.class);
+            verify(ventaDetalleRepository, times(2)).save(cap.capture());
+            assertThat(cap.getAllValues().get(1).getEsRegalo()).isTrue();
+        }
+
+        @Test
+        @DisplayName("el precio sin la promoción se rechaza (400)")
+        void sinElDescuento_seRechaza() {
+            celularYAccesorio();
+            promocion(1, "5");
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(lineaCelular(IMEI), accesorio((short) 1, "15"))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("10.00").hasMessageContaining("15.00");
+            verify(ventaRepository, never()).save(any(Venta.class));
+        }
+
+        @Test
+        @DisplayName("la promoción alcanza para menos piezas de las del renglón: 400, se mandan por separado")
+        void piezasParciales() {
+            celularYAccesorio();
+            promocion(1, "5");
+
+            assertThatThrownBy(() -> ventaService.crear(ventaBase(List.of(lineaCelular(IMEI), accesorio((short) 2, "10"))), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("alcanza para 1 pieza").hasMessageContaining("Cable USB-C");
+        }
+
+        @Test
+        @DisplayName("sin conexión: la venta con el precio de antes se acepta y queda anotada")
+        void sinConexion_seAceptaConAviso() {
+            celularYAccesorio();
+            promocion(1, "5");
+            VentaRequestDto request = ventaBase(List.of(lineaCelular(IMEI), accesorio((short) 1, "15")));
+            request.setClaveOffline("clave-promo-1");
+            request.setSinConexion(true);
+
+            ventaService.crear(request, ID_VENDEDOR);
+
+            verify(ventaRepository, atLeastOnce()).save(ventaCaptor.capture());
+            assertThat(ventaCaptor.getAllValues().get(0).getObservaciones()).contains("PRECIO DISTINTO AL DEL SISTEMA");
+        }
+
+        @Test
+        @DisplayName("el accesorio va en otra venta del mismo carrito: cuenta el equipo de la otra venta y lo ya rebajado")
+        void equipoEnOtraVentaDelCarrito() {
+            ProductoMaster accesorio = masterAccesorio();
+            ProductoMaster celular = masterCelular();
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(accesorio));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(accesorio, BigDecimal.TEN)));
+            Venta previa = Venta.builder().idventa(77).estado((byte) 1).tienda(tienda).usuarioVendedor(vendedor).build();
+            VentaDetalle equipoPrevio = VentaDetalle.builder().productoMaster(celular).cantidad((short) 1).build();
+            VentaDetalle micaPrevia = VentaDetalle.builder().productoMaster(accesorio).cantidad((short) 1).promoTipo("MICA").build();
+            when(ventaRepository.findByIdOperacion("OP-1")).thenReturn(List.of(previa));
+            when(ventaDetalleRepository.findByVenta_Idventa(77)).thenReturn(List.of(equipoPrevio, micaPrevia));
+            doReturn(List.of(PromocionEquipoService.Beneficio.NINGUNO)).when(promocionEquipoService).calcularConPrevios(any(), any());
+            VentaRequestDto request = ventaBase(List.of(accesorio((short) 1, "15")));
+            request.setIdOperacion("OP-1");
+
+            ventaService.crear(request, ID_VENDEDOR);
+
+            verify(promocionEquipoService).calcularConPrevios(any(), eq(new PromocionEquipoService.Previos(1, 0, 1, 0)));
+            verify(ventaRepository, atLeastOnce()).save(ventaCaptor.capture());
+            assertThat(ventaCaptor.getAllValues().get(0).getIdOperacion()).isEqualTo("OP-1");
+        }
+
+        @Test
+        @DisplayName("las ventas que arma una orden de servicio no llevan la promoción")
+        void desdeOrden_noLaAplica() {
+            ProductoMaster accesorio = masterAccesorio();
+            when(productoMasterRepository.findById(2)).thenReturn(Optional.of(accesorio));
+            when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(accesorio, BigDecimal.TEN)));
+
+            ventaService.crearDesdeOrdenServicio(ventaBase(List.of(accesorio((short) 1, "15"))), ID_VENDEDOR);
+
+            verify(promocionEquipoService, never()).calcularConPrevios(any(), any());
         }
     }
 }

@@ -47,6 +47,13 @@ public class InventarioAuditoria {
     @Column(name = "fecha_fin")
     private LocalDateTime fechaFin;
 
+    /**
+     * Las categorías que cubre este inventario (ids separados por coma; valen también para sus subcategorías). Vacío = sin alcance:
+     * se cuenta lo que se escanea y, de cada sección contada, lo que no apareció.
+     */
+    @Column(name = "alcance", length = 255)
+    private String alcance;
+
     @Column(name = "total_faltantes", columnDefinition = "INT DEFAULT 0")
     private Integer totalFaltantes;
 

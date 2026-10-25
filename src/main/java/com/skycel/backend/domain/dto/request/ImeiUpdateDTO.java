@@ -10,7 +10,7 @@ import java.math.BigDecimal;
  */
 @Data
 public class ImeiUpdateDTO {
-    /** NUEVO, USADO o REACONDICIONADO. */
+    /** NUEVO, SEMINUEVO o REACONDICIONADO. */
     private String condicion;
     /** Costo de compra de esta unidad. */
     private BigDecimal costoUnitario;

@@ -74,7 +74,7 @@ public class ProductoImei {
     @Column(name = "precio_venta_override", precision = 12, scale = 2)
     private BigDecimal precioVenta;
 
-    /** Condición de ESTA unidad: NUEVO, USADO o REACONDICIONADO. */
+    /** Condición de ESTA unidad: NUEVO, SEMINUEVO o REACONDICIONADO. */
     @Column(name = "condicion", nullable = false, length = 20, columnDefinition = "VARCHAR(20) NOT NULL DEFAULT 'NUEVO'")
     @Builder.Default
     private String condicion = "NUEVO";
