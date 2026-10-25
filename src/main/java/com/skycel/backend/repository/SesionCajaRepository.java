@@ -19,6 +19,10 @@ public interface SesionCajaRepository extends JpaRepository<SesionCaja, Integer>
 
     boolean existsByCaja_IdCajaAndEstado(Integer idCaja, Byte estado);
 
+    Optional<SesionCaja> findFirstByClaveApertura(String claveApertura);
+
+    Optional<SesionCaja> findFirstByClaveCierre(String claveCierre);
+
     /** Historial de una caja, la más reciente primero. */
     List<SesionCaja> findByCaja_IdCajaOrderByFechaAperturaDesc(Integer idCaja, Pageable pageable);
 }

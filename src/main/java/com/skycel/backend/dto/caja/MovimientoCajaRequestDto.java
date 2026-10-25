@@ -19,4 +19,10 @@ public class MovimientoCajaRequestDto {
 
     /** Descripción libre y detallada del movimiento (opcional). */
     private String observaciones;
+
+    /** Solo si el movimiento se capturó sin conexión: cuándo ocurrió de verdad y su clave (reenviarlo no lo duplica). */
+    private java.time.LocalDateTime fecha;
+
+    @jakarta.validation.constraints.Size(max = 64, message = "La clave no puede exceder los 64 caracteres")
+    private String claveOffline;
 }

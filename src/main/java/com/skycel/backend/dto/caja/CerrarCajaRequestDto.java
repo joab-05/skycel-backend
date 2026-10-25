@@ -25,4 +25,10 @@ public class CerrarCajaRequestDto {
 
     @Size(max = 1000, message = "Las observaciones no pueden exceder los 1000 caracteres")
     private String observaciones;
+
+    /** Solo si el cierre se hizo sin conexión: cuándo ocurrió de verdad y su clave (reenviarlo no lo duplica). */
+    private java.time.LocalDateTime fecha;
+
+    @Size(max = 64, message = "La clave no puede exceder los 64 caracteres")
+    private String claveOffline;
 }

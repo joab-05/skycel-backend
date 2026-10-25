@@ -72,6 +72,13 @@ public class SesionCaja {
     @Column(name = "retiro_cierre", precision = 12, scale = 2)
     private BigDecimal retiroCierre;
 
+    /** Claves de lo que se hizo sin conexión: reenviar la misma apertura o el mismo cierre no lo duplica. */
+    @Column(name = "clave_apertura", length = 64)
+    private String claveApertura;
+
+    @Column(name = "clave_cierre", length = 64)
+    private String claveCierre;
+
     @Column(name = "observaciones", columnDefinition = "TEXT")
     private String observaciones;
 

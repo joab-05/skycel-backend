@@ -144,6 +144,73 @@ class SesionCajaServiceTest {
     }
 
     @Test
+    @DisplayName("abrir sin conexión: el turno conserva la fecha real y la clave, y el fondo se registra con esa fecha")
+    void abrirSinConexion() {
+        lenient().when(movimientoCajaService.registrarDeTurno(any(Caja.class), any(Usuario.class), any(), any(BigDecimal.class), any(), any(LocalDateTime.class)))
+                .thenAnswer(inv -> movimiento(inv.getArgument(2), ENTRADA, inv.getArgument(3)));
+        LocalDateTime ayer = LocalDateTime.now().minusHours(5).withNano(0);
+        AbrirCajaRequestDto dto = abrirCon("1000");
+        dto.setFecha(ayer);
+        dto.setClaveOffline("clave-abrir-1");
+
+        SesionCajaResponseDto r = service.abrir(ID_CAJA, dto, "luis");
+
+        assertThat(sesiones.get(0).getFechaApertura()).isEqualTo(ayer);
+        assertThat(sesiones.get(0).getClaveApertura()).isEqualTo("clave-abrir-1");
+        assertThat(r.isAbierta()).isTrue();
+        verify(movimientoCajaService).registrarDeTurno(eq(caja), eq(luis), eq(FONDO_APERTURA), any(BigDecimal.class), any(), eq(ayer));
+    }
+
+    @Test
+    @DisplayName("abrir sin conexión: reenviar la misma clave devuelve el mismo turno y no abre otro")
+    void abrirSinConexionReenviado() {
+        AbrirCajaRequestDto dto = abrirCon("1000");
+        dto.setFecha(LocalDateTime.now().minusHours(2));
+        dto.setClaveOffline("clave-abrir-2");
+        service.abrir(ID_CAJA, dto, "luis");
+        when(sesionCajaRepository.findFirstByClaveApertura("clave-abrir-2")).thenAnswer(inv -> sesiones.stream().findFirst());
+
+        SesionCajaResponseDto otra = service.abrir(ID_CAJA, dto, "luis");
+
+        assertThat(sesiones).hasSize(1);
+        assertThat(otra.getIdsesionCaja()).isEqualTo(sesiones.get(0).getIdsesionCaja());
+    }
+
+    @Test
+    @DisplayName("abrir sin conexión con una fecha del futuro: se usa la hora de ahora")
+    void abrirSinConexionFechaFutura() {
+        lenient().when(movimientoCajaService.registrarDeTurno(any(Caja.class), any(Usuario.class), any(), any(BigDecimal.class), any(), any(LocalDateTime.class)))
+                .thenAnswer(inv -> movimiento(inv.getArgument(2), ENTRADA, inv.getArgument(3)));
+        AbrirCajaRequestDto dto = abrirCon("1000");
+        dto.setFecha(LocalDateTime.now().plusDays(3));
+        dto.setClaveOffline("clave-abrir-3");
+
+        service.abrir(ID_CAJA, dto, "luis");
+
+        assertThat(sesiones.get(0).getFechaApertura()).isBeforeOrEqualTo(LocalDateTime.now());
+    }
+
+    @Test
+    @DisplayName("cerrar sin conexión: el corte queda con la fecha real y reenviar la misma clave devuelve el mismo corte")
+    void cerrarSinConexion() {
+        lenient().when(movimientoCajaService.registrarDeTurno(any(Caja.class), any(Usuario.class), any(), any(BigDecimal.class), any(), any(LocalDateTime.class)))
+                .thenAnswer(inv -> movimiento(inv.getArgument(2), SALIDA, inv.getArgument(3)));
+        service.abrir(ID_CAJA, abrirCon("1500"), "luis");
+        LocalDateTime hace1h = LocalDateTime.now().minusHours(1).withNano(0);
+        CerrarCajaRequestDto dto = cerrarCon("1500", "1500", null);
+        dto.setFecha(hace1h);
+        dto.setClaveOffline("clave-cerrar-1");
+
+        SesionCajaResponseDto r = service.cerrar(ID_CAJA, dto, "luis");
+
+        assertThat(sesiones.get(0).getFechaCierre()).isEqualTo(hace1h);
+        assertThat(sesiones.get(0).getClaveCierre()).isEqualTo("clave-cerrar-1");
+        when(sesionCajaRepository.findFirstByClaveCierre("clave-cerrar-1")).thenAnswer(inv -> sesiones.stream().findFirst());
+        SesionCajaResponseDto otra = service.cerrar(ID_CAJA, dto, "luis");
+        assertThat(otra.getIdsesionCaja()).isEqualTo(r.getIdsesionCaja());
+    }
+
+    @Test
     @DisplayName("no se puede abrir una caja que ya está abierta")
     void abrirDosVeces() {
         service.abrir(ID_CAJA, abrirCon("1000"), "luis");

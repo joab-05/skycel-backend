@@ -55,6 +55,10 @@ public class MovimientoCaja {
     @Column(name = "idmov_ref")
     private Integer idmovRef;
 
+    /** Clave de un movimiento capturado sin conexión: reenviarlo no lo duplica. */
+    @Column(name = "clave_offline", length = 64)
+    private String claveOffline;
+
     @Column(name = "fecha_mov", updatable = false)
     private LocalDateTime fechaMov;
 

@@ -110,6 +110,13 @@ public class SesionCajaService {
 
     @Transactional
     public SesionCajaResponseDto abrir(Integer idCaja, AbrirCajaRequestDto dto, String username) {
+        // Una apertura hecha sin conexión que ya se había enviado: se devuelve el mismo turno, no se abre otro
+        if (dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank()) {
+            var existente = sesionCajaRepository.findFirstByClaveApertura(dto.getClaveOffline().trim());
+            if (existente.isPresent()) {
+                return existente.get().getEstado() == SesionCaja.ABIERTA ? toDtoAbierta(existente.get()) : toDtoCerrada(existente.get(), false);
+            }
+        }
         Usuario usuario = usuario(username);
         Caja caja = caja(idCaja);
         validarAcceso(usuario, caja);
@@ -121,20 +128,22 @@ public class SesionCajaService {
         });
 
         BigDecimal fondo = dto.getFondoInicial().setScale(2, java.math.RoundingMode.HALF_UP);
-        LocalDateTime ahora = LocalDateTime.now();
+        boolean sinConexion = dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank();
+        LocalDateTime ahora = sinConexion ? MovimientoCajaService.fechaNoFutura(dto.getFecha()) : LocalDateTime.now();
         SesionCaja sesion = sesionCajaRepository.save(SesionCaja.builder()
                 .caja(caja).usuarioApertura(usuario).fechaApertura(ahora)
+                .claveApertura(sinConexion ? dto.getClaveOffline().trim() : null)
                 .estado(SesionCaja.ABIERTA).fondoInicial(fondo).build());
 
         // Deja el saldo del sistema igual al efectivo con el que se abre
         BigDecimal saldo = saldoDe(idCaja);
         BigDecimal diferencia = fondo.subtract(saldo);
         if (diferencia.signum() > 0) {
-            movimientoCajaService.registrarDeTurno(caja, usuario, FONDO_APERTURA, diferencia,
-                    "Apertura de caja · turno #" + sesion.getIdsesionCaja());
+            registrarDeTurno(caja, usuario, FONDO_APERTURA, diferencia,
+                    "Apertura de caja · turno #" + sesion.getIdsesionCaja(), sinConexion ? ahora : null);
         } else if (diferencia.signum() < 0) {
-            movimientoCajaService.registrarDeTurno(caja, usuario, AJUSTE_APERTURA, diferencia.negate(),
-                    "Apertura de caja · turno #" + sesion.getIdsesionCaja() + " (el sistema esperaba $" + saldo + ")");
+            registrarDeTurno(caja, usuario, AJUSTE_APERTURA, diferencia.negate(),
+                    "Apertura de caja · turno #" + sesion.getIdsesionCaja() + " (el sistema esperaba $" + saldo + ")", sinConexion ? ahora : null);
         }
         return toDtoAbierta(sesion);
     }
@@ -143,6 +152,11 @@ public class SesionCajaService {
 
     @Transactional
     public SesionCajaResponseDto cerrar(Integer idCaja, CerrarCajaRequestDto dto, String username) {
+        // Un cierre hecho sin conexión que ya se había enviado: se devuelve el mismo corte
+        if (dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank()) {
+            var existente = sesionCajaRepository.findFirstByClaveCierre(dto.getClaveOffline().trim());
+            if (existente.isPresent()) return toDtoCerrada(existente.get(), true);
+        }
         Usuario usuario = usuario(username);
         Caja caja = caja(idCaja);
         validarAcceso(usuario, caja);
@@ -159,12 +173,14 @@ public class SesionCajaService {
                     "El fondo que se deja para mañana ($" + fondoSiguiente + ") no puede ser mayor a lo contado ($" + contado + ").");
         }
 
-        LocalDateTime ahora = LocalDateTime.now();
+        boolean sinConexion = dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank();
+        LocalDateTime ahora = sinConexion ? MovimientoCajaService.fechaNoFutura(dto.getFecha()) : LocalDateTime.now();
         BigDecimal esperado = saldoDe(idCaja);
         BigDecimal retiro = contado.subtract(fondoSiguiente);
         ResumenDto resumen = resumen(idCaja, sesion.getFechaApertura(), ahora);
 
         sesion.setUsuarioCierre(usuario);
+        sesion.setClaveCierre(sinConexion ? dto.getClaveOffline().trim() : null);
         sesion.setFechaCierre(ahora);
         sesion.setEstado(SesionCaja.CERRADA);
         sesion.setEfectivoEsperado(esperado);
@@ -177,8 +193,8 @@ public class SesionCajaService {
         sesionCajaRepository.save(sesion);
 
         if (retiro.signum() > 0) {
-            movimientoCajaService.registrarDeTurno(caja, usuario, RETIRO_CIERRE, retiro,
-                    "Cierre de caja · turno #" + sesion.getIdsesionCaja());
+            registrarDeTurno(caja, usuario, RETIRO_CIERRE, retiro,
+                    "Cierre de caja · turno #" + sesion.getIdsesionCaja(), sinConexion ? ahora : null);
         }
         return toDtoCerrada(sesion, true);
     }
@@ -277,6 +293,12 @@ public class SesionCajaService {
         return sesionCajaRepository.findFirstByCaja_IdCajaAndEstadoOrderByFechaCierreDesc(idCaja, SesionCaja.CERRADA)
                 .map(SesionCaja::getFondoSiguiente)
                 .orElseGet(() -> saldoDe(idCaja).max(BigDecimal.ZERO));
+    }
+
+    /** El movimiento del turno; con fecha solo si el turno se abrió o cerró sin conexión. */
+    private void registrarDeTurno(Caja caja, Usuario usuario, String motivo, BigDecimal monto, String observaciones, LocalDateTime fecha) {
+        if (fecha == null) movimientoCajaService.registrarDeTurno(caja, usuario, motivo, monto, observaciones);
+        else movimientoCajaService.registrarDeTurno(caja, usuario, motivo, monto, observaciones, fecha);
     }
 
     private BigDecimal saldoDe(Integer idCaja) {

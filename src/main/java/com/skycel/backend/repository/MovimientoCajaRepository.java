@@ -18,6 +18,8 @@ public interface MovimientoCajaRepository extends JpaRepository<MovimientoCaja, 
     /** Último movimiento registrado en una caja (para saber si está abierta y desde cuándo) */
     Optional<MovimientoCaja> findTopByCaja_IdCajaOrderByFechaMovDesc(Integer idCaja);
 
+    Optional<MovimientoCaja> findFirstByClaveOffline(String claveOffline);
+
     /** Movimientos de una caja desde una fecha/hora en adelante (turno actual), en orden cronológico */
     List<MovimientoCaja> findByCaja_IdCajaAndFechaMovGreaterThanEqualOrderByFechaMovAsc(Integer idCaja, LocalDateTime desde);
 

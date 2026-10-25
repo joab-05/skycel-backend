@@ -78,13 +78,26 @@ public class MovimientoCajaService {
     /** Movimiento que registra la apertura o el cierre de un turno (fondo, ajuste o retiro). */
     @Transactional
     public MovimientoCaja registrarDeTurno(Caja caja, Usuario usuario, String nombreMotivo, BigDecimal monto, String observaciones) {
-        return guardar(caja, usuario, null, motivoSistema(nombreMotivo), monto, observaciones, null);
+        return registrarDeTurno(caja, usuario, nombreMotivo, monto, observaciones, null);
+    }
+
+    /** {@code fecha} null = ahora; un turno abierto o cerrado sin conexión deja sus movimientos con la fecha en que ocurrió. */
+    @Transactional
+    public MovimientoCaja registrarDeTurno(Caja caja, Usuario usuario, String nombreMotivo, BigDecimal monto, String observaciones,
+                                           java.time.LocalDateTime fecha) {
+        return guardar(caja, usuario, null, motivoSistema(nombreMotivo), monto, observaciones, null, fecha);
     }
 
     // ── Movimientos manuales ─────────────────────────────────────────────────
 
     @Transactional
     public MovimientoCajaResponseDto registrarManual(Integer idCaja, MovimientoCajaRequestDto dto, String username) {
+        // Un movimiento capturado sin conexión que ya se había enviado: se devuelve el mismo, no se duplica
+        if (dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank()) {
+            var existente = movimientoCajaRepository.findFirstByClaveOffline(dto.getClaveOffline().trim());
+            if (existente.isPresent()) return toDto(existente.get());
+        }
+        boolean sinConexion = dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank();
         Usuario usuario = usuarioPorUsername(username);
         Caja caja = buscarCaja(idCaja);
         validarAcceso(usuario, caja);
@@ -111,7 +124,8 @@ public class MovimientoCajaService {
             admin = usuario;
         }
 
-        if (motivo.getTipoMov() == SALIDA) {
+        // Lo capturado sin conexión ya ocurrió: no se rechaza por saldo
+        if (motivo.getTipoMov() == SALIDA && !sinConexion) {
             BigDecimal saldo = saldoDe(caja.getIdCaja());
             if (dto.getMonto().compareTo(saldo) > 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -119,7 +133,13 @@ public class MovimientoCajaService {
             }
         }
 
-        return toDto(guardar(caja, usuario, admin, motivo, dto.getMonto(), dto.getObservaciones(), null));
+        MovimientoCaja guardado = guardar(caja, usuario, admin, motivo, dto.getMonto(), dto.getObservaciones(), null,
+                sinConexion ? fechaNoFutura(dto.getFecha()) : null);
+        if (sinConexion) {
+            guardado.setClaveOffline(dto.getClaveOffline().trim());
+            guardado = movimientoCajaRepository.save(guardado);
+        }
+        return toDto(guardado);
     }
 
     // ── Movimientos automáticos (los llama VentaService en la misma transacción) ──
@@ -342,6 +362,12 @@ public class MovimientoCajaService {
                 .observaciones(observaciones)
                 .sesion(sesionActual.actual())   // la sesión desde la que se hizo
                 .build());
+    }
+
+    /** La fecha que manda un equipo sin conexión; nunca una del futuro. */
+    static java.time.LocalDateTime fechaNoFutura(java.time.LocalDateTime fecha) {
+        java.time.LocalDateTime ahora = java.time.LocalDateTime.now();
+        return fecha == null || fecha.isAfter(ahora) ? ahora : fecha;
     }
 
     private BigDecimal saldoDe(Integer idCaja) {

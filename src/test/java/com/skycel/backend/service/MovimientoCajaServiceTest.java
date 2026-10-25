@@ -107,6 +107,40 @@ class MovimientoCajaServiceTest {
     }
 
     @Test
+    @DisplayName("un movimiento capturado sin conexión conserva su fecha y su clave, y no se rechaza por saldo (ya ocurrió)")
+    void sinConexionNoSeRechazaPorSaldo() {
+        motivo(gasto);
+        java.time.LocalDateTime hace2h = java.time.LocalDateTime.now().minusHours(2).withNano(0);
+        MovimientoCajaRequestDto dto = req(5, "900.00");   // más de lo que hay en la caja
+        dto.setFecha(hace2h);
+        dto.setClaveOffline("mov-offline-1");
+
+        service.registrarManual(ID_CAJA, dto, "abigail");
+
+        ArgumentCaptor<MovimientoCaja> cap = ArgumentCaptor.forClass(MovimientoCaja.class);
+        verify(movimientoCajaRepository, atLeastOnce()).save(cap.capture());
+        MovimientoCaja guardado = cap.getAllValues().get(cap.getAllValues().size() - 1);
+        assertThat(guardado.getFechaMov()).isEqualTo(hace2h);
+        assertThat(guardado.getClaveOffline()).isEqualTo("mov-offline-1");
+    }
+
+    @Test
+    @DisplayName("reenviar un movimiento sin conexión con la misma clave devuelve el mismo y no lo guarda otra vez")
+    void sinConexionReenviado() {
+        motivo(gasto);
+        MovimientoCaja existente = MovimientoCaja.builder().idmovimiento(77).caja(caja).usuarioEncargado(encargado).motivo(gasto)
+                .tipo((byte) 2).monto(new BigDecimal("50")).claveOffline("mov-offline-2").build();
+        when(movimientoCajaRepository.findFirstByClaveOffline("mov-offline-2")).thenReturn(Optional.of(existente));
+        MovimientoCajaRequestDto dto = req(5, "50.00");
+        dto.setClaveOffline("mov-offline-2");
+
+        MovimientoCajaResponseDto r = service.registrarManual(ID_CAJA, dto, "abigail");
+
+        assertThat(r.getIdmovimiento()).isEqualTo(77);
+        verify(movimientoCajaRepository, never()).save(any(MovimientoCaja.class));
+    }
+
+    @Test
     @DisplayName("el movimiento guarda la sesión desde la que se hizo (y queda vacía si no hay sesión)")
     void guardaLaSesion() {
         motivo(gasto);
