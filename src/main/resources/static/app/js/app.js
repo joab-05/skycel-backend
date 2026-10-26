@@ -5115,7 +5115,7 @@ function dibujarSelectorClientePOS(cont, alSeleccionar) {
 }
 
 // ── Devoluciones ─────────────────────────────────────────────────────────
-// v1: solo Reembolso. Los cambios por otro producto se atienden en la tienda con JSystem.
+// Reembolso (se devuelve el dinero) o Cambio (el cliente se lleva otro producto de igual o mayor valor y paga la diferencia).
 
 function pastillaDevolucion(estadoDisplay) {
   const claves = { 'Pendiente': 'pendiente', 'Procesada': 'lista', 'Rechazada': 'cancelada' };
@@ -5127,7 +5127,7 @@ async function pantallaDevoluciones() {
   if (!Sesion.tiene('DEVOLUCION_SOLICITAR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
 
   root.innerHTML = `
-    ${cabeceraPantalla(ic('undo-2') + ' Devoluciones', 'Reembolsos de productos vendidos (el cambio por otro producto se hace en JSystem)')}
+    ${cabeceraPantalla(ic('undo-2') + ' Devoluciones', 'Reembolsos y cambios de productos vendidos (plazo de 15 días)')}
     <div class="kp-h" id="dv-kpis">
       ${kpiH('c4', 'clock', '…', 'Pendientes de aprobar', 'dv-k-pend')}
       ${kpiH('c3', 'circle-check', '…', 'Procesadas', 'dv-k-proc')}
@@ -5142,7 +5142,7 @@ async function pantallaDevoluciones() {
         <button id="dv-consultar" class="btn btn-azul btn-chico" style="flex:0 0 auto;">Consultar</button>
       </div>
       <div id="dv-consulta-resultado"></div>
-      <div class="ayuda">Solo reembolso. Para cambiar por otro producto, usa JSystem en la tienda.</div>
+      <div class="ayuda">Escribe el número de venta (está en el ticket). Puedes reembolsar el dinero o cambiar por otro producto.</div>
     </div>
 
     <div class="tarjeta">
@@ -5198,13 +5198,138 @@ async function pantallaDevoluciones() {
         </div>`).join('')}
       <label class="obligatorio" style="margin-top:10px;">Motivo</label>
       <textarea id="dv-motivo" placeholder="Por qué se devuelve"></textarea>
-      <label class="obligatorio">Cómo se reembolsa</label>
-      <select id="dv-metodo-reembolso">
-        <option value="1">Efectivo</option>
-        <option value="2">Tarjeta</option>
-        <option value="3">Transferencia</option>
-      </select>
+      <label class="obligatorio">¿Qué se hace?</label>
+      <div class="segmentado" style="margin:0 0 8px 0;">
+        <button type="button" id="dv-tipo-reembolso" class="activo">Reembolso</button>
+        <button type="button" id="dv-tipo-cambio">Cambio por otro producto</button>
+      </div>
+      <div id="dv-bloque-reembolso">
+        <label class="obligatorio">Cómo se reembolsa</label>
+        <select id="dv-metodo-reembolso">
+          <option value="1">Efectivo</option>
+          <option value="2">Tarjeta</option>
+          <option value="3">Transferencia</option>
+        </select>
+      </div>
+      <div id="dv-bloque-cambio" class="oculto">
+        <label class="obligatorio">Lo que se lleva el cliente</label>
+        <div class="buscador buscar-ic">${ic('search')}<input id="dv-cambio-buscar" placeholder="Buscar producto por nombre, código, modelo o IMEI..." autocomplete="off"></div>
+        <div id="dv-cambio-resultados"></div>
+        <div id="dv-cambio-lista"></div>
+        <div id="dv-cambio-resumen" class="mixto-estado"></div>
+        <div id="dv-cambio-dif" class="oculto">
+          <label class="obligatorio">Cómo paga la diferencia</label>
+          <select id="dv-metodo-diferencia"><option value="1">Efectivo</option><option value="2">Tarjeta</option><option value="3">Transferencia</option></select>
+        </div>
+      </div>
       <button id="dv-solicitar" class="btn btn-verde" style="margin-top:10px;">Solicitar devolución</button>`;
+
+    // ── Cambio: el producto nuevo se elige del catálogo de la tienda de la venta ──
+    let esCambio = false;
+    let catalogo = null;                // se pide la primera vez que se elige «Cambio»
+    const nuevos = [];                  // { idprodmaster, codpro, nombre, cantidad, precio, imei, stock }
+    const contBuscar = document.getElementById('dv-cambio-buscar');
+    const contRes = document.getElementById('dv-cambio-resultados');
+    const contLista = document.getElementById('dv-cambio-lista');
+
+    /** Lo que vale lo que se devuelve, según lo marcado. */
+    const totalDevuelto = () => {
+      let t = 0;
+      cont.querySelectorAll('.dv-linea-chk:checked').forEach(chk => {
+        const l = devolvibles.find(x => String(x.iddetalleVenta) === chk.dataset.idx);
+        const ci = cont.querySelector(`.dv-linea-cant[data-idx="${chk.dataset.idx}"]`);
+        t += Number(l.precioUnitario) * (ci ? Number(ci.value) || 0 : 1);
+      });
+      return Math.round(t * 100) / 100;
+    };
+    const totalNuevo = () => Math.round(nuevos.reduce((s, n) => s + n.cantidad * n.precio, 0) * 100) / 100;
+
+    const dibujarNuevos = () => {
+      contLista.innerHTML = nuevos.length === 0 ? '' : nuevos.map((n, k) => `
+        <div class="dv-nuevo" style="border-top:1px solid var(--gris-claro); padding:10px 0;">
+          <div>${escapar(n.nombre)}${n.imei ? ' · IMEI ' + escapar(n.imei) : ''}</div>
+          <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+            ${n.imei ? '1 pieza' : `<input type="number" class="dv-nuevo-cant" data-k="${k}" min="1" max="${n.stock}" value="${n.cantidad}" style="width:72px;">`}
+            <span class="ayuda" style="margin:0;">× ${formatoDinero(n.precio)}</span>
+            <b style="margin-left:auto;">${formatoDinero(n.cantidad * n.precio)}</b>
+            <button type="button" class="btn btn-gris btn-chico dv-nuevo-quitar" data-k="${k}" title="Quitar" style="flex:0 0 auto;">${ic('x')}</button>
+          </div>
+        </div>`).join('');
+      contLista.querySelectorAll('.dv-nuevo-quitar').forEach(b => b.onclick = () => { nuevos.splice(Number(b.dataset.k), 1); dibujarNuevos(); });
+      contLista.querySelectorAll('.dv-nuevo-cant').forEach(inp => inp.addEventListener('input', () => {
+        const n = nuevos[Number(inp.dataset.k)];
+        n.cantidad = Math.max(1, Math.min(n.stock, Math.floor(Number(inp.value)) || 1));
+        resumenCambio();
+        inp.closest('.dv-nuevo').querySelector('b').textContent = formatoDinero(n.cantidad * n.precio);
+      }));
+      resumenCambio();
+    };
+    const resumenCambio = () => {
+      const resumen = document.getElementById('dv-cambio-resumen');
+      const dev = totalDevuelto(), nuevo = totalNuevo();
+      document.getElementById('dv-cambio-dif').classList.toggle('oculto', !(nuevo > dev + 0.004));
+      if (!esCambio) return;
+      if (nuevos.length === 0) { resumen.textContent = dev > 0 ? `Devuelve ${formatoDinero(dev)}: elige lo que se lleva.` : ''; resumen.className = 'mixto-estado'; return; }
+      if (nuevo + 0.004 < dev) { resumen.textContent = `Devuelve ${formatoDinero(dev)} → se lleva ${formatoDinero(nuevo)}: debe valer igual o más que lo devuelto.`; resumen.className = 'mixto-estado falta'; return; }
+      resumen.textContent = `Devuelve ${formatoDinero(dev)} → se lleva ${formatoDinero(nuevo)}` + (nuevo > dev + 0.004 ? ` · diferencia a cobrar ${formatoDinero(nuevo - dev)}` : ' · sin diferencia');
+      resumen.className = 'mixto-estado ok';
+    };
+    cont.querySelectorAll('.dv-linea-chk, .dv-linea-cant').forEach(el => el.addEventListener('input', resumenCambio));
+    cont.querySelectorAll('.dv-linea-chk').forEach(el => el.addEventListener('change', resumenCambio));
+
+    const agregarNuevo = (p, imei, precio) => {
+      if (imei && nuevos.some(n => n.imei === imei)) { mostrarMensaje(root, 'Esa unidad ya está en la lista.', 'info'); return; }
+      const ya = !imei ? nuevos.find(n => n.codpro === p.codpro) : null;
+      if (ya) { if (ya.cantidad < ya.stock) ya.cantidad++; }
+      else nuevos.push({ idprodmaster: p.idProductoMaster, codpro: p.esEquipo ? null : p.codpro, nombre: p.nombreProductoMaster, cantidad: 1, precio: Number(precio), imei: imei || null, stock: p.esEquipo ? 1 : Number(p.stock) });
+      contBuscar.value = ''; contRes.innerHTML = '';
+      dibujarNuevos();
+    };
+    const buscarNuevos = () => {
+      const q = contBuscar.value.trim();
+      if (q.length < 2 || !catalogo) { contRes.innerHTML = ''; return; }
+      const lista = filtrarProductos(catalogo, q).slice(0, 8);
+      contRes.innerHTML = lista.length === 0 ? '<div class="vacio">Sin resultados.</div>' : lista.map(p => `
+        <div class="orden-item pos-fila" data-codpro="${escapar(p.codpro)}">
+          <div class="pos-fila-cuerpo">
+            <div class="orden-folio">${escapar(p.nombreProductoMaster)}</div>
+            <div class="orden-cliente">${p.esEquipo ? Number(p.stock) + ' disponible' + (Number(p.stock) === 1 ? '' : 's') : escapar(p.codpro) + ' · Stock: ' + Number(p.stock)}</div>
+          </div>
+          ${p.esEquipo ? `<div class="grupo-botones pos-imeis">${p.imeisDisponibles.map(u => `<button type="button" class="btn btn-azul btn-chico dv-agregar-imei" data-imei="${escapar(u.imei)}">${escapar(u.imei)} · ${formatoDinero(u.precioVenta)}</button>`).join('')}</div>`
+            : `<span class="pos-precio">${formatoDinero(p.preciopub)} <span class="pv-mas">${ic('plus')}</span></span>`}
+        </div>`).join('');
+      contRes.querySelectorAll('.orden-item').forEach(el => {
+        const p = lista.find(x => x.codpro === el.dataset.codpro);
+        if (p.esEquipo) el.querySelectorAll('.dv-agregar-imei').forEach(b => b.onclick = (ev) => {
+          ev.stopPropagation();
+          const u = p.imeisDisponibles.find(x => x.imei === b.dataset.imei);
+          agregarNuevo(p, u.imei, u.precioVenta);
+        });
+        else el.onclick = () => agregarNuevo(p, null, p.preciopub);
+      });
+    };
+    contBuscar.addEventListener('input', buscarNuevos);
+
+    const elegirTipo = async (cambio) => {
+      esCambio = cambio;
+      document.getElementById('dv-tipo-reembolso').classList.toggle('activo', !cambio);
+      document.getElementById('dv-tipo-cambio').classList.toggle('activo', cambio);
+      document.getElementById('dv-bloque-reembolso').classList.toggle('oculto', cambio);
+      document.getElementById('dv-bloque-cambio').classList.toggle('oculto', !cambio);
+      if (cambio && !catalogo) {
+        contRes.innerHTML = '<div class="vacio">Cargando catálogo...</div>';
+        try {
+          catalogo = (await catalogoConEquipos(venta.codti)).filter(p => p.tipo !== 'SERVICIO' && Number(p.stock) > 0);
+          contRes.innerHTML = '';
+          buscarNuevos();
+        } catch (err) {
+          contRes.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+        }
+      }
+      resumenCambio();
+    };
+    document.getElementById('dv-tipo-reembolso').onclick = () => elegirTipo(false);
+    document.getElementById('dv-tipo-cambio').onclick = () => elegirTipo(true);
 
     cont.querySelectorAll('.dv-linea-chk').forEach(chk => {
       chk.addEventListener('change', () => {
@@ -5227,13 +5352,18 @@ async function pantallaDevoluciones() {
       if (lineas.length === 0) { mostrarMensaje(root, 'Selecciona al menos un producto.', 'error'); return; }
       if (!motivo) { mostrarMensaje(root, 'Escribe el motivo de la devolución.', 'error'); return; }
 
-      const payload = {
-        idventa: venta.idventa,
-        tipo: 1,
-        motivo,
-        metodoReembolso: Number(document.getElementById('dv-metodo-reembolso').value),
-        lineas,
-      };
+      const payload = { idventa: venta.idventa, tipo: esCambio ? 2 : 1, motivo, lineas };
+      if (esCambio) {
+        if (nuevos.length === 0) { mostrarMensaje(root, 'Elige el producto que se lleva el cliente.', 'error'); return; }
+        const dev = totalDevuelto(), nuevo = totalNuevo();
+        if (nuevo + 0.004 < dev) { mostrarMensaje(root, `Lo que se lleva (${formatoDinero(nuevo)}) debe valer igual o más que lo devuelto (${formatoDinero(dev)}).`, 'error'); return; }
+        payload.cambio = {
+          lineas: nuevos.map(n => ({ idprodmaster: n.idprodmaster, codpro: n.codpro, cantidad: n.cantidad, precioUnitarioFinal: n.precio, imei: n.imei })),
+          metodoPago: nuevo > dev + 0.004 ? Number(document.getElementById('dv-metodo-diferencia').value) : null,
+        };
+      } else {
+        payload.metodoReembolso = Number(document.getElementById('dv-metodo-reembolso').value);
+      }
       e.target.disabled = true;
       e.target.innerHTML = '<span class="spinner"></span> Enviando...';
       try {
@@ -5321,6 +5451,18 @@ async function pantallaDevolucionDetalle(id) {
         <span class="v">${formatoDinero(d.totalDevuelto)}</span>
       </div>
       ${d.descripcionMetodoReembolso ? `<div class="ayuda">Reembolso: ${escapar(d.descripcionMetodoReembolso)}</div>` : ''}
+      ${(d.cambio || []).length > 0 ? `
+        <h2>Lo que se lleva el cliente</h2>
+        ${d.cambio.map(l => `
+          <div class="detalle-fila">
+            <span class="k">${escapar(l.nombreProducto)}${l.imei ? ' · IMEI ' + escapar(l.imei) : ''} × ${l.cantidad}</span>
+            <span class="v">${formatoDinero(l.subtotal)}</span>
+          </div>`).join('')}
+        <div class="detalle-fila" style="font-weight:800;">
+          <span class="k">Total del cambio</span>
+          <span class="v">${formatoDinero(d.totalCambio)}</span>
+        </div>
+        <div class="ayuda">${Number(d.diferencia) > 0.004 ? `Diferencia a cobrar: ${formatoDinero(d.diferencia)}` : 'Sin diferencia'}${d.idventaCambio ? ` · Venta del cambio #${d.idventaCambio}` : ''}</div>` : ''}
       <div class="ayuda" style="margin-top:10px;">Solicitó ${escapar(d.nombreSolicita)} · ${formatoFecha(d.fechaSolicitud)}</div>
       ${d.nombreResuelve ? `<div class="ayuda">Resolvió ${escapar(d.nombreResuelve)} · ${formatoFecha(d.fechaResolucion)}${d.comentarioResolucion ? ': ' + escapar(d.comentarioResolucion) : ''}</div>` : ''}
     </div>

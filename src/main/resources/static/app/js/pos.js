@@ -4,7 +4,8 @@
  *  - al vender un equipo, la promoción (chip de regalo, mica y protector con descuento) se aplica sola con la misma regla que el servidor;
  *  - un vendedor puede pedir un descuento a un administrador y verlo aprobado o rechazado aquí mismo;
  *  - la tarjeta solo aparece si el negocio ya la acepta;
- *  - un carrito se parte en una venta por cada forma de cobro (todas con el mismo idOperacion).
+ *  - un carrito se parte en una venta por cada forma de cobro (todas con el mismo idOperacion);
+ *  - el pago mixto reparte lo de contado entre efectivo, tarjeta y transferencia (una sola venta con su desglose).
  * Funciona con conexión; sin ella, usa JSystem en la tienda.
  */
 
@@ -139,12 +140,19 @@ function posAplicarPromocion() {
 
 function posMetodoCarrito() { return Number(document.getElementById('pv-metodo')?.value || 1); }
 
+/** Lo que se cobra en cada forma de pago cuando el método es Mixto (efectivo, tarjeta y transferencia). */
+function posMixtoDesglose() {
+  const n = (id) => posRedondear(Number(document.getElementById(id)?.value) || 0);
+  return { 1: n('pv-mx-efe'), 2: posConfig.aceptaTarjeta ? n('pv-mx-tar') : 0, 3: n('pv-mx-tra') };
+}
+const posMixtoPagos = () => Object.entries(posMixtoDesglose()).filter(([, m]) => m > 0.004).map(([metodoPago, monto]) => ({ metodoPago: Number(metodoPago), monto }));
+
 /** Los renglones agrupados por forma de cobro: una venta por grupo. Primero las que llevan equipos (la promoción cuenta con ellos). */
 function posGrupos() {
   const grupos = new Map();
   for (const i of posCarrito) {
     const clave = i.formaPago === 'PayJoy' ? 'PJ' + i.metodoEnganche : 'C' + posMetodoCarrito();
-    if (!grupos.has(clave)) grupos.set(clave, { clave, payjoy: i.formaPago === 'PayJoy', metodo: i.formaPago === 'PayJoy' ? i.metodoEnganche : posMetodoCarrito(), items: [] });
+    if (!grupos.has(clave)) grupos.set(clave, { clave, payjoy: i.formaPago === 'PayJoy', metodo: i.formaPago === 'PayJoy' ? i.metodoEnganche : posMetodoCarrito(), mixto: i.formaPago !== 'PayJoy' && posMetodoCarrito() === 4, items: [] });
     grupos.get(clave).items.push(i);
   }
   return [...grupos.values()].sort((a, b) => Number(b.items.some(x => x.esEquipo)) - Number(a.items.some(x => x.esEquipo)));
@@ -153,7 +161,9 @@ function posGrupos() {
 function posTotales() {
   const contado = posCarrito.filter(i => i.formaPago !== 'PayJoy').reduce((s, i) => s + posImporte(i), 0);
   const enganches = posCarrito.filter(i => i.formaPago === 'PayJoy').reduce((s, i) => s + Number(i.enganche || 0), 0);
-  const efectivo = posCarrito.filter(i => (i.formaPago === 'PayJoy' ? i.metodoEnganche : posMetodoCarrito()) === 1).reduce((s, i) => s + posCobroHoy(i), 0);
+  const metodo = posMetodoCarrito();
+  const efectivoContado = metodo === 1 ? contado : (metodo === 4 && contado > 0 ? posMixtoDesglose()[1] : 0);
+  const efectivo = efectivoContado + posCarrito.filter(i => i.formaPago === 'PayJoy' && i.metodoEnganche === 1).reduce((s, i) => s + posCobroHoy(i), 0);
   return { contado: posRedondear(contado), enganches: posRedondear(enganches), total: posRedondear(contado + enganches), efectivo: posRedondear(efectivo) };
 }
 
@@ -251,8 +261,17 @@ async function pantallaPOS() {
       <select id="pv-metodo">
         <option value="1">Efectivo</option>
         <option value="3">Transferencia</option>
+        <option value="4">Mixto</option>
       </select>
       <div class="ayuda">Aplica a todo lo que se paga de contado. Un equipo a crédito con PayJoy se cobra aparte: solo el enganche.</div>
+      <div id="pv-mixto-cont" class="oculto">
+        <div class="mixto-grid">
+          <div><label>Efectivo</label><input id="pv-mx-efe" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0"></div>
+          <div id="pv-mx-tar-cont"><label>Tarjeta</label><input id="pv-mx-tar" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0"></div>
+          <div><label>Transferencia</label><input id="pv-mx-tra" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0"></div>
+        </div>
+        <div id="pv-mx-estado" class="mixto-estado"></div>
+      </div>
       <div id="pv-efectivo-cont">
         <label>Monto recibido en efectivo</label>
         <input id="pv-recibido" type="number" inputmode="decimal" min="0" step="0.01">
@@ -285,8 +304,9 @@ async function pantallaPOS() {
 
   // La tarjeta solo si el negocio ya la acepta
   const selMetodo = document.getElementById('pv-metodo');
-  selMetodo.innerHTML = [['1', 'Efectivo'], posConfig.aceptaTarjeta ? ['2', 'Tarjeta'] : null, ['3', 'Transferencia']].filter(Boolean)
+  selMetodo.innerHTML = [['1', 'Efectivo'], posConfig.aceptaTarjeta ? ['2', 'Tarjeta'] : null, ['3', 'Transferencia'], ['4', 'Mixto']].filter(Boolean)
     .map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+  document.getElementById('pv-mx-tar-cont').classList.toggle('oculto', !posConfig.aceptaTarjeta);
 
   // Caja de la tienda (se valida de nuevo al cobrar)
   let idCaja = null;
@@ -358,6 +378,7 @@ async function pantallaPOS() {
   const actualizarMetodo = () => { actualizarCarritoPOS(); };
   selMetodo.onchange = actualizarMetodo;
   document.getElementById('pv-recibido').addEventListener('input', actualizarCambioPOS);
+  ['pv-mx-efe', 'pv-mx-tar', 'pv-mx-tra'].forEach(id => document.getElementById(id).addEventListener('input', actualizarTotalesPOS));
 
   actualizarCarritoPOS();
   if (posSondeo) clearInterval(posSondeo);
@@ -376,6 +397,10 @@ async function pantallaPOS() {
       if (!confirm('Hay un descuento esperando respuesta del administrador. Si cobras ahora se cobra sin ese descuento. ¿Continuar?')) return;
     }
     const tot = posTotales();
+    if (posMetodoCarrito() === 4 && tot.contado > 0.004) {
+      const m = posMixtoEstado(tot.contado);
+      if (!m.ok) { mostrarMensaje(root, m.texto, 'error'); return; }
+    }
     const recibido = Number(document.getElementById('pv-recibido').value);
     if (tot.efectivo > 0.004 && !(recibido + 0.004 >= tot.efectivo)) { mostrarMensaje(root, `El monto recibido debe cubrir ${formatoDinero(tot.efectivo)} en efectivo.`, 'error'); return; }
     if (chkCliente.checked && !clienteSel) { mostrarMensaje(root, 'Busca o registra al cliente, o desmarca la casilla.', 'error'); return; }
@@ -393,6 +418,7 @@ async function pantallaPOS() {
           metodoPago: g.metodo,
           tipoVenta: g.payjoy ? 1 : 0,
           montoAbonado: posRedondear(g.items.reduce((sum, i) => sum + posCobroHoy(i), 0)),
+          pagos: g.mixto ? posMixtoPagos() : undefined,
           observaciones: document.getElementById('pv-obs').value.trim() || null,
           claveOffline: uuid(),
           idOperacion,
@@ -483,7 +509,22 @@ function actualizarTotalesPOS() {
   const hayPayjoy = t.enganches > 0 || posCarrito.some(i => i.formaPago === 'PayJoy');
   contTotal.innerHTML = `<span class="bt-detalle">${hayPayjoy ? `Contado ${formatoDinero(t.contado)} · Enganches ${formatoDinero(t.enganches)}` : `${piezas} ${piezas === 1 ? 'artículo' : 'artículos'}`}</span><span class="bt-total"><small>${hayPayjoy ? 'Total hoy' : 'Total'}</small> ${formatoDinero(t.total)}</span>`;
   document.getElementById('pv-efectivo-cont')?.classList.toggle('oculto', t.efectivo <= 0.004);
+  const mixto = posMetodoCarrito() === 4 && t.contado > 0.004;
+  document.getElementById('pv-mixto-cont')?.classList.toggle('oculto', !mixto);
+  const estado = document.getElementById('pv-mx-estado');
+  if (estado && mixto) { const m = posMixtoEstado(t.contado); estado.textContent = m.texto; estado.className = 'mixto-estado ' + (m.ok ? 'ok' : 'falta'); }
   actualizarCambioPOS();
+}
+
+/** ¿El desglose del pago mixto cuadra con lo que se cobra de contado? */
+function posMixtoEstado(contado) {
+  const d = posMixtoDesglose();
+  const suma = posRedondear(d[1] + d[2] + d[3]);
+  const formas = [d[1], d[2], d[3]].filter(m => m > 0.004).length;
+  const falta = posRedondear(contado - suma);
+  if (Math.abs(falta) >= 0.005) return { ok: false, texto: falta > 0 ? `Faltan ${formatoDinero(falta)} por repartir (de ${formatoDinero(contado)})` : `Se pasa por ${formatoDinero(-falta)} (de ${formatoDinero(contado)})` };
+  if (formas < 2) return { ok: false, texto: 'Usa al menos dos formas de pago (si es una sola, elige ese método).' };
+  return { ok: true, texto: 'Cuadra: ' + formatoDinero(contado) };
 }
 
 function actualizarCarritoPOS() {

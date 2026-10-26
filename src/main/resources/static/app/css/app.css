@@ -711,6 +711,11 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
 /* Botón principal oscuro; el verde queda solo para mover dinero (cobrar, abonar, pagar) */
 .btn-verde { background: var(--oscuro); }
 .btn-verde.btn-dinero { background: var(--verde); }
+/* Pago mixto: cuánto se cobra en cada forma de pago */
+.mixto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 8px; }
+.mixto-estado { font-size: 13px; font-weight: 700; margin: 8px 0 2px; }
+.mixto-estado.ok { color: var(--verde); }
+.mixto-estado.falta { color: var(--rojo, #dc2626); }
 
 /* ══ Grupo 2: ventas (punto de venta, devoluciones, reportes) ═══════════════ */
 

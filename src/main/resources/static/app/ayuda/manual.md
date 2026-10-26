@@ -77,7 +77,8 @@ Si un cliente pide rebaja, en el renglón toca **Pedir descuento**, escribe cuá
 El cliente es **opcional**: si no marcas **Registrar cliente**, la venta queda de **mostrador**. Si la marcas, escribe el **teléfono (10 dígitos)** y pulsa **Buscar**: si ya existe aparece su nombre; si no, escribe su nombre y pulsa **Registrar** (quien puede crear clientes).
 
 ### Cobrar
-1. Elige la **forma de pago**: **Efectivo** o **Transferencia**. La **tarjeta** no se acepta por ahora: solo aparece si un administrador la habilita en **Ajustes › Formas de pago**.
+1. Elige la **forma de pago**: **Efectivo**, **Transferencia** o **Mixto**. La **tarjeta** no se acepta por ahora: solo aparece si un administrador la habilita en **Ajustes › Formas de pago**.
+   - **Mixto**: el cliente paga una parte de cada forma. Escribe cuánto va en **efectivo**, **transferencia** (y **tarjeta**, si se acepta); el sistema te dice cuánto falta o cuánto se pasa, y solo deja cobrar cuando **cuadra** con el total y usas **al menos dos formas**. En el cajón entra únicamente la parte en efectivo.
 2. En efectivo escribe el **monto recibido**; el sistema calcula el **cambio**. Si el carrito lleva un equipo a crédito, lo que se cobra hoy de ese equipo es solo su enganche.
 3. Pulsa **Cobrar**.
 
@@ -89,7 +90,7 @@ Si el carrito mezcla formas de cobro (por ejemplo accesorios en efectivo y un eq
 - **«El IMEI no está disponible»**: el equipo ya se vendió, está en otra tienda, en traspaso o en garantía, o está mal escrito. Búscalo en Equipos.
 - **«El precio de … es $X»**: los precios los define Inventario; el punto de venta no los cambia.
 
-> En la **web** el punto de venta necesita conexión y no maneja el **pago mixto** ni los cambios de producto. Para eso usa JSystem en la tienda.
+> En la **web** el punto de venta necesita conexión: si no hay internet, usa JSystem en la tienda.
 
 ## Caja
 
@@ -135,15 +136,13 @@ Sirven para regresar un producto vendido: se le **reembolsa** al cliente o se le
 4. Marca si el artículo está en **buen estado** (regresa a inventario) o **dañado** (se da de baja).
 5. Elige cómo se resuelve:
    - **Reembolso**: se devuelve el dinero. Si es en efectivo, sale de la caja (debe estar abierta).
-   - **Cambio**: el cliente se lleva otro producto. Lo nuevo debe valer **igual o más** que lo devuelto; si vale más, se cobra la diferencia. El cambio se hace en JSystem.
+   - **Cambio**: el cliente se lleva otro producto. Busca lo que se lleva (en un equipo, toca su IMEI) y agrega las piezas. Lo nuevo debe valer **igual o más** que lo devuelto; si vale más, elige **cómo paga la diferencia**. Al aprobarse se genera la venta del cambio.
 6. Pulsa **Solicitar devolución**.
 
 ### Aprobar o rechazar
 Un **encargado** o **administrador** revisa la solicitud: **Aprobar y ejecutar** mueve el inventario y el dinero, o **Rechazar** (con el motivo del rechazo). Hasta que se aprueba no cambia nada.
 
 > Una venta con una devolución pedida o procesada ya no se puede cancelar.
-
-> En la web solo se piden **reembolsos**; el cambio por otro producto se hace en JSystem.
 
 ## Inventario
 
