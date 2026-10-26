@@ -2,9 +2,10 @@
  * Skycel · Web para celular y tablet. Una sola página con ruteo por hash (#/...). Usa las mismas rutas de la
  * API que JSystem, con JWT en localStorage.
  *
- * Sistema de punto de venta: vender, inventario, traspasos, caja, clientes, cuentas por cobrar, reportes y devoluciones,
- * más el taller de reparaciones (recepción con cola sin conexión, órdenes y garantías) y empleados. Lo que necesita pago mixto,
- * venta a crédito o cambio de producto por otro sigue en JSystem.
+ * Sistema de punto de venta: vender (equipos por IMEI, PayJoy, promoción y descuentos con aprobación), inventario y equipos, traspasos,
+ * caja, clientes, cuentas por cobrar, reportes y devoluciones, más el taller de reparaciones (recepción con cola sin conexión, órdenes
+ * y garantías), el corte de servicios, los permisos por rol y empleados. Lo que necesita pago mixto o cambio de producto por otro
+ * sigue en JSystem. Las pantallas nuevas viven en js/*.js (pos, equipos, promocion, permisos, inventariofisico, garantias, servicios).
  */
 
 const PERSONAL = ['ROOT', 'ADMIN', 'ENCARGADO_TIENDA', 'VENDEDOR']; // puede recibir equipos, ver/crear clientes, garantías
@@ -33,9 +34,11 @@ function formatoFecha(iso) {
   return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) + ' ' +
     d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 }
+/** Sin centavos cuando son cero ($15,999); con ellos si el monto los trae (una comisión, un porcentaje): $1,234.50. Igual que JSystem. */
 function formatoDinero(n) {
   const v = Number(n || 0);
-  return '$' + v.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const entero = Math.abs(v - Math.round(v)) < 0.005;
+  return '$' + (entero ? Math.round(v) : v).toLocaleString('es-MX', entero ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 /** Fecha/hora local del dispositivo en el formato que espera el backend (sin 'Z': es hora local, no UTC). */
 function fechaLocalISO(d) {
@@ -137,10 +140,10 @@ function dibujarNavInferior() {
   if (!s) return;
   const ruta = location.hash.split('/')[1] || 'menu';
   const items = [{ h: '#/menu', i: ic('house'), t: 'Inicio', clave: 'menu' }];
-  if (PERSONAL.includes(s.rol)) {
+  if (Sesion.tiene('VENTA_CREAR')) {
     items.push({ h: '#/pos', i: ic('shopping-cart'), t: 'Vender', clave: 'pos' });
     items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', clave: 'inventario' });
-    items.push(GESTOR_ROLES.includes(s.rol)
+    items.push(Sesion.tiene('CAJA_MOVIMIENTOS')
       ? { h: '#/caja', i: ic('receipt'), t: 'Caja', clave: 'caja' }
       : { h: '#/clientes', i: ic('users'), t: 'Clientes', clave: 'clientes' });
   } else {
@@ -172,25 +175,32 @@ async function obtenerBajoStock(codti) {
  */
 function itemsMenu(s, pend, err, bajoStock) {
   const items = [];
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/pos', i: ic('shopping-cart'), t: 'Punto de venta', grupo: 'Ventas' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/devoluciones', i: ic('undo-2'), t: 'Devoluciones', grupo: 'Ventas' });
-  items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Inventario' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/inventario-fisico', i: ic('scan-barcode'), t: 'Inventario físico', grupo: 'Inventario' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/compras', i: ic('shopping-bag'), t: 'Compras y cuentas por pagar', grupo: 'Finanzas' });
-  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/descuentos', i: ic('tags'), t: 'Descuentos', grupo: 'Finanzas' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reportes', grupo: 'Finanzas' });
-  items.push({ h: '#/clientes', i: ic('users'), t: 'Clientes', grupo: 'Clientes' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/garantias', i: ic('shield-check'), t: 'Garantías', grupo: 'Clientes' });
-  if (PERSONAL.includes(s.rol)) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir equipo', grupo: 'Taller' });
-  if (TALLER_ROLES.includes(s.rol)) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', grupo: 'Taller' });
-  items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
-  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
-  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
-  if (SUPERIOR.includes(s.rol)) items.push({ h: '#/comisiones', i: ic('percent'), t: 'Comisiones', grupo: 'Administración' });
-  if (GESTOR_ROLES.includes(s.rol)) items.push({ h: '#/descansos', i: ic('calendar'), t: 'Descansos', grupo: 'Administración' });
+  // Cada sección aparece si el rol de quien entró tiene el permiso de usarla (root los cambia en «Permisos»), igual que en JSystem
+  const tiene = Sesion.tiene;
+  const vendeOInventaria = tiene('VENTA_CREAR', 'INVENTARIO_AJUSTAR', 'INVENTARIO_EDITAR', 'INVENTARIO_FISICO', 'TRASPASOS');
+  if (tiene('VENTA_CREAR')) items.push({ h: '#/pos', i: ic('shopping-cart'), t: 'Punto de venta', grupo: 'Ventas' });
+  if (tiene('DEVOLUCION_SOLICITAR')) items.push({ h: '#/devoluciones', i: ic('undo-2'), t: 'Devoluciones', grupo: 'Ventas' });
+  if (tiene('CORTE_SERVICIOS_CAPTURAR')) items.push({ h: '#/servicios', i: ic('receipt'), t: 'Corte de servicios', grupo: 'Ventas' });
+  if (vendeOInventaria || s.rol === 'TECNICO') items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Inventario' });
+  if (vendeOInventaria) items.push({ h: '#/equipos', i: ic('smartphone'), t: 'Equipos', grupo: 'Inventario' });
+  if (tiene('INVENTARIO_FISICO', 'INVENTARIO_CONFIRMAR')) items.push({ h: '#/inventario-fisico', i: ic('scan-barcode'), t: 'Inventario físico', grupo: 'Inventario' });
+  if (tiene('TRASPASOS')) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
+  if (tiene('CATALOGOS_EDITAR')) items.push({ h: '#/catalogos', i: ic('list'), t: 'Catálogos', grupo: 'Inventario' });
+  if (tiene('DESCUENTOS')) items.push({ h: '#/descuentos', i: ic('tags'), t: 'Descuentos', grupo: 'Finanzas' });
+  if (tiene('CAJA_MOVIMIENTOS')) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
+  if (tiene('COMPRAS')) items.push({ h: '#/compras', i: ic('shopping-bag'), t: 'Compras y cuentas por pagar', grupo: 'Finanzas' });
+  if (tiene('CUENTAS_COBRAR')) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
+  if (tiene('VENTA_HISTORIAL', 'REPORTES')) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reportes', grupo: 'Finanzas' });
+  if (tiene('VENTA_CREAR', 'CLIENTE_EDITAR')) items.push({ h: '#/clientes', i: ic('users'), t: 'Clientes', grupo: 'Clientes' });
+  if (tiene('GARANTIAS')) items.push({ h: '#/garantias', i: ic('shield-check'), t: 'Garantías', grupo: 'Clientes' });
+  if (tiene('ORDEN_RECIBIR')) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir equipo', grupo: 'Taller' });
+  if (tiene('TALLER_TRABAJAR')) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', grupo: 'Taller' });
+  if (tiene('ORDEN_CONSULTAR', 'ORDEN_RECIBIR', 'TALLER_TRABAJAR')) items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
+  if (tiene('EMPLEADOS_ADMIN')) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
+  if (s.rol === 'ROOT') items.push({ h: '#/permisos', i: ic('lock'), t: 'Permisos', grupo: 'Administración' });
+  if (tiene('NOMINA')) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
+  if (tiene('NOMINA')) items.push({ h: '#/comisiones', i: ic('percent'), t: 'Comisiones', grupo: 'Administración' });
+  if (tiene('DESCANSOS')) items.push({ h: '#/descansos', i: ic('calendar'), t: 'Descansos', grupo: 'Administración' });
   items.push({ h: '#/ayuda', i: ic('circle-help'), t: 'Ayuda', grupo: null });
   items.push({ h: '#/pendientes', i: ic('cloud-upload'), t: 'Guardado en el equipo', badge: (pend + err) > 0 ? (pend + err) : null, grupo: null });
   return items;
@@ -251,6 +261,9 @@ async function render() {
   if (!s && ruta !== 'login') { navegar('#/login'); return; }
   if (s && ruta === 'login') { navegar('#/menu'); return; }
 
+  // Una vez por carga de la página se traen los permisos del rol (root los puede haber cambiado): si cambiaron, se redibuja
+  if (s && !s.permisos) await Sesion.cargarPermisos(true);
+  else if (s) Sesion.cargarPermisos().then(cambio => { if (cambio) render(); });
   await actualizarEncabezado();
   actualizarBarraConexion();
 
@@ -298,6 +311,9 @@ async function render() {
     if (ruta === 'ayuda') return pantallaAyuda(param);
     if (ruta === 'notificaciones') return pantallaNotificaciones();
     if (ruta === 'catalogos') return pantallaCatalogos();
+    if (ruta === 'equipos') return pantallaEquipos();
+    if (ruta === 'servicios') return pantallaServicios();
+    if (ruta === 'permisos') return pantallaPermisos();
     navegar('#/menu');
   } catch (err) {
     root.innerHTML = `<div class="tarjeta"><div class="mensaje error">${escapar(err.message || 'Ocurrió un error')}</div>
@@ -371,7 +387,7 @@ function pantallaLogin() {
       const r = await api('POST', '/api/auth/login', { username: user.value.trim(), password: pass.value });
       Sesion.guardar({
         token: r.token, idusuario: r.idusuario, username: r.username, nombreCompleto: r.nombreCompleto,
-        rol: r.rol, codti: r.codti, tecnicoEncargado: r.tecnicoEncargado,
+        rol: r.rol, codti: r.codti, tecnicoEncargado: r.tecnicoEncargado, permisos: r.permisos || undefined,
       });
       navegar('#/menu');
       actualizarBadgeNotificaciones();
@@ -409,9 +425,9 @@ async function pantallaMenu() {
   const err = await Net.cantidadConError();
   const bajoStock = await obtenerBajoStock(s.codti);
   const tarjetas = itemsMenu(s, pend, err, bajoStock);
-  const gestor = GESTOR_ROLES.includes(s.rol);
-  const personal = PERSONAL.includes(s.rol);
-  const enTaller = TALLER_ROLES.includes(s.rol);
+  const gestor = Sesion.tiene('VENTA_HISTORIAL', 'REPORTES', 'CAJA_MOVIMIENTOS');
+  const personal = Sesion.tiene('VENTA_CREAR');
+  const enTaller = Sesion.tiene('TALLER_TRABAJAR');
   const fecha = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   // Accesos directos del banner: los módulos de uso diario que le tocan a su rol (los demás están en el menú lateral)
   const preferidos = ['Devoluciones', 'Caja', 'Inventario', 'Cuentas por cobrar', 'Clientes', 'Taller', 'Recibir equipo', 'Consultar orden'];
@@ -485,7 +501,7 @@ async function pantallaMenu() {
       </div>`).join('')}
     </div>
     <div class="ayuda" style="text-align:center; margin-top:20px;">
-      Para pagos mixtos, ventas a crédito y cambios de producto, usa JSystem en la tienda.
+      Para pagos mixtos y cambios de producto, usa JSystem en la tienda.
     </div>`;
   root.querySelectorAll('[data-h]').forEach(b => b.onclick = () => navegar(b.dataset.h));
   // El reloj del banner avanza solo mientras la pantalla siga siendo el Inicio
@@ -601,6 +617,28 @@ function pastillaColor(estadoDisplay, estadoColor) {
 function textoDias(d) { return d < 0 ? Math.abs(d) + ' días vencida' : 'vence en ' + d + ' días'; }
 
 // ── Turno de caja: abrir al iniciar el día y cerrar con corte ────────────
+
+/**
+ * La cuenta del cajón como una suma: fondo inicial + ventas en efectivo + otras entradas (abonos, ingresos) − salidas = efectivo esperado.
+ * Debajo, cuántas ventas van y su total con cualquier forma de pago.
+ */
+function cuentaDelCajon(t) {
+  const r = t.resumen;
+  let ventasEfectivo = 0, otrasEntradas = 0;
+  (r?.movimientos || []).forEach(m => { if (m.tipo !== 1) return; if (m.motivo === 'Venta') ventasEfectivo += Number(m.total); else otrasEntradas += Number(m.total); });
+  const caja = (valor, etiqueta, clase) => `<div class="cc-casilla"><small>${etiqueta}</small><b class="${clase || ''}">${valor}</b></div>`;
+  const nv = r ? r.numVentas : 0;
+  const porMetodo = (r?.ventasPorMetodo || []).map(m => `${escapar(m.metodo)} ${formatoDinero(m.total)}`).join(' · ');
+  return `
+    <div class="cuenta-cajon">
+      ${caja(formatoDinero(t.fondoInicial), 'Fondo inicial')}<span class="op">+</span>
+      ${caja(formatoDinero(ventasEfectivo), 'Ventas en efectivo')}<span class="op">+</span>
+      ${caja(formatoDinero(otrasEntradas), 'Otras entradas', 'monto-ok')}<span class="op">−</span>
+      ${caja(formatoDinero(r?.totalSalidas || 0), 'Salidas', 'monto-rojo')}<span class="op">=</span>
+      ${caja(formatoDinero(t.efectivoEsperado), 'Efectivo esperado', 'esperado')}
+    </div>
+    <div class="ayuda">${nv === 0 ? 'Sin ventas todavía' : `${nv} ${nv === 1 ? 'venta' : 'ventas'} por ${formatoDinero(r.totalVentas)} en total${porMetodo ? ' · ' + porMetodo : ''}`}${r && r.numAbonos > 0 ? ` · incluye ${r.numAbonos} abono(s) de clientes por ${formatoDinero(r.totalAbonos)}` : ''}</div>`;
+}
 
 /** Formulario para abrir la caja con su fondo inicial (sugerido: lo que se dejó al cerrar). */
 function formularioAbrirCaja(cont, idCaja, nombreCaja, fondoSugerido, alAbrir) {
@@ -746,7 +784,7 @@ function filaLista(titulo, meta, derecha) {
 
 async function pantallaRecepcion() {
   const s = Sesion.obtener();
-  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para recibir equipos.</div>'; return; }
+  if (!Sesion.tiene('ORDEN_RECIBIR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para recibir equipos.</div>'; return; }
 
   root.innerHTML = `
     ${cabeceraPantalla(ic('inbox') + ' Recibir equipo', 'Registra el equipo que el cliente deja para reparación')}
@@ -795,8 +833,9 @@ async function pantallaRecepcion() {
       <textarea id="rc-estado-fisico" placeholder="Golpes, rayones, daños visibles (opcional)"></textarea>
       <label class="obligatorio">Falla reportada</label>
       <textarea id="rc-falla" placeholder="Lo que dice el cliente que tiene"></textarea>
-      <label>Fecha prometida</label>
-      <input id="rc-fecha-promesa" type="date">
+      <label class="obligatorio">Tiempo estimado (horas)</label>
+      <input id="rc-horas" type="number" inputmode="numeric" min="1" max="720" value="24">
+      <div id="rc-entrega" class="ayuda"></div>
       <div id="rc-tecnico-cont"></div>
 
     </div>
@@ -887,6 +926,16 @@ async function pantallaRecepcion() {
   const contAnticipo = document.getElementById('rc-anticipo-cont');
   chkAnticipo.onchange = () => contAnticipo.classList.toggle('oculto', !chkAnticipo.checked);
   const selMetodo = document.getElementById('rc-anticipo-metodo');
+  negocioAceptaTarjeta().then(ok => { if (!ok) selMetodo.querySelector('option[value="2"]')?.remove(); });
+  // «Se le promete para el ...»: las horas a partir de ahora
+  const pintarEntrega = () => {
+    const h = Math.floor(Number(document.getElementById('rc-horas').value));
+    const el = document.getElementById('rc-entrega');
+    el.textContent = h >= 1 && h <= 720
+      ? 'Se le promete para el ' + new Date(Date.now() + h * 3600000).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  };
+  document.getElementById('rc-horas').addEventListener('input', pintarEntrega);
+  pintarEntrega();
   selMetodo.onchange = () => document.getElementById('rc-anticipo-folio-cont').classList.toggle('oculto', selMetodo.value === '1');
 
   // Enviar
@@ -911,6 +960,8 @@ async function pantallaRecepcion() {
     const codti = SUPERIOR.includes(s.rol) ? Number(document.getElementById('rc-codti')?.value || tiendaSel) : undefined;
     const idTecnicoSel = document.getElementById('rc-tecnico')?.value;
 
+    const horasEstimadas = Math.floor(Number(document.getElementById('rc-horas').value));
+    if (!(horasEstimadas >= 1 && horasEstimadas <= 720)) { mostrarMensaje(root, 'Indica el tiempo estimado en horas (de 1 a 720).', 'error'); return; }
     const payload = {
       codti,
       idcliente,
@@ -920,7 +971,7 @@ async function pantallaRecepcion() {
       accesoriosDejados: document.getElementById('rc-accesorios').value.trim() || null,
       estadoFisico: document.getElementById('rc-estado-fisico').value.trim() || null,
       fallaReportada: falla,
-      fechaPromesa: document.getElementById('rc-fecha-promesa').value || null,
+      horasEstimadas: horasEstimadas,
       idTecnico: idTecnicoSel ? Number(idTecnicoSel) : null,
       claveOffline: uuid(),
     };
@@ -972,7 +1023,7 @@ async function pantallaRecepcion() {
 
 async function pantallaTaller() {
   const s = Sesion.obtener();
-  if (!TALLER_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver el taller.</div>'; return; }
+  if (!Sesion.tiene('TALLER_TRABAJAR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver el taller.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('wrench') + ' Taller', 'Órdenes abiertas en reparación y por entregar')}
     <div class="kp-h">
@@ -1093,7 +1144,7 @@ async function pantallaOrdenDetalle(id) {
     return;
   }
 
-  const puedeTrabajar = TALLER_ROLES.includes(s.rol) && (SUPERIOR.includes(s.rol) || s.tecnicoEncargado || (s.rol === 'TECNICO' && o.idTecnico === s.idusuario));
+  const puedeTrabajar = Sesion.tiene('TALLER_TRABAJAR') && (SUPERIOR.includes(s.rol) || s.tecnicoEncargado || (s.rol === 'TECNICO' && o.idTecnico === s.idusuario));
   const esTecnicoLibre = s.rol === 'TECNICO' && !o.idTecnico && o.estado === 1;
 
   root.innerHTML = `
@@ -1117,7 +1168,7 @@ async function pantallaOrdenDetalle(id) {
       <div class="detalle-fila"><span class="k">Diagnóstico</span><span class="v">${escapar(o.diagnostico || '—')}</span></div>
       <div class="detalle-fila"><span class="k">Técnico</span><span class="v">${escapar(o.nombreTecnico || 'Sin asignar')}</span></div>
       <div class="detalle-fila"><span class="k">Recibió</span><span class="v">${escapar(o.nombreRecibe)}</span></div>
-      <div class="detalle-fila"><span class="k">Fecha prometida</span><span class="v">${o.fechaPromesa || '—'}</span></div>
+      <div class="detalle-fila"><span class="k">Fecha prometida</span><span class="v">${o.fechaPromesaHora ? formatoFecha(o.fechaPromesaHora) + (o.horasEstimadas != null ? ' (' + o.horasEstimadas + ' h)' : '') : (o.fechaPromesa || '—')}</span></div>
     </div>
 
     <div id="dt-acciones" class="tarjeta oculto">
@@ -1269,7 +1320,7 @@ async function dibujarColaAbonos() {
 
 async function pantallaClientes() {
   const s = Sesion.obtener();
-  const puedeCrear = GESTOR_ROLES.includes(s.rol);
+  const puedeCrear = Sesion.tiene('CLIENTE_EDITAR');
   root.innerHTML = `
     ${cabeceraPantalla(ic('users') + ' Clientes', 'Gestión de clientes y su historial de compras', puedeCrear ? `<button id="cl-nuevo" class="btn btn-azul">${ic('plus')} Nuevo cliente</button>` : '')}
     <div id="cl-form" class="oculto"></div>
@@ -1410,8 +1461,8 @@ async function pantallaClienteDetalle(id) {
 
   const acciones = document.getElementById('cd-acciones');
   const botones = [];
-  if (GESTOR_ROLES.includes(s.rol)) botones.push({ t: ic('pencil') + ' Editar', color: 'btn-azul', fn: () => dibujarFormularioCliente(document.getElementById('cd-form'), c, () => pantallaClienteDetalle(id)) });
-  if (SUPERIOR.includes(s.rol)) botones.push({ t: ic('trash-2') + ' Desactivar', color: 'btn-rojo', fn: async () => {
+  if (Sesion.tiene('CLIENTE_EDITAR')) botones.push({ t: ic('pencil') + ' Editar', color: 'btn-azul', fn: () => dibujarFormularioCliente(document.getElementById('cd-form'), c, () => pantallaClienteDetalle(id)) });
+  if (Sesion.tiene('CLIENTE_DESACTIVAR')) botones.push({ t: ic('trash-2') + ' Desactivar', color: 'btn-rojo', fn: async () => {
     if (!confirm('¿Desactivar a ' + c.nombreCompleto + '? Ya no aparecerá en la lista.')) return;
     try { await api('DELETE', '/api/clientes/' + id); navegar('#/clientes'); }
     catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
@@ -1428,7 +1479,7 @@ const METODOS_ABONO = { 1: 'Efectivo', 2: 'Tarjeta', 3: 'Transferencia', 4: 'Pay
 
 async function pantallaCxC() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver cuentas por cobrar.</div>'; return; }
+  if (!Sesion.tiene('CUENTAS_COBRAR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver cuentas por cobrar.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('credit-card') + ' Cuentas por cobrar', 'Control de créditos y pagos pendientes de los clientes')}
     <div class="kp-h">
@@ -1545,6 +1596,7 @@ async function pantallaCuentaDetalle(id) {
   cargarHistorialAbonos(id);
 
   if (cuenta.saldoPendiente > 0) {
+    ajustarMetodosDeCobro('ab-metodo');
     document.getElementById('ab-btn').onclick = async (e) => {
       const monto = Number(document.getElementById('ab-monto').value);
       if (!monto || monto <= 0) { mostrarMensaje(root, 'Indica un monto válido.', 'error'); return; }
@@ -1610,9 +1662,9 @@ async function cargarHistorialAbonos(id) {
 
 async function pantallaCompras() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver compras.</div>'; return; }
+  if (!Sesion.tiene('COMPRAS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver compras.</div>'; return; }
   root.innerHTML = `
-    ${cabeceraPantalla(ic('shopping-bag') + ' Compras y cuentas por pagar', 'Mercancía recibida de proveedores y lo que se les debe', `<button id="cp-nueva" class="btn btn-azul">${ic('plus')} Registrar compra</button>`)}
+    ${cabeceraPantalla(ic('shopping-bag') + ' Compras y cuentas por pagar', 'Lo que se les debe a los proveedores', `<button id="cp-nueva" class="btn btn-azul">${ic('plus')} Registrar compra</button>`)}
     <div class="kp-h">
       ${kpiH('c4', 'banknote', '…', 'Por pagar a proveedores', 'cp-k-pend')}
       ${kpiH('c6', 'triangle-alert', '…', 'Vencido', 'cp-k-venc')}
@@ -1726,6 +1778,7 @@ async function pantallaCompraDetalle(id) {
   cargarHistorialCompras(id);
 
   if (compra.saldoPendiente > 0) {
+    ajustarMetodosDeCobro('pc-metodo');
     document.getElementById('pc-btn').onclick = async (e) => {
       const monto = Number(document.getElementById('pc-monto').value);
       if (!monto || monto <= 0) { mostrarMensaje(root, 'Indica un monto válido.', 'error'); return; }
@@ -1766,14 +1819,16 @@ async function cargarHistorialCompras(id) {
 
 async function pantallaCompraNueva() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para registrar compras.</div>'; return; }
+  if (!Sesion.tiene('COMPRAS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para registrar compras.</div>'; return; }
   root.innerHTML = `
     <button class="enlace" id="cn-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
-    ${cabeceraPantalla(ic('shopping-bag') + ' Registrar compra', 'Mercancía que llega de un proveedor')}
+    ${cabeceraPantalla(ic('shopping-bag') + ' Registrar compra', 'Lo que se le debe a un proveedor')}
     <div class="tarjeta">
       <label class="obligatorio">Proveedor</label>
       <select id="cn-proveedor"><option>Cargando...</option></select>
       <div id="cn-tienda"></div>
+      <label class="obligatorio">Monto total</label>
+      <input id="cn-monto" type="number" inputmode="decimal" min="0.01" step="1" placeholder="Lo que se le debe al proveedor por esta compra">
       <label>Folio o factura del proveedor</label>
       <input id="cn-folio" placeholder="Opcional">
       <label>Vencimiento</label>
@@ -1781,46 +1836,18 @@ async function pantallaCompraNueva() {
       <div class="ayuda">Si no lo indicas, se calcula con los días de crédito del proveedor.</div>
       <label>Notas</label>
       <input id="cn-notas" placeholder="Opcional">
-    </div>
-
-    <div class="tarjeta">
-      <h2 style="margin-top:0;">Agregar productos</h2>
-      <input id="cn-buscar" placeholder="Buscar producto por nombre o código...">
-      <div id="cn-resultados"></div>
-      <div id="cn-form-linea"></div>
-    </div>
-
-    <div class="tarjeta">
-      <h2 style="margin-top:0;">Productos de esta compra</h2>
-      <div id="cn-lineas"><div class="vacio">Todavía no agregas productos.</div></div>
-      <div class="orden-meta" style="margin-top:10px;"><span>Total</span><span id="cn-total" style="font-weight:800; font-size:16px;">$0.00</span></div>
-    </div>
-    <button id="cn-guardar" class="btn btn-verde" disabled>Registrar compra</button>`;
+      <div class="ayuda">Una compra es lo que se debe a un proveedor: basta con el monto total. La mercancía se da de alta aparte, en Inventario o en Equipos, que ya guardan el proveedor, la fecha y la hora de cada entrada.</div>
+      <button id="cn-guardar" class="btn btn-verde">Registrar compra</button>
+    </div>`;
 
   document.getElementById('cn-volver').onclick = () => navegar('#/compras');
 
   let codti = s.codti;
-  let productosTienda = [];
-  const lineas = []; // { codpro, nombre, cantidad, costoUnitario, subtotal, unidades? }
-
-  const cargarProductosTienda = async () => {
-    if (codti == null) return;
-    try { productosTienda = await api('GET', `/api/productos/tienda/${codti}`); }
-    catch { productosTienda = []; }
-  };
-
-  const contTienda = document.getElementById('cn-tienda');
-  codti = await dibujarSelectorSucursal(contTienda, s, async (nuevo) => {
-    codti = nuevo;
-    await cargarProductosTienda();
-    if (lineas.length > 0) { lineas.length = 0; dibujarLineas(); mostrarMensaje(root, 'Cambiaste de sucursal: se vaciaron los productos ya agregados.', 'info'); }
-  });
-  await cargarProductosTienda();
+  codti = await dibujarSelectorSucursal(document.getElementById('cn-tienda'), s, (nuevo) => { codti = nuevo; });
 
   const selProveedor = document.getElementById('cn-proveedor');
-  let proveedores = [];
   try {
-    proveedores = await api('GET', '/api/catalogos/proveedores');
+    const proveedores = await api('GET', '/api/catalogos/proveedores');
     selProveedor.innerHTML = proveedores.length
       ? proveedores.map(p => `<option value="${p.id}">${escapar(p.nombreCorto || p.nombreFiscal)}</option>`).join('')
       : '<option value="">Sin proveedores activos</option>';
@@ -1828,106 +1855,19 @@ async function pantallaCompraNueva() {
     selProveedor.innerHTML = '<option value="">No se pudo cargar (sin conexión)</option>';
   }
 
-  const contResultados = document.getElementById('cn-resultados');
-  const contFormLinea = document.getElementById('cn-form-linea');
-  document.getElementById('cn-buscar').addEventListener('input', (e) => {
-    const q = e.target.value.trim();
-    contFormLinea.innerHTML = '';
-    if (q.length < 2) { contResultados.innerHTML = ''; return; }
-    const candidatos = filtrarProductos(productosTienda.filter(p => p.tipo !== 'SERVICIO'), q).slice(0, 15);
-    contResultados.innerHTML = candidatos.length === 0 ? '<div class="vacio">Sin resultados.</div>' : candidatos.map(p => `
-      <div class="orden-item" data-codpro="${escapar(p.codpro)}">
-        <div class="orden-cab">
-          <span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
-          <span class="ayuda">Stock: ${Number(p.stock)}</span>
-        </div>
-        <div class="orden-cliente">${escapar(p.codpro)}</div>
-      </div>`).join('');
-    contResultados.querySelectorAll('.orden-item').forEach(el => {
-      el.onclick = () => {
-        const p = candidatos.find(x => x.codpro === el.dataset.codpro);
-        dibujarFormularioLinea(p);
-      };
-    });
-  });
-
-  function dibujarFormularioLinea(p) {
-    const esEquipo = p.tipo === 'CELULAR' || p.tipo === 'TABLET';
-    contFormLinea.innerHTML = `
-      <div class="tarjeta" style="background:var(--gris-claro); box-shadow:none;">
-        <h2 style="margin-top:0;">${escapar(p.nombreProductoMaster)}</h2>
-        ${esEquipo ? `
-          <label class="obligatorio">IMEIs recibidos (uno por línea)</label>
-          <textarea id="ln-imeis" placeholder="Un IMEI o serie por línea"></textarea>
-          <label class="obligatorio">Costo por unidad</label>
-          <input id="ln-costo" type="number" inputmode="decimal" min="0.01" step="0.01">
-        ` : `
-          <label class="obligatorio">Cantidad</label>
-          <input id="ln-cantidad" type="number" inputmode="decimal" min="0.01" step="1" value="1">
-          <label class="obligatorio">Costo unitario</label>
-          <input id="ln-costo" type="number" inputmode="decimal" min="0.01" step="0.01" value="${p.preciopro ?? ''}">
-        `}
-        <button id="ln-agregar" class="btn btn-azul">${ic('plus')} Agregar a la compra</button>
-      </div>`;
-
-    document.getElementById('ln-agregar').onclick = () => {
-      const costo = Number(document.getElementById('ln-costo').value);
-      if (!costo || costo <= 0) { mostrarMensaje(root, 'Indica un costo válido.', 'error'); return; }
-      if (esEquipo) {
-        const imeis = document.getElementById('ln-imeis').value.split('\n').map(x => x.trim()).filter(Boolean);
-        if (imeis.length === 0) { mostrarMensaje(root, 'Indica al menos un IMEI.', 'error'); return; }
-        lineas.push({
-          codpro: p.codpro, nombre: p.nombreProductoMaster, cantidad: imeis.length,
-          costoUnitario: costo, subtotal: costo * imeis.length,
-          unidades: imeis.map(imei => ({ imei, costoUnitario: costo })),
-        });
-      } else {
-        const cantidad = Number(document.getElementById('ln-cantidad').value);
-        if (!cantidad || cantidad <= 0) { mostrarMensaje(root, 'Indica una cantidad válida.', 'error'); return; }
-        lineas.push({ codpro: p.codpro, nombre: p.nombreProductoMaster, cantidad, costoUnitario: costo, subtotal: costo * cantidad });
-      }
-      contFormLinea.innerHTML = '';
-      document.getElementById('cn-buscar').value = '';
-      contResultados.innerHTML = '';
-      dibujarLineas();
-    };
-  }
-
-  function dibujarLineas() {
-    const cont = document.getElementById('cn-lineas');
-    cont.innerHTML = lineas.length === 0 ? '<div class="vacio">Todavía no agregas productos.</div>' : lineas.map((l, idx) => `
-      <div class="orden-item">
-        <div class="orden-cab">
-          <span class="orden-folio">${escapar(l.nombre)}</span>
-          <button class="btn btn-rojo btn-chico cn-quitar" data-idx="${idx}">Quitar</button>
-        </div>
-        <div class="orden-meta"><span class="ayuda">${l.cantidad} × ${formatoDinero(l.costoUnitario)}</span><span style="font-weight:700;">${formatoDinero(l.subtotal)}</span></div>
-      </div>`).join('');
-    cont.querySelectorAll('.cn-quitar').forEach(b => b.onclick = () => { lineas.splice(Number(b.dataset.idx), 1); dibujarLineas(); });
-    const total = lineas.reduce((sum, l) => sum + l.subtotal, 0);
-    document.getElementById('cn-total').textContent = formatoDinero(total);
-    document.getElementById('cn-guardar').disabled = lineas.length === 0;
-  }
-
   document.getElementById('cn-guardar').onclick = async (e) => {
-    if (lineas.length === 0) return;
     if (!selProveedor.value) { mostrarMensaje(root, 'Elige un proveedor.', 'error'); return; }
     if (codti == null) { mostrarMensaje(root, 'Elige una sucursal.', 'error'); return; }
-
+    const monto = Number(document.getElementById('cn-monto').value);
+    if (!(monto > 0)) { mostrarMensaje(root, 'Indica el monto total de la compra.', 'error'); return; }
     const payload = {
       idProveedor: Number(selProveedor.value),
       codti,
+      montoTotal: monto,
       folioProveedor: document.getElementById('cn-folio').value.trim() || null,
       fechaVencimiento: document.getElementById('cn-vencimiento').value || null,
       observaciones: document.getElementById('cn-notas').value.trim() || null,
-      lineas: lineas.map(l => ({
-        codpro: l.codpro,
-        cantidad: l.unidades ? null : l.cantidad,
-        costoUnitario: l.unidades ? null : l.costoUnitario,
-        unidades: l.unidades || null,
-      })),
     };
-
     e.target.disabled = true;
     e.target.innerHTML = '<span class="spinner"></span> Guardando...';
     try {
@@ -1962,9 +1902,10 @@ function pastillaGarantia(g) {
 
 async function pantallaGarantias() {
   const s = Sesion.obtener();
-  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver garantías.</div>'; return; }
+  if (!Sesion.tiene('GARANTIAS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver garantías.</div>'; return; }
   root.innerHTML = `
-    ${cabeceraPantalla(ic('shield-check') + ' Garantías', 'Reclamos de garantía y su viaje al proveedor')}
+    ${cabeceraPantalla(ic('shield-check') + ' Garantías', 'Reclamos de garantía y su viaje al proveedor', `<button id="ga-nueva" class="btn btn-azul">${ic('plus')} Recibir garantía</button>`)}
+    <div id="ga-form" class="oculto"></div>
     <div class="kp-h">
       ${kpiH('c1', 'shield-check', '…', 'Abiertas', 'ga-k-abiertas')}
       ${kpiH('c6', 'triangle-alert', '…', 'Vencidas', 'ga-k-venc')}
@@ -1983,6 +1924,7 @@ async function pantallaGarantias() {
       <div id="ga-lista" style="margin-top:14px;"><div class="vacio">Cargando...</div></div>
     </div>`;
 
+  document.getElementById('ga-nueva').onclick = () => formularioNuevaGarantia(document.getElementById('ga-form'), (g) => navegar('#/garantia/' + g.idgarantia));
   const cont = document.getElementById('ga-lista');
   let todas = [];
   try {
@@ -2075,12 +2017,13 @@ async function pantallaGarantiaDetalle(id) {
     ${cabeceraPantalla(escapar(g.folio), `${escapar(g.nombreProducto)} · ingresó ${formatoFecha(g.fechaIngreso)}`, pastillaGarantia(g))}
     <div class="tarjeta">
       <h2>Información de la garantía</h2>
-      ${g.ventaAnterior ? `<div class="detalle-fila"><span class="k">Compra</span><span class="v">Sistema anterior${g.folioVentaAnterior ? ' · ticket ' + escapar(g.folioVentaAnterior) : ''} · ${escapar(g.fechaVentaOriginal || '—')} · cubría hasta ${escapar(g.garantiaVigenteHasta || '—')}</span></div>`
+      ${g.vitrina ? `<div class="detalle-fila"><span class="k">Origen</span><span class="v">Equipo de vitrina: no se había vendido; mientras está fuera no cuenta en las existencias</span></div>`
+        : g.ventaAnterior ? `<div class="detalle-fila"><span class="k">Compra</span><span class="v">Sistema anterior${g.folioVentaAnterior ? ' · ticket ' + escapar(g.folioVentaAnterior) : ''} · ${escapar(g.fechaVentaOriginal || '—')} · cubría hasta ${escapar(g.garantiaVigenteHasta || '—')}</span></div>`
         : `<div class="detalle-fila"><span class="k">Venta</span><span class="v">#${g.idventa}${g.fechaVentaOriginal ? ' · ' + escapar(g.fechaVentaOriginal) : ''}</span></div>`}
       <div class="detalle-fila"><span class="k">Producto</span><span class="v">${escapar(g.nombreProducto)}</span></div>
       <div class="detalle-fila"><span class="k">IMEI/Serie</span><span class="v">${escapar(g.imei || '—')}</span></div>
-      <div class="detalle-fila"><span class="k">Contacto</span><span class="v">${escapar(g.nombreContacto || '—')}</span></div>
-      <div class="detalle-fila"><span class="k">Teléfono</span><span class="v">${escapar(g.telefonoContacto || '—')}</span></div>
+      ${g.vitrina ? '' : `<div class="detalle-fila"><span class="k">Contacto</span><span class="v">${escapar(g.nombreContacto || '—')}</span></div>
+      <div class="detalle-fila"><span class="k">Teléfono</span><span class="v">${escapar(g.telefonoContacto || '—')}</span></div>`}
       <div class="detalle-fila"><span class="k">Sucursal</span><span class="v">${escapar(g.nombreTienda)}</span></div>
       <div class="detalle-fila"><span class="k">Falla reportada</span><span class="v">${escapar(g.fallaReportada)}</span></div>
       <div class="detalle-fila"><span class="k">Proveedor</span><span class="v">${escapar(g.proveedor || '—')}</span></div>
@@ -2142,9 +2085,9 @@ function mostrarFormularioAvance(id, hacia) {
 
 async function pantallaReportes() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
-  const veCaja = SUPERIOR.includes(s.rol);
-  const veResultados = GESTOR_ROLES.includes(s.rol);
+  if (!Sesion.tiene('VENTA_HISTORIAL', 'REPORTES')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
+  const veCaja = Sesion.tiene('REPORTES_CONSOLIDADOS');
+  const veResultados = Sesion.tiene('REPORTES');
   root.innerHTML = `
     ${cabeceraPantalla(ic('chart-column') + ' Reportes', 'Ventas, resultados, resumen gerencial, productos rezagados y caja')}
     <div class="segmentado">
@@ -2829,7 +2772,7 @@ async function cargarManual() {
 /** El tema del manual que corresponde a la pantalla (la ruta) donde está la persona; F1 y el botón «?» lo usan. */
 function temaDeRuta(ruta) {
   const mapa = {
-    pos: 'Punto de Venta', caja: 'Caja', corte: 'Caja', devoluciones: 'Devoluciones', devolucion: 'Devoluciones',
+    pos: 'Punto de Venta', equipos: 'Equipos', servicios: 'Corte de Servicios', permisos: 'Roles y permisos', caja: 'Caja', corte: 'Caja', devoluciones: 'Devoluciones', devolucion: 'Devoluciones',
     inventario: 'Inventario', producto: 'Inventario', 'producto-editar': 'Inventario', catalogos: 'Inventario', auditoria: 'Inventario',
     'inventario-fisico': 'Inventario físico', traspasos: 'Traspasos', traspaso: 'Traspasos', 'traspaso-nuevo': 'Traspasos', faltantes: 'Traspasos',
     clientes: 'Clientes', cliente: 'Clientes', cxc: 'Cuentas por Cobrar', cuenta: 'Cuentas por Cobrar',
@@ -2905,219 +2848,7 @@ async function pantallaAyuda(param) {
   };
 }
 
-// ── Inventario físico por secciones ─────────────────────────────────────
-
-/** Inventario físico: Aperturar → Inventariar (escanear) → Catalogar diferencias → Finalizar. */
-async function pantallaInventarioFisico(param) {
-  const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para esta sección.</div>'; return; }
-  if (param === 'historial') return pantallaInventarioFisicoHistorial(s);
-
-  root.innerHTML = `
-    ${cabeceraPantalla(ic('scan-barcode') + ' Inventario físico', 'Conteo de existencias por secciones y revisión de diferencias')}
-    <div id="if-tienda"></div>
-    <div id="if-cuerpo"><div class="vacio">Cargando...</div></div>`;
-
-  let codti = s.codti;
-  const contTienda = document.getElementById('if-tienda');
-  if (SUPERIOR.includes(s.rol)) {
-    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="if-codti"><option>Cargando...</option></select>`;
-    try {
-      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
-      const sel = document.getElementById('if-codti');
-      sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
-      codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
-      if (codti != null) sel.value = codti;
-      sel.onchange = () => { codti = Number(sel.value); cargarInventarioFisico(codti); };
-    } catch {
-      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
-    }
-  } else {
-    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
-  }
-  if (codti != null) cargarInventarioFisico(codti);
-}
-
-async function cargarInventarioFisico(codti) {
-  const cont = document.getElementById('if-cuerpo');
-  cont.innerHTML = '<div class="vacio">Cargando...</div>';
-  try {
-    const a = await api('GET', `/api/inventario-fisico/tienda/${codti}/activa`);
-    if (!a.activa) {
-      cont.innerHTML = `
-        <div class="tarjeta" style="text-align:center;">
-          <p class="ayuda">No hay ninguna auditoría de inventario en curso para esta sucursal.</p>
-          <button id="if-aperturar" class="btn btn-verde">${ic('plus')} Aperturar inventario</button>
-          <button id="if-ver-historial" class="btn btn-gris" style="margin-top:8px;">${ic('history')} Ver historial</button>
-        </div>`;
-      document.getElementById('if-aperturar').onclick = async () => {
-        try {
-          await api('POST', `/api/inventario-fisico/aperturar?codti=${codti}`, undefined);
-          cargarInventarioFisico(codti);
-        } catch (err) { alert(err.message || 'No se pudo aperturar.'); }
-      };
-      document.getElementById('if-ver-historial').onclick = () => { location.hash = '#/inventario-fisico/historial'; };
-      return;
-    }
-    if (a.estado === 0) dibujarInventarioAbierto(cont, a, codti);
-    else dibujarInventarioCatalogando(cont, a, codti);
-  } catch (err) {
-    cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
-  }
-}
-
-function dibujarInventarioAbierto(cont, a, codti) {
-  cont.innerHTML = `
-    <div class="tarjeta">
-      <div class="ayuda">Auditoría #${a.idinventario} · Auditor: ${escapar(a.nombreAuditor)}</div>
-      <p><span class="pastilla pendiente">Inventariando</span></p>
-      <div class="buscador">
-        <input id="if-codpro" placeholder="Código del artículo (o escanear)">
-      </div>
-      <button id="if-escanear" class="btn btn-azul">${ic('scan-barcode')} Agregar</button>
-      <div class="ayuda" style="margin-top:6px;">${a.totalArticulos} artículo(s) contado(s) hasta ahora.</div>
-      <button id="if-cerrar-conteo" class="btn btn-ambar" style="margin-top:10px;">${ic('circle-check')} Cerrar conteo y pasar a catalogar</button>
-    </div>
-    <div id="if-lista-conteo" style="margin-top:10px;"></div>`;
-
-  const input = document.getElementById('if-codpro');
-  input.focus();
-  const escanear = async () => {
-    const codpro = input.value.trim();
-    if (!codpro) return;
-    try {
-      await api('POST', `/api/inventario-fisico/${a.idinventario}/escanear?codpro=${encodeURIComponent(codpro)}`, undefined);
-      input.value = '';
-      cargarInventarioFisico(codti);
-    } catch (err) { alert(err.message || 'No se pudo registrar.'); }
-  };
-  document.getElementById('if-escanear').onclick = escanear;
-  input.onkeydown = (e) => { if (e.key === 'Enter') escanear(); };
-  document.getElementById('if-cerrar-conteo').onclick = async () => {
-    if (!confirm('¿Cerrar el conteo? Ya no se podrán agregar más artículos y pasará a catalogar diferencias.')) return;
-    try {
-      await api('POST', `/api/inventario-fisico/${a.idinventario}/cerrar-conteo`, undefined);
-      cargarInventarioFisico(codti);
-    } catch (err) { alert(err.message || 'No se pudo cerrar el conteo.'); }
-  };
-
-  api('GET', `/api/inventario-fisico/${a.idinventario}`).then(det => {
-    const listaEl = document.getElementById('if-lista-conteo');
-    listaEl.innerHTML = det.items.length === 0 ? '<div class="vacio">Aún no hay artículos contados.</div>' : det.items.slice().reverse().map(it => `
-      <div class="detalle-fila">
-        <span class="k">${escapar(it.nombreArticulo || it.codpro)} <span class="ayuda">(${escapar(it.codpro)})</span></span>
-        <span class="v">${it.conteo} pza</span>
-      </div>`).join('');
-  }).catch(() => {});
-}
-
-function dibujarInventarioCatalogando(cont, a, codti) {
-  cont.innerHTML = `
-    <div class="tarjeta">
-      <div class="ayuda">Auditoría #${a.idinventario} · Auditor: ${escapar(a.nombreAuditor)}</div>
-      <p><span class="pastilla por-tomar">Catalogando diferencias</span></p>
-      <div class="ayuda">${a.totalConDiferencia} diferencia(s) encontradas, ${a.totalPendientes} sin catalogar.</div>
-      <button id="if-finalizar" class="btn btn-verde" style="margin-top:10px;" ${Number(a.totalPendientes) > 0 ? 'disabled' : ''}>${ic('circle-check')} Finalizar auditoría</button>
-    </div>
-    <div id="if-lista-dif" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
-
-  document.getElementById('if-finalizar').onclick = async () => {
-    if (!confirm('¿Finalizar la auditoría? Ya no se podrá modificar.')) return;
-    try {
-      await api('POST', `/api/inventario-fisico/${a.idinventario}/finalizar`, undefined);
-      alert('Auditoría finalizada.');
-      cargarInventarioFisico(codti);
-    } catch (err) { alert(err.message || 'No se pudo finalizar.'); }
-  };
-
-  const listaEl = document.getElementById('if-lista-dif');
-  api('GET', `/api/inventario-fisico/${a.idinventario}?soloDiferencias=true`).then(det => {
-    if (det.items.length === 0) { listaEl.innerHTML = '<div class="vacio">Sin diferencias.</div>'; return; }
-    listaEl.innerHTML = det.items.map(it => `
-      <div class="orden-item">
-        <div class="orden-cab">
-          <span class="orden-folio">${escapar(it.nombreArticulo || it.codpro)}</span>
-          ${it.estado === 1 ? '<span class="pastilla lista">Ajustado</span>' : it.estado === 2 ? '<span class="pastilla entregada">Justificado</span>' : '<span class="pastilla pendiente">Pendiente</span>'}
-        </div>
-        <div class="orden-equipo">${escapar(it.codpro)} · Contado: ${it.conteo} · Sistema: ${it.stockSistema}</div>
-        <div class="orden-meta">
-          <span class="orden-fecha">${it.diferencia > 0 ? '+' : ''}${it.diferencia} de diferencia</span>
-        </div>
-        ${it.estado === 0 ? `
-        <div class="grupo-botones" style="margin-top:8px;">
-          <button class="btn btn-verde btn-chico if-ajustar" data-id="${it.iddetalleInv}">Ajustar stock</button>
-          <button class="btn btn-gris btn-chico if-justificar" data-id="${it.iddetalleInv}">Justificar</button>
-        </div>` : ''}
-      </div>`).join('');
-    listaEl.querySelectorAll('.if-ajustar').forEach(btn => {
-      btn.onclick = async () => {
-        if (!confirm('¿Ajustar el stock del sistema al conteo físico?')) return;
-        try {
-          await api('POST', `/api/inventario-fisico/${a.idinventario}/detalle/${btn.dataset.id}/resolver?accion=AJUSTAR`, undefined);
-          cargarInventarioFisico(codti);
-        } catch (err) { alert(err.message || 'No se pudo ajustar.'); }
-      };
-    });
-    listaEl.querySelectorAll('.if-justificar').forEach(btn => {
-      btn.onclick = async () => {
-        const motivo = prompt('Motivo de la diferencia (no se tocará el stock):');
-        if (!motivo) return;
-        try {
-          await api('POST', `/api/inventario-fisico/${a.idinventario}/detalle/${btn.dataset.id}/resolver?accion=JUSTIFICAR&motivo=${encodeURIComponent(motivo)}`, undefined);
-          cargarInventarioFisico(codti);
-        } catch (err) { alert(err.message || 'No se pudo justificar.'); }
-      };
-    });
-  }).catch(err => {
-    listaEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
-  });
-}
-
-async function pantallaInventarioFisicoHistorial(s) {
-  root.innerHTML = `
-    ${cabeceraPantalla(ic('history') + ' Historial de inventario físico', 'Auditorías anteriores')}
-    <div id="ifh-tienda"></div>
-    <div id="ifh-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
-
-  let codti = s.codti;
-  const contTienda = document.getElementById('ifh-tienda');
-  const cargar = async () => {
-    if (codti == null) return;
-    const listaEl = document.getElementById('ifh-lista');
-    listaEl.innerHTML = '<div class="vacio">Cargando...</div>';
-    try {
-      const lista = await api('GET', `/api/inventario-fisico/tienda/${codti}/historial`);
-      listaEl.innerHTML = lista.length === 0 ? '<div class="vacio">Sin auditorías registradas.</div>' : lista.map(a => `
-        <div class="orden-item">
-          <div class="orden-cab">
-            <span class="orden-folio">Auditoría #${a.idinventario}</span>
-            <span class="pastilla ${a.estado === 2 ? 'lista' : a.estado === 1 ? 'por-tomar' : 'pendiente'}">${escapar(a.estadoDisplay)}</span>
-          </div>
-          <div class="orden-equipo">Auditor: ${escapar(a.nombreAuditor)}</div>
-          <div class="orden-fecha">${formatoFecha(a.fechaInicio)}${a.fechaFin ? ' — ' + formatoFecha(a.fechaFin) : ''}</div>
-          <div class="ayuda" style="margin-top:4px;">${a.totalFaltantes} faltante(s) · ${a.totalSobrantes} sobrante(s)</div>
-        </div>`).join('');
-    } catch (err) {
-      listaEl.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
-    }
-  };
-  if (SUPERIOR.includes(s.rol)) {
-    contTienda.innerHTML = `<label class="obligatorio">Sucursal</label><select id="ifh-codti"><option>Cargando...</option></select>`;
-    try {
-      const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen);
-      const sel = document.getElementById('ifh-codti');
-      sel.innerHTML = tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
-      codti = tiendas.find(t => t.codti === s.codti)?.codti ?? tiendas[0]?.codti;
-      if (codti != null) sel.value = codti;
-      sel.onchange = () => { codti = Number(sel.value); cargar(); };
-    } catch {
-      contTienda.innerHTML = '<div class="mensaje info">No se pudo cargar la lista de sucursales (sin conexión).</div>';
-    }
-  } else {
-    contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
-  }
-  cargar();
-}
+// El inventario físico (contar, revisar y confirmar) vive en js/inventariofisico.js.
 
 // ── Nómina ───────────────────────────────────────────────────────────────
 
@@ -3139,7 +2870,7 @@ function sugerirPeriodoNomina() {
 
 async function pantallaNomina() {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
+  if (!Sesion.tiene('NOMINA')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para manejar la nómina.</div>'; return; }
   root.innerHTML = `${cabeceraPantalla(ic('banknote') + ' Nómina', 'Períodos, percepciones y pagos del personal')}<div id="nm-cuerpo"><div class="vacio">Cargando...</div></div>`;
   cargarNomina();
 }
@@ -3226,7 +2957,7 @@ async function dibujarPeriodoActivo(cont, p) {
 
 async function pantallaNominaHistorial() {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
+  if (!Sesion.tiene('NOMINA')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para manejar la nómina.</div>'; return; }
   root.innerHTML = `${cabeceraPantalla(ic('history') + ' Historial de nómina', 'Períodos de pago anteriores')}<div id="nmh-lista"><div class="vacio">Cargando...</div></div>`;
   const listaEl = document.getElementById('nmh-lista');
   try {
@@ -3250,7 +2981,7 @@ async function pantallaNominaHistorial() {
 
 async function pantallaNominaDetalle(iddetalle) {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja la nómina.</div>'; return; }
+  if (!Sesion.tiene('NOMINA')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para manejar la nómina.</div>'; return; }
   root.innerHTML = `${cabeceraPantalla(ic('banknote') + ' Línea de nómina', 'Percepciones, deducciones y pago de un empleado')}<div id="nmd-cuerpo"><div class="vacio">Cargando...</div></div>`;
   cargarNominaDetalle(iddetalle, s);
 }
@@ -3379,12 +3110,12 @@ const TIPO_ICONO = { CELULAR: ic('smartphone'), TABLET: ic('smartphone'), ACCESO
 async function pantallaInventario() {
   const s = Sesion.obtener();
   bajoStockCache.expira = 0; // se refresca el badge del menú la próxima vez que se dibuje, por si aquí cambia el stock
-  const verCosto = GESTOR_ROLES.includes(s.rol);
+  const verCosto = Sesion.tiene('COSTOS_VER');
   root.innerHTML = `
-    ${cabeceraPantalla(ic('package') + ' Inventario', 'Control de productos y stock', SUPERIOR.includes(s.rol) ? `
-      <button id="iv-catalogos" class="btn btn-gris">${ic('tags')} Catálogos</button>
-      <button id="iv-nuevo" class="btn btn-azul">${ic('plus')} Nuevo producto</button>` : '')}
-    ${SUPERIOR.includes(s.rol) ? '<div id="iv-form" class="oculto"></div>' : ''}
+    ${cabeceraPantalla(ic('package') + ' Inventario', 'Control de productos y stock',
+      `<button id="iv-equipos" class="btn btn-gris">${ic('smartphone')} Equipos (IMEI)</button>` + (Sesion.tiene('CATALOGOS_EDITAR') ? `<button id="iv-catalogos" class="btn btn-gris">${ic('tags')} Catálogos</button>` : '')
+      + (Sesion.tiene('INVENTARIO_EDITAR') ? `<button id="iv-nuevo" class="btn btn-azul">${ic('plus')} Nuevo producto</button>` : ''))}
+    ${Sesion.tiene('INVENTARIO_EDITAR') ? '<div id="iv-form" class="oculto"></div>' : ''}
     <div class="kp-h" id="iv-kpis">
       ${kpiH('c1', 'package', '…', 'Total de productos', 'iv-k-total')}
       ${verCosto ? kpiH('c3', 'banknote', '…', 'Valor del inventario (al costo)', 'iv-k-valor') : ''}
@@ -3456,12 +3187,14 @@ async function pantallaInventario() {
     contTienda.innerHTML = '<div class="ayuda">Sucursal: <strong>tu tienda</strong></div>';
   }
 
+  document.getElementById('iv-equipos').onclick = () => navegar('#/equipos');
   document.getElementById('iv-buscar').addEventListener('input', refrescarListaInventario);
   document.getElementById('iv-bajo-stock').addEventListener('change', refrescarListaInventario);
   document.getElementById('iv-cat').addEventListener('change', refrescarListaInventario);
   cargar();
 
-  if (SUPERIOR.includes(s.rol)) {
+  if (document.getElementById('iv-catalogos')) document.getElementById('iv-catalogos').onclick = () => navegar('#/catalogos');
+  if (document.getElementById('iv-nuevo')) {
     let categorias = null;
     document.getElementById('iv-nuevo').onclick = async () => {
       const cont = document.getElementById('iv-form');
@@ -3472,7 +3205,6 @@ async function pantallaInventario() {
       }
       dibujarFormularioProducto(cont, categorias, () => codti, () => { cont.classList.add('oculto'); cargar(); });
     };
-    document.getElementById('iv-catalogos').onclick = () => navegar('#/catalogos');
   }
 }
 
@@ -3864,8 +3596,9 @@ async function pantallaProductoDetalle(param) {
     return;
   }
 
-  const puedeEditar = GESTOR_ROLES.includes(s.rol);      // ajustar stock, ver costos y movimientos
-  const puedeEditarDatos = SUPERIOR.includes(s.rol);   // cambiar precios y datos del artículo: vista aparte
+  const puedeEditar = Sesion.tiene('INVENTARIO_AJUSTAR');      // ajustar stock y ver los movimientos
+  const verCostoProducto = Sesion.tiene('COSTOS_VER');
+  const puedeEditarDatos = Sesion.tiene('INVENTARIO_EDITAR');   // cambiar precios y datos del artículo: vista aparte
   const rutaCategoria = [p.categoriaPrincipal, p.subcategoria1, p.subcategoria2].filter(Boolean).join(' › ') || p.nombreCategoria || '';
   root.innerHTML = `
     <button class="enlace" id="pd-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver a inventario</button>
@@ -3875,7 +3608,7 @@ async function pantallaProductoDetalle(param) {
     <div class="kp-h">
       ${p.tipo !== 'SERVICIO' ? kpiH(p.bajoStock ? 'c4' : 'c3', 'package', String(Number(p.stock)), 'En existencia' + (Number(p.stockMinimo) > 0 ? ' (mínimo ' + Number(p.stockMinimo) + ')' : '')) : ''}
       ${kpiH('c1', 'banknote', formatoDinero(p.preciopub), 'Precio de venta')}
-      ${puedeEditar ? kpiH('c5', 'tags', formatoDinero(p.preciopro), 'Precio de compra') : ''}
+      ${verCostoProducto ? kpiH('c5', 'tags', formatoDinero(p.preciopro), 'Precio de compra') : ''}
       ${p.diasGarantia ? kpiH('c2', 'shield-check', p.diasGarantia + ' días', 'Garantía') : ''}
     </div>
     <div class="det-grid">
@@ -3963,7 +3696,7 @@ async function pantallaProductoDetalle(param) {
 async function pantallaProductoEditar(param) {
   const [codti, codpro] = param.split('~').map(decodeURIComponent);
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador puede editar productos.</div>'; return; }
+  if (!Sesion.tiene('INVENTARIO_EDITAR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para editar productos.</div>'; return; }
   root.innerHTML = '<div class="vacio">Cargando...</div>';
   let p, categorias = [], proveedores = [], colores = [];
   const volver = `#/producto/${encodeURIComponent(codti)}~${encodeURIComponent(codpro)}`;
@@ -4214,7 +3947,7 @@ async function cargarHistorialInventario(codti, codpro) {
 
 async function pantallaCaja() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver caja.</div>'; return; }
+  if (!Sesion.tiene('CAJA_MOVIMIENTOS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver caja.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('receipt') + ' Caja', 'Saldo y movimientos de efectivo', `<button id="cj-nuevo" class="btn btn-azul">${ic('plus')} Nuevo movimiento</button>`)}
     <div class="tarjeta iv-filtros">
@@ -4253,7 +3986,7 @@ async function pantallaCaja() {
       } else {
         idCaja = cajas[0].idCaja;
       }
-      if (SUPERIOR.includes(s.rol)) {
+      if (Sesion.tiene('CAJA_CONFIG')) {
         html += `<button id="cj-nueva-caja" class="btn btn-gris btn-chico" style="margin-top:8px;">+ Nueva caja</button><div id="cj-caja-form" class="oculto"></div>`;
       }
       contCaja.innerHTML = html;
@@ -4261,7 +3994,7 @@ async function pantallaCaja() {
         document.getElementById('cj-idcaja').value = idCaja;
         document.getElementById('cj-idcaja').onchange = (e) => { idCaja = Number(e.target.value); cargarSaldoYMovimientos(); };
       }
-      if (SUPERIOR.includes(s.rol)) {
+      if (Sesion.tiene('CAJA_CONFIG')) {
         document.getElementById('cj-nueva-caja').onclick = () => {
           const contForm = document.getElementById('cj-caja-form');
           contForm.classList.toggle('oculto');
@@ -4304,7 +4037,7 @@ async function pantallaCaja() {
         cont.innerHTML = `
           <div class="tarjeta turno turno-abierto">
             <div><span class="punto-estado verde"></span><strong>Caja abierta</strong> desde ${formatoFecha(t.fechaApertura)} por ${escapar(t.usuarioApertura)}</div>
-            <div class="ayuda">Fondo inicial ${formatoDinero(t.fondoInicial)} · efectivo esperado <strong>${formatoDinero(t.efectivoEsperado)}</strong>${t.resumen ? ` · ${t.resumen.numVentas} ventas por ${formatoDinero(t.resumen.totalVentas)}` : ''}</div>
+            ${cuentaDelCajon(t)}
             <div class="grupo-botones"><button id="cj-cerrar" class="btn btn-azul btn-chico">${ic('lock')} Cerrar caja (corte)</button></div>
           </div>`;
         document.getElementById('cj-cerrar').onclick = () => formularioCerrarCaja(contForm, idCaja, t, (corte) => { navegar('#/corte/' + corte.idsesionCaja); });
@@ -4514,15 +4247,19 @@ function descripcionDescuento(r) {
 
 async function pantallaDescuentos() {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador puede ver los descuentos.</div>'; return; }
+  if (!Sesion.tiene('DESCUENTOS')) { root.innerHTML = '<div class="tarjeta">Solo quien define los descuentos puede verlos.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('tags') + ' Descuentos', 'El sistema los aplica solo al cobrar; nadie los captura a mano en el punto de venta', `<button id="ds-nueva" class="btn btn-azul">${ic('plus')} Nueva regla</button>`)}
+    <div id="ds-solicitudes"></div>
+    <div id="ds-promo"></div>
     <div id="ds-form" class="oculto"></div>
     <div id="ds-lista"><div class="vacio">Cargando...</div></div>`;
 
   let tiendas = [];
   try { tiendas = await api('GET', '/api/tiendas'); } catch { tiendas = []; }
 
+  dibujarSolicitudesDescuento(document.getElementById('ds-solicitudes'));
+  dibujarPromocionEquipo(document.getElementById('ds-promo'));
   const cont = document.getElementById('ds-lista');
   const contForm = document.getElementById('ds-form');
   const cargar = async () => {
@@ -4699,7 +4436,7 @@ function auditoriaValorCampo(campo, v) {
 
 async function pantallaAuditoria(param) {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador puede ver el historial de cambios.</div>'; return; }
+  if (!Sesion.tiene('AUDITORIA')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver el historial de cambios.</div>'; return; }
   const [entidad, id] = param.split('~');
   root.innerHTML = `
     <button class="enlace" id="au-volver" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
@@ -4738,7 +4475,7 @@ const ROL_ETIQUETA = { ROOT: 'Administrador', ADMIN: 'Administrador', ENCARGADO_
 
 async function pantallaEmpleados() {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver empleados.</div>'; return; }
+  if (!Sesion.tiene('EMPLEADOS_ADMIN')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver empleados.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('briefcase') + ' Empleados', 'Personal, sucursales y roles de acceso', `<button id="em-nuevo" class="btn btn-azul">${ic('plus')} Nuevo empleado</button>`)}
     <div id="em-form" class="oculto"></div>
@@ -4888,7 +4625,7 @@ async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
 
 async function pantallaEmpleadoDetalle(id) {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver empleados.</div>'; return; }
+  if (!Sesion.tiene('EMPLEADOS_ADMIN')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver empleados.</div>'; return; }
   root.innerHTML = '<div class="vacio">Cargando...</div>';
   let u;
   try {
@@ -5124,7 +4861,7 @@ async function cargarDescansosEmpleado(idempleado) {
 /** Control de descansos de toda una sucursal: cuántos días tomó cada empleado en el rango elegido. */
 async function pantallaDescansos() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver esta sección.</div>'; return; }
+  if (!Sesion.tiene('DESCANSOS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver esta sección.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('calendar') + ' Descansos', 'Descansos y vacaciones del personal')}
     <div id="ds-tienda"></div>
@@ -5173,7 +4910,7 @@ async function cargarReporteSaldos(codti) {
 /** Comisión mensual de encargado (2% de su tienda, sin PayJoy) y comisión PayJoy (por equipo, quien lo venda). */
 async function pantallaComisiones() {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Solo un administrador maneja las comisiones.</div>'; return; }
+  if (!Sesion.tiene('NOMINA')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para manejar las comisiones.</div>'; return; }
 
   const hoy = new Date();
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
@@ -5299,12 +5036,9 @@ async function cargarDescansosTienda(codti) {
 }
 
 // ── Punto de venta ───────────────────────────────────────────────────────
-// v1: solo en línea (sin cola sin conexión todavía; si no hay servidor, usa JSystem en la tienda).
-// Sin pago Mixto ni ventas a crédito — para eso, JSystem.
+// Solo en línea (si no hay servidor, usa JSystem en la tienda). Sin pago Mixto — para eso, JSystem.
 
-let posCarrito = [];
-
-// ── Búsqueda de productos y catálogo del POS ─────────────────────────────
+// ── Búsqueda de productos del POS ─────────────────────────────
 
 function quitarAcentos(t) { return t.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 
@@ -5323,300 +5057,11 @@ function filtrarProductos(productos, q) {
   return productos.filter(p => { const t = textoBusqueda(p); return terminos.every(x => t.includes(x)); });
 }
 
-/**
- * Catálogo del punto de venta de una sucursal (~2,000 productos). Si ya se tenía se devuelve al instante y se
- * refresca en segundo plano (alActualizar recibe la lista nueva); el servidor valida el stock al cobrar.
- */
-const posCatalogoCache = { codti: null, productos: null };
-async function cargarCatalogoPOS(codti, alActualizar) {
-  const pedir = async () => {
-    const productos = await api('GET', `/api/productos/tienda/${codti}/disponibles`);
-    posCatalogoCache.codti = codti; posCatalogoCache.productos = productos;
-    return productos;
-  };
-  if (posCatalogoCache.codti === codti && posCatalogoCache.productos) {
-    pedir().then(alActualizar).catch(() => { /* se sigue con lo que ya había */ });
-    return posCatalogoCache.productos;
-  }
-  return pedir();
-}
-
-async function pantallaPOS() {
-  const s = Sesion.obtener();
-  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para vender.</div>'; return; }
-  const codti = s.codti;
-  if (codti == null) { root.innerHTML = '<div class="tarjeta">Tu usuario no tiene una sucursal fija: usa JSystem en la tienda para vender.</div>'; return; }
-  posCarrito = [];
-
-  root.innerHTML = `
-    <div id="pv-turno"></div>
-    ${cabeceraPantalla(ic('shopping-cart') + ' Punto de venta', `Vendedor: ${escapar(s.nombreCompleto || s.username)} · ${new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}`)}
-    <div class="pos-grid">
-    <div class="pos-izq">
-    <div class="tarjeta pos-catalogo">
-      <h2 class="h2-ic">${ic('package')} Catálogo</h2>
-      <div class="buscador buscar-ic">${ic('search')}<input id="pv-buscar" placeholder="Buscar producto..."></div>
-      <div id="pv-chips" class="chips"></div>
-      <div id="pv-resultados"></div>
-    </div>
-    </div>
-
-    <div class="pos-der">
-    <div class="tarjeta pos-carrito">
-      <div class="lista-cab"><h2 class="h2-ic">${ic('shopping-cart')} Carrito de compra</h2><span class="pill-items" id="pv-items">0 items</span></div>
-      <div id="pv-carrito"><div class="vacio">Agrega productos desde el catálogo.</div></div>
-      <div id="pv-total" class="barra-total"></div>
-    </div>
-
-    <div class="tarjeta">
-      <h2 class="h2-ic" style="margin-top:0;">${ic('users')} Cliente</h2>
-      <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
-        <input type="checkbox" id="pv-con-cliente" style="width:auto;"> Registrar cliente (si no, venta de mostrador)
-      </label>
-      <div id="pv-cliente-cont" class="oculto"></div>
-    </div>
-
-    <div class="tarjeta">
-      <h2 class="h2-ic" style="margin-top:0;">${ic('credit-card')} Método de pago</h2>
-      <label class="obligatorio">Método</label>
-      <select id="pv-metodo">
-        <option value="1">Efectivo</option>
-        <option value="2">Tarjeta</option>
-        <option value="3">Transferencia</option>
-      </select>
-      <div class="ayuda">Para una venta a crédito PayJoy usa JSystem en la tienda.</div>
-      <div id="pv-efectivo-cont">
-        <label>Monto recibido</label>
-        <input id="pv-recibido" type="number" inputmode="decimal" min="0" step="0.01">
-        <div id="pv-cambio" class="ayuda"></div>
-      </div>
-      <label>Observaciones</label>
-      <input id="pv-obs" placeholder="Opcional">
-      <button id="pv-cobrar" class="btn btn-verde btn-dinero btn-grande">${ic('banknote')} Cobrar</button>
-    </div>
-    </div>
-    </div>`;
-
-  // El catálogo y la caja se piden a la vez (y el catálogo se usa al instante si ya se tenía: ver cargarCatalogoPOS)
-  const promesaCajas = api('GET', '/api/cajas/tienda/' + codti).catch(() => null);
-  const inputBuscar = document.getElementById('pv-buscar');
-  inputBuscar.disabled = true;
-  inputBuscar.placeholder = 'Cargando catálogo...';
-  let productos = [];
-  try {
-    productos = await cargarCatalogoPOS(codti, (nuevos) => { productos = nuevos; });
-  } catch (err) {
-    document.getElementById('pv-resultados').innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor: el punto de venta necesita conexión.' : err.message)}</div>`;
-    inputBuscar.placeholder = 'Sin catálogo';
-    return;
-  }
-  inputBuscar.disabled = false;
-  inputBuscar.placeholder = 'Buscar por nombre, código, modelo o IMEI...';
-
-  // Caja de la tienda (se valida de nuevo al cobrar)
-  let idCaja = null;
-  const cajas = await promesaCajas;
-  if (cajas) idCaja = cajas.find(c => c.esCajaPrincipal)?.idCaja ?? cajas[0]?.idCaja ?? null;
-
-  // Para cobrar la caja debe estar abierta: si no lo está, se ofrece abrirla aquí mismo
-  const revisarTurno = async () => {
-    const cont = document.getElementById('pv-turno');
-    if (!cont || idCaja == null) return;
-    try {
-      const t = await api('GET', `/api/cajas/${idCaja}/sesion`);
-      if (t.abierta) { cont.innerHTML = ''; return; }
-      cont.innerHTML = '<div class="mensaje info">' + ic('lock') + ' La caja está cerrada: ábrela con su fondo inicial para poder cobrar.</div><div id="pv-turno-form"></div>';
-      formularioAbrirCaja(document.getElementById('pv-turno-form'), idCaja, t.nombreCaja, t.fondoSugerido, revisarTurno);
-    } catch { /* sin conexión: no se bloquea nada aquí; el servidor decide al cobrar */ }
-  };
-  revisarTurno();
-
-  const contResultados = document.getElementById('pv-resultados');
-  // Filtro por categoría: sin escribir nada muestra lo que hay de esa categoría (con existencia primero)
-  const contChips = document.getElementById('pv-chips');
-  let categoriaSel = null;
-  const hayExistencia = (p) => p.tipo === 'SERVICIO' || (p.tipo === 'CELULAR' || p.tipo === 'TABLET' ? (p.imeisDisponibles || []).length > 0 : Number(p.stock) > 0);
-  const dibujarChips = () => {
-    const cuenta = {};
-    productos.filter(hayExistencia).forEach(p => { const c = p.categoriaPrincipal || p.nombreCategoria; if (c) cuenta[c] = (cuenta[c] || 0) + 1; });
-    const top = Object.entries(cuenta).sort((a, b) => b[1] - a[1]).slice(0, 12).map(x => x[0]);
-    contChips.innerHTML = top.length === 0 ? '' :
-      `<button class="chip ${categoriaSel === null ? 'activo' : ''}" data-cat="">Todo</button>` +
-      top.map(c => `<button class="chip ${categoriaSel === c ? 'activo' : ''}" data-cat="${escapar(c)}">${escapar(c)}</button>`).join('');
-    contChips.querySelectorAll('.chip').forEach(b => b.onclick = () => { categoriaSel = b.dataset.cat || null; dibujarChips(); mostrarResultados(); });
-  };
-  const mostrarResultados = () => {
-    const q = inputBuscar.value.trim();
-    // El catálogo no se muestra completo: solo cuando se busca algo o se elige una categoría
-    if (q.length < 2 && !categoriaSel) { contResultados.innerHTML = '<div class="vacio">Escribe en el buscador para ver productos.</div>'; return; }
-    let lista = q.length >= 2 ? filtrarProductos(productos, q) : productos;
-    if (categoriaSel) lista = lista.filter(p => (p.categoriaPrincipal || p.nombreCategoria) === categoriaSel);
-    if (q.length < 2) lista = lista.filter(hayExistencia).sort((a, b) => a.nombreProductoMaster.localeCompare(b.nombreProductoMaster, 'es'));
-    dibujarResultadosPOS(contResultados, lista.slice(0, 40));
-  };
-  dibujarChips();
-  mostrarResultados();
-  inputBuscar.addEventListener('input', mostrarResultados);
-
-  // Cliente
-  const chkCliente = document.getElementById('pv-con-cliente');
-  const contCliente = document.getElementById('pv-cliente-cont');
-  let clienteSel = null;
-  chkCliente.onchange = () => {
-    contCliente.classList.toggle('oculto', !chkCliente.checked);
-    if (chkCliente.checked && !contCliente.innerHTML) dibujarSelectorClientePOS(contCliente, (c) => { clienteSel = c; });
-  };
-
-  // Pago
-  const selMetodo = document.getElementById('pv-metodo');
-  const contEfectivo = document.getElementById('pv-efectivo-cont');
-  const actualizarMetodo = () => contEfectivo.classList.toggle('oculto', selMetodo.value !== '1');
-  selMetodo.onchange = actualizarMetodo;
-  actualizarMetodo();
-  document.getElementById('pv-recibido').addEventListener('input', actualizarCambioPOS);
-
-  actualizarCarritoPOS();
-
-  document.getElementById('pv-cobrar').onclick = async (e) => {
-    if (posCarrito.length === 0) { mostrarMensaje(root, 'Agrega al menos un producto.', 'error'); return; }
-    if (!idCaja) { mostrarMensaje(root, 'No se encontró una caja para tu sucursal.', 'error'); return; }
-    const metodoPago = Number(selMetodo.value);
-    const total = posCarrito.reduce((sum, i) => sum + i.cantidad * i.precioUnitarioFinal, 0);
-    let montoAbonado = total;
-    if (metodoPago === 1) {
-      montoAbonado = Number(document.getElementById('pv-recibido').value);
-      if (!montoAbonado || montoAbonado < total) { mostrarMensaje(root, 'El monto recibido debe cubrir el total.', 'error'); return; }
-    }
-    if (chkCliente.checked && !clienteSel) { mostrarMensaje(root, 'Busca o registra al cliente, o desmarca la casilla.', 'error'); return; }
-
-    const payload = {
-      codti, idCaja,
-      idcliente: clienteSel?.idcliente ?? null,
-      tipoComprobante: 1,
-      metodoPago,
-      montoAbonado,
-      observaciones: document.getElementById('pv-obs').value.trim() || null,
-      claveOffline: uuid(),
-      detalles: posCarrito.map(i => ({
-        idprodmaster: i.idprodmaster, codpro: i.codpro, cantidad: i.cantidad,
-        precioUnitarioFinal: i.precioUnitarioFinal, imei: i.imei || null, esRegalo: false,
-      })),
-    };
-
-    e.target.disabled = true;
-    e.target.innerHTML = '<span class="spinner"></span> Cobrando...';
-    try {
-      const venta = await api('POST', '/api/ventas', payload);
-      mostrarMensaje(root, `Venta #${venta.idventa} registrada. Total ${formatoDinero(venta.total)}${metodoPago === 1 ? ' · Cambio ' + formatoDinero(venta.cambio) : ''}.`, 'ok');
-      posCarrito = [];
-      posCatalogoCache.productos = null;   // el stock cambió: el próximo POS pide el catálogo fresco
-      setTimeout(() => pantallaPOS(), 1200);
-    } catch (err) {
-      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: esta venta no se guardó. Usa JSystem en la tienda mientras tanto.' : err.message, 'error');
-      if (!err.network && /cerrada/.test(err.message || '')) revisarTurno();
-      e.target.disabled = false;
-      e.target.innerHTML = ic('banknote') + ' Cobrar';
-    }
-  };
-}
-
-function dibujarResultadosPOS(cont, productos) {
-  if (productos.length === 0) { cont.innerHTML = '<div class="vacio">Sin resultados.</div>'; return; }
-  cont.innerHTML = productos.map(p => {
-    const conDescuento = p.precioFinal != null && Number(p.descuentoAplicado) > 0;
-    return `
-    <div class="orden-item pos-fila" data-codpro="${escapar(p.codpro)}">
-      <span class="pos-ic tipo-${escapar((p.tipo || '').toLowerCase())}">${TIPO_ICONO[p.tipo] || ic('package')}</span>
-      <div class="pos-fila-cuerpo">
-        <div class="orden-folio">${escapar(p.nombreProductoMaster)}</div>
-        <div class="orden-cliente">${escapar(p.codpro)}${p.tipo !== 'SERVICIO' ? ' · Stock: ' + Number(p.stock) : ''}${conDescuento ? ' · ' + ic('tags') + ' con descuento' : ''}</div>
-      </div>
-      <span class="pos-precio">
-        ${conDescuento ? `<span class="ayuda" style="text-decoration:line-through; display:block; font-weight:400;">${formatoDinero(p.preciopub)}</span>` : ''}
-        <span style="color:${conDescuento ? 'var(--verde)' : 'inherit'};">${formatoDinero(conDescuento ? p.precioFinal : p.preciopub)}</span>${p.tipo !== 'CELULAR' ? ' <span class="pv-mas">' + ic('plus') + '</span>' : ''}
-      </span>
-      ${p.tipo === 'CELULAR' && p.imeisDisponibles?.length ? `
-        <div class="grupo-botones pos-imeis">
-          ${p.imeisDisponibles.map(u => `<button class="btn btn-azul btn-chico pv-agregar-imei" data-imei="${escapar(u.imei)}">${escapar(u.imei)} · ${formatoDinero(u.precioVenta)}</button>`).join('')}
-        </div>` : ''}
-    </div>`;
-  }).join('');
-
-  cont.querySelectorAll('.orden-item').forEach(el => {
-    const p = productos.find(x => x.codpro === el.dataset.codpro);
-    if (p.tipo === 'CELULAR') {
-      el.querySelectorAll('.pv-agregar-imei').forEach(btn => btn.onclick = (ev) => {
-        ev.stopPropagation();
-        const unidad = p.imeisDisponibles.find(u => u.imei === btn.dataset.imei);
-        agregarAlCarritoPOS(p, 1, unidad.precioVenta, unidad.imei);
-      });
-    } else {
-      el.onclick = () => agregarAlCarritoPOS(p, 1, p.precioFinal ?? p.preciopub, null);
-    }
-  });
-}
-
-function agregarAlCarritoPOS(p, cantidad, precio, imei) {
-  const existente = imei ? null : posCarrito.find(i => i.codpro === p.codpro && !i.imei);
-  if (existente) { existente.cantidad += cantidad; }
-  else {
-    posCarrito.push({
-      idprodmaster: p.idProductoMaster, codpro: p.codpro, nombre: p.nombreProductoMaster,
-      cantidad, precioUnitarioFinal: Number(precio), imei, tipo: p.tipo, stockMax: p.tipo === 'ACCESORIO' ? Number(p.stock) : null,
-    });
-  }
-  actualizarCarritoPOS();
-}
-
-function actualizarCarritoPOS() {
-  const cont = document.getElementById('pv-carrito');
-  const contTotal = document.getElementById('pv-total');
-  if (!cont) return;
-  if (posCarrito.length === 0) { cont.innerHTML = '<div class="vacio">Agrega productos desde el catálogo.</div>'; }
-  else {
-    cont.innerHTML = posCarrito.map((i, idx) => `
-      <div class="orden-item">
-        <div class="orden-cab">
-          <span class="orden-folio">${escapar(i.nombre)}</span>
-          <button class="btn btn-rojo btn-chico pv-quitar" data-idx="${idx}">Quitar</button>
-        </div>
-        ${i.imei ? `<div class="orden-cliente">IMEI: ${escapar(i.imei)}</div>` : ''}
-        <div class="fila" style="margin-top:8px; align-items:center;">
-          ${!i.imei ? `<div><label style="margin:0 0 2px 0;">Cantidad</label><input type="number" min="1" ${i.stockMax ? 'max="' + i.stockMax + '"' : ''} value="${i.cantidad}" class="pv-cantidad" data-idx="${idx}"></div>` : ''}
-          <div><label style="margin:0 0 2px 0;">Precio unitario</label><div class="precio-fijo" title="El precio lo define Inventario; no se cambia al vender">${ic('lock')} ${formatoDinero(i.precioUnitarioFinal)}</div></div>
-        </div>
-        <div class="orden-meta"><span class="ayuda" style="margin:0;">${i.cantidad} × ${formatoDinero(i.precioUnitarioFinal)}</span><span class="importe-linea">${formatoDinero(i.cantidad * i.precioUnitarioFinal)}</span></div>
-      </div>`).join('');
-
-    cont.querySelectorAll('.pv-quitar').forEach(b => b.onclick = () => { posCarrito.splice(Number(b.dataset.idx), 1); actualizarCarritoPOS(); });
-    cont.querySelectorAll('.pv-cantidad').forEach(inp => inp.onchange = () => {
-      const idx = Number(inp.dataset.idx);
-      let v = Math.max(1, Number(inp.value) || 1);
-      if (posCarrito[idx].stockMax) v = Math.min(v, posCarrito[idx].stockMax);
-      posCarrito[idx].cantidad = v;
-      actualizarCarritoPOS();
-    });
-  }
-  const total = posCarrito.reduce((sum, i) => sum + i.cantidad * i.precioUnitarioFinal, 0);
-  const piezas = posCarrito.reduce((sum, i) => sum + i.cantidad, 0);
-  const pill = document.getElementById('pv-items');
-  if (pill) pill.textContent = `${piezas} ${piezas === 1 ? 'item' : 'items'}`;
-  contTotal.innerHTML = `<span class="bt-detalle">${piezas} ${piezas === 1 ? 'artículo' : 'artículos'}</span><span class="bt-total"><small>Total</small> ${formatoDinero(total)}</span>`;
-  actualizarCambioPOS();
-}
-
-function actualizarCambioPOS() {
-  const inp = document.getElementById('pv-recibido');
-  const contCambio = document.getElementById('pv-cambio');
-  if (!inp || !contCambio) return;
-  const total = posCarrito.reduce((sum, i) => sum + i.cantidad * i.precioUnitarioFinal, 0);
-  const recibido = Number(inp.value) || 0;
-  contCambio.textContent = recibido > 0 ? 'Cambio: ' + formatoDinero(Math.max(0, recibido - total)) : '';
-}
+// El punto de venta (catálogo, carrito, cobro) vive en js/pos.js.
 
 function dibujarSelectorClientePOS(cont, alSeleccionar) {
   const s = Sesion.obtener();
-  const puedeRegistrar = GESTOR_ROLES.includes(s.rol);
+  const puedeRegistrar = Sesion.tiene('CLIENTE_EDITAR');
   cont.innerHTML = `
     <label>Teléfono</label>
     <div class="fila">
@@ -5679,7 +5124,7 @@ function pastillaDevolucion(estadoDisplay) {
 
 async function pantallaDevoluciones() {
   const s = Sesion.obtener();
-  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
+  if (!Sesion.tiene('DEVOLUCION_SOLICITAR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
 
   root.innerHTML = `
     ${cabeceraPantalla(ic('undo-2') + ' Devoluciones', 'Reembolsos de productos vendidos (el cambio por otro producto se hace en JSystem)')}
@@ -5844,7 +5289,7 @@ async function pantallaDevoluciones() {
 
 async function pantallaDevolucionDetalle(id) {
   const s = Sesion.obtener();
-  if (!PERSONAL.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
+  if (!Sesion.tiene('DEVOLUCION_SOLICITAR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver devoluciones.</div>'; return; }
   root.innerHTML = '<div class="vacio">Cargando...</div>';
   let d;
   try {
@@ -5879,7 +5324,7 @@ async function pantallaDevolucionDetalle(id) {
       <div class="ayuda" style="margin-top:10px;">Solicitó ${escapar(d.nombreSolicita)} · ${formatoFecha(d.fechaSolicitud)}</div>
       ${d.nombreResuelve ? `<div class="ayuda">Resolvió ${escapar(d.nombreResuelve)} · ${formatoFecha(d.fechaResolucion)}${d.comentarioResolucion ? ': ' + escapar(d.comentarioResolucion) : ''}</div>` : ''}
     </div>
-    ${d.estado === 1 && GESTOR_ROLES.includes(s.rol) ? `
+    ${d.estado === 1 && Sesion.tiene('DEVOLUCION_APROBAR') ? `
       <div class="tarjeta">
         <h2 style="margin-top:0;">Resolver</h2>
         <label>Comentario</label>
@@ -5891,7 +5336,7 @@ async function pantallaDevolucionDetalle(id) {
       </div>` : ''}
     <button class="btn btn-gris" onclick="navegar('#/devoluciones')" style="margin-top:10px;">Volver</button>`;
 
-  if (d.estado === 1 && GESTOR_ROLES.includes(s.rol)) {
+  if (d.estado === 1 && Sesion.tiene('DEVOLUCION_APROBAR')) {
     document.getElementById('dv-aprobar').onclick = async (e) => {
       e.target.disabled = true;
       try {
@@ -5955,7 +5400,7 @@ async function dibujarSelectorSucursal(cont, s, alCambiar) {
 
 async function pantallaTraspasos() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
+  if (!Sesion.tiene('TRASPASOS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para manejar traspasos.</div>'; return; }
 
   root.innerHTML = `
     ${cabeceraPantalla(ic('truck') + ' Traspasos', 'Mercancía que se envía y se pide entre sucursales', `
@@ -6048,7 +5493,7 @@ async function pantallaTraspasos() {
 
 async function pantallaTraspasoDetalle(id) {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
+  if (!Sesion.tiene('TRASPASOS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para manejar traspasos.</div>'; return; }
   root.innerHTML = '<div class="vacio">Cargando...</div>';
   let t;
   try {
@@ -6078,7 +5523,7 @@ async function pantallaTraspasoDetalle(id) {
       <h2>Productos</h2>
       ${lineas.map(l => `
         <div class="detalle-fila">
-          <span class="k">${escapar(l.nombreProducto)}<br><span class="ayuda">${escapar(l.codpro)}${(l.imeis || []).length ? ' · ' + l.imeis.map(escapar).join(', ') : ''}</span></span>
+          <span class="k">${escapar(l.nombreProducto)}<br><span class="ayuda">${[l.codpro ? escapar(l.codpro) : '', ...(l.imeis || []).map(escapar)].filter(Boolean).join(' · ')}</span></span>
           <span class="v">× ${Number(l.cantidad)}${esEnvio && t.estado === 2 && l.cantidadRecibida != null ? ' (llegó ' + Number(l.cantidadRecibida) + ')' : ''}</span>
         </div>
         ${Number(l.faltantePendiente) > 0 ? `<div class="ayuda" style="color:#b91c1c;">${ic('triangle-alert')} Faltan por resolver: ${Number(l.faltantePendiente)}</div>` : ''}`).join('')}
@@ -6131,7 +5576,7 @@ async function pantallaTraspasoDetalle(id) {
         if (esEquipoTipo(l.tipoProducto)) {
           const imeis = [...acciones.querySelectorAll(`.tr-falta-imei[data-i="${chk.dataset.i}"]:checked`)].map(x => x.value);
           if (imeis.length === 0) { mostrarMensaje(root, `Marca cuál IMEI no llegó de ${l.nombreProducto}.`, 'error'); return; }
-          faltantes.push({ codpro: l.codpro, imeis });
+          faltantes.push({ imeis });
         } else {
           const cantidad = Number(acciones.querySelector(`.tr-falta-cant[data-i="${chk.dataset.i}"]`).value);
           if (!cantidad || cantidad < 1) { mostrarMensaje(root, `Indica cuánto no llegó de ${l.nombreProducto}.`, 'error'); return; }
@@ -6153,7 +5598,7 @@ async function pantallaTraspasoDetalle(id) {
     const equipos = lineas.filter(l => esEquipoTipo(l.tipoProducto));
     let catalogo = [];
     if (equipos.length > 0) {
-      try { catalogo = await api('GET', `/api/productos/tienda/${t.codtiDestino}/disponibles`); }
+      try { catalogo = await api('GET', `/api/equipos/tienda/${t.codtiDestino}/articulos?conUnidades=true`); }
       catch { /* se avisa abajo */ }
     }
     acciones.insertAdjacentHTML('beforeend', `
@@ -6161,13 +5606,13 @@ async function pantallaTraspasoDetalle(id) {
         <h2 style="margin-top:0;">Atender solicitud</h2>
         <div class="ayuda">Acepta para enviar lo pedido${equipos.length ? ' (elige qué equipos mandas)' : ''}, o recházala con un motivo.</div>
         ${equipos.map((l, i) => {
-          const prod = catalogo.find(p => p.codpro === l.codpro);
-          const unidades = prod?.imeisDisponibles || [];
+          const prod = catalogo.find(a => a.idprodmaster === l.idprodmaster);
+          const unidades = prod?.unidades || [];
           return `<div style="border-top:1px solid var(--gris-claro); padding:10px 0;">
             <div><strong>${escapar(l.nombreProducto)}</strong> — elige ${Number(l.cantidad)} equipo(s)</div>
             ${unidades.length === 0 ? '<div class="mensaje error">No hay equipos disponibles en tu inventario.</div>' : unidades.map(u => `
               <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
-                <input type="checkbox" class="tr-imei" data-codpro="${escapar(l.codpro)}" value="${escapar(u.imei)}" style="width:auto;"> ${escapar(u.imei)}
+                <input type="checkbox" class="tr-imei" data-id="${l.idprodmaster}" value="${escapar(u.imei)}" style="width:auto;"> ${escapar(u.imei)}${u.condicion && u.condicion !== 'NUEVO' ? ' · ' + escapar(nombreCondicionEquipo(u.condicion)) : ''}
               </label>`).join('')}
           </div>`;
         }).join('')}
@@ -6179,9 +5624,9 @@ async function pantallaTraspasoDetalle(id) {
     document.getElementById('tr-aceptar').onclick = async (e) => {
       const elegidos = [];
       for (const l of equipos) {
-        const imeis = [...acciones.querySelectorAll(`.tr-imei[data-codpro="${CSS.escape(l.codpro)}"]:checked`)].map(x => x.value);
+        const imeis = [...acciones.querySelectorAll(`.tr-imei[data-id="${l.idprodmaster}"]:checked`)].map(x => x.value);
         if (imeis.length !== Number(l.cantidad)) { mostrarMensaje(root, `De ${l.nombreProducto} debes elegir exactamente ${Number(l.cantidad)} equipo(s).`, 'error'); return; }
-        elegidos.push({ codpro: l.codpro, imeis });
+        elegidos.push({ idprodmaster: l.idprodmaster, imeis });
       }
       if (!confirm('¿Aceptar y enviar? El stock sale de tu inventario.')) return;
       e.target.disabled = true;
@@ -6223,7 +5668,7 @@ async function pantallaTraspasoDetalle(id) {
 /** Nuevo envío ("envio") o nueva solicitud ("solicitud"). */
 async function pantallaTraspasoNuevo(tipo) {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
+  if (!Sesion.tiene('TRASPASOS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para manejar traspasos.</div>'; return; }
   const esEnvio = tipo !== 'solicitud';
 
   root.innerHTML = `
@@ -6262,7 +5707,7 @@ async function pantallaTraspasoNuevo(tipo) {
     if (!fuente) { buscar.disabled = true; return; }
     buscar.disabled = true; buscar.placeholder = 'Cargando productos...';
     try {
-      catalogo = (await api('GET', `/api/productos/tienda/${fuente}/disponibles`)).filter(p => p.tipo !== 'SERVICIO');
+      catalogo = (await catalogoConEquipos(fuente)).filter(p => p.tipo !== 'SERVICIO');
       buscar.disabled = false; buscar.placeholder = 'Buscar por nombre, código o IMEI...';
     } catch (err) {
       buscar.placeholder = err.network ? 'Sin conexión con el servidor' : 'No se pudo cargar el catálogo';
@@ -6281,7 +5726,7 @@ async function pantallaTraspasoNuevo(tipo) {
       <div class="orden-item" data-codpro="${escapar(p.codpro)}">
         <div class="orden-cab"><span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
           <span style="font-weight:700;">Stock: ${Number(p.stock)}</span></div>
-        <div class="orden-cliente">${escapar(p.codpro)}</div>
+        <div class="orden-cliente">${p.esEquipo ? 'Equipos' : escapar(p.codpro)}</div>
       </div>`).join('');
     cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => {
       const p = catalogo.find(x => x.codpro === el.dataset.codpro);
@@ -6300,11 +5745,11 @@ async function pantallaTraspasoNuevo(tipo) {
           <span class="orden-folio">${escapar(l.p.nombreProductoMaster)}</span>
           <button class="btn btn-rojo btn-chico tn-quitar" data-i="${i}">Quitar</button>
         </div>
-        <div class="orden-cliente">${escapar(l.p.codpro)} · Stock: ${Number(l.p.stock)}</div>
+        <div class="orden-cliente">${l.p.esEquipo ? 'Equipos' : escapar(l.p.codpro)} · ${l.p.esEquipo ? 'Disponibles' : 'Stock'}: ${Number(l.p.stock)}</div>
         ${esEnvio && esEquipoTipo(l.p.tipo)
           ? `<div style="margin-top:6px;">${(l.p.imeisDisponibles || []).map(u => `
               <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
-                <input type="checkbox" class="tn-imei" data-i="${i}" value="${escapar(u.imei)}" ${l.imeis.includes(u.imei) ? 'checked' : ''} style="width:auto;"> ${escapar(u.imei)}
+                <input type="checkbox" class="tn-imei" data-i="${i}" value="${escapar(u.imei)}" ${l.imeis.includes(u.imei) ? 'checked' : ''} style="width:auto;"> ${escapar(u.imei)}${u.condicion && u.condicion !== 'NUEVO' ? ' · ' + escapar(nombreCondicionEquipo(u.condicion)) : ''}
               </label>`).join('')}</div>`
           : `<div class="fila" style="margin-top:8px; align-items:center;">
               <label style="margin:0;">Cantidad</label>
@@ -6328,12 +5773,13 @@ async function pantallaTraspasoNuevo(tipo) {
     for (const l of lineas) {
       if (esEnvio && esEquipoTipo(l.p.tipo)) {
         if (l.imeis.length === 0) { mostrarMensaje(root, `Elige los equipos que envías de ${l.p.nombreProductoMaster}.`, 'error'); return; }
-        detalle.push({ codpro: l.p.codpro, cantidad: l.imeis.length, imeis: l.imeis });
+        detalle.push({ cantidad: l.imeis.length, imeis: l.imeis });
       } else {
         if (!l.cantidad || l.cantidad < 1 || l.cantidad > Number(l.p.stock)) {
           mostrarMensaje(root, `La cantidad de ${l.p.nombreProductoMaster} debe estar entre 1 y ${Number(l.p.stock)}.`, 'error'); return;
         }
-        detalle.push({ codpro: l.p.codpro, cantidad: l.cantidad });
+        // un equipo se pide por su artículo (cantidad); un accesorio, por su código
+        detalle.push(l.p.esEquipo ? { idprodmaster: l.p.idProductoMaster, cantidad: l.cantidad } : { codpro: l.p.codpro, cantidad: l.cantidad });
       }
     }
     // En un envío, "origen" es quien manda; en una solicitud, quien pide (y recibe). La otra tienda va como destino.
@@ -6355,7 +5801,7 @@ async function pantallaTraspasoNuevo(tipo) {
 /** Lo que faltó en envíos ya recibidos y sigue sin resolver. */
 async function pantallaFaltantes() {
   const s = Sesion.obtener();
-  if (!GESTOR_ROLES.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los traspasos los manejan el encargado de la tienda y los administradores.</div>'; return; }
+  if (!Sesion.tiene('TRASPASOS')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para manejar traspasos.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('triangle-alert') + ' Faltantes', 'Mercancía que no llegó completa en un traspaso')}
     <div class="ayuda">Mercancía que salió de una tienda y no llegó completa a la otra. Cada faltante se resuelve: llegó tarde, regresó al origen o se da de baja.</div>
@@ -6496,7 +5942,7 @@ async function pantallaNotificaciones() {
 
 function pantallaAjustes() {
   root.innerHTML = `
-    ${cabeceraPantalla(ic('settings') + ' Ajustes', 'Tu contraseña y el logo del negocio')}
+    ${cabeceraPantalla(ic('settings') + ' Ajustes', 'Tu contraseña, las formas de pago y el logo del negocio')}
     <div class="tarjeta">
       <h2 style="margin-top:0;">Cambiar mi contraseña</h2>
       <label class="obligatorio">Contraseña actual</label>
@@ -6508,7 +5954,13 @@ function pantallaAjustes() {
       <div class="ayuda">Al menos 8 caracteres.</div>
       <button id="aj-guardar" class="btn btn-verde">Guardar</button>
     </div>
-    ${SUPERIOR.includes(Sesion.obtener().rol) ? `
+    ${Sesion.tiene('NEGOCIO_CONFIG') ? `
+    <div class="tarjeta">
+      <h2 style="margin-top:0;">Formas de pago</h2>
+      <label class="casilla"><input type="checkbox" id="aj-tarjeta" disabled> El negocio acepta pagos con tarjeta</label>
+      <div class="ayuda">Por ahora solo se cobra en efectivo o por transferencia. Mientras no se acepte, la tarjeta no aparece al cobrar y el servidor rechaza una venta con tarjeta.</div>
+      <button id="aj-tarjeta-guardar" class="btn btn-verde btn-chico" disabled>Guardar</button>
+    </div>
     <div class="tarjeta">
       <h2 style="margin-top:0;">Logo del negocio</h2>
       <div class="logo-vista"><div id="aj-logo-prev" class="logo-previa ${LOGO.tiene ? 'con-imagen' : ''}">${logoHtml()}</div></div>
@@ -6520,7 +5972,24 @@ function pantallaAjustes() {
       </div>
     </div>` : ''}`;
 
-  if (SUPERIOR.includes(Sesion.obtener().rol)) {
+  if (Sesion.tiene('NEGOCIO_CONFIG')) {
+    // Formas de pago: el servidor guarda los datos del negocio completos, así que se manda lo que ya había con el cambio
+    (async () => {
+      const chk = document.getElementById('aj-tarjeta'), btn = document.getElementById('aj-tarjeta-guardar');
+      let negocio;
+      try { negocio = await api('GET', '/api/configuracion/negocio'); } catch { return; }
+      chk.checked = !!negocio.aceptaTarjeta; chk.disabled = false; btn.disabled = false;
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          const guardado = await api('PUT', '/api/configuracion/negocio', { ...negocio, aceptaTarjeta: chk.checked });
+          negocio = guardado || negocio;
+          negocioTarjetaCache = !!chk.checked;
+          mostrarMensaje(root, chk.checked ? 'Ahora se acepta la tarjeta.' : 'La tarjeta quedó desactivada.', 'ok');
+        } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+        btn.disabled = false;
+      };
+    })();
     const archivo = document.getElementById('aj-logo-archivo');
     const refrescar = async () => {
       await cargarLogo();
@@ -6584,7 +6053,7 @@ function pantallaAjustes() {
 
 async function pantallaCatalogos() {
   const s = Sesion.obtener();
-  if (!SUPERIOR.includes(s.rol)) { root.innerHTML = '<div class="tarjeta">Los catálogos solo los administra un administrador.</div>'; return; }
+  if (!Sesion.tiene('CATALOGOS_EDITAR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para editar los catálogos.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('tags') + ' Catálogos', 'Categorías, descripciones, colores y proveedores con los que se registran los artículos')}
     <div class="segmentado">
@@ -6913,7 +6382,57 @@ async function pantallaCatalogos() {
           </div>
           <h2>Secciones de ${escapar(tiendas.find(t => t.codti === codti)?.nombre || '')}</h2>
           ${deLaTienda.length === 0 ? '<div class="vacio">Sin secciones.</div>'
-            : deLaTienda.map(sec => `<div class="detalle-fila"><span class="k">${escapar(sec.nombre)}</span></div>`).join('')}`;
+            : deLaTienda.map(sec => `
+              <div class="detalle-fila" data-sec="${sec.id}">
+                <span class="k">${escapar(sec.nombre)}</span>
+                <span class="v">
+                  <button class="btn btn-gris btn-chico sc-renombrar" data-id="${sec.id}" data-nombre="${escapar(sec.nombre)}">${ic('pencil')} Renombrar</button>
+                  ${deLaTienda.length > 1 ? `<button class="btn btn-gris btn-chico sc-mover" data-id="${sec.id}">${ic('arrow-left-right')} Pasar todo a otra</button>` : ''}
+                </span>
+              </div>
+              <div class="sc-panel oculto" id="sc-panel-${sec.id}"></div>`).join('')}`;
+        // Renombrar una sección: se actualiza en todo lo que la usa
+        cont.querySelectorAll('.sc-renombrar').forEach(b => b.onclick = () => {
+          const panel = document.getElementById('sc-panel-' + b.dataset.id);
+          panel.classList.remove('oculto');
+          panel.innerHTML = `<div class="tarjeta" style="background:var(--gris-claro);">
+            <label class="obligatorio">Nuevo nombre</label>
+            <div class="fila"><input id="sc-nombre-${b.dataset.id}" value="${b.dataset.nombre}" maxlength="50">
+              <button class="btn btn-verde btn-chico sc-ok" style="flex:0 0 auto;">Guardar</button>
+              <button class="btn btn-gris btn-chico sc-no" style="flex:0 0 auto;">Cancelar</button></div></div>`;
+          panel.querySelector('.sc-no').onclick = () => { panel.classList.add('oculto'); panel.innerHTML = ''; };
+          panel.querySelector('.sc-ok').onclick = async (e) => {
+            const nombre = document.getElementById('sc-nombre-' + b.dataset.id).value.trim();
+            if (!nombre) { mostrarMensaje(root, 'Escribe el nombre.', 'error'); return; }
+            e.target.disabled = true;
+            try {
+              await api('PUT', `/api/catalogos/secciones/${b.dataset.id}?nombre=${encodeURIComponent(nombre)}`);
+              mostrarMensaje(root, 'Sección renombrada.', 'ok');
+              dibujarSecciones(cont);
+            } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); e.target.disabled = false; }
+          };
+        });
+        // Pasar todo lo que tiene una sección a otra (y dejar la primera vacía)
+        cont.querySelectorAll('.sc-mover').forEach(b => b.onclick = () => {
+          const panel = document.getElementById('sc-panel-' + b.dataset.id);
+          const otras = deLaTienda.filter(x => String(x.id) !== b.dataset.id);
+          panel.classList.remove('oculto');
+          panel.innerHTML = `<div class="tarjeta" style="background:var(--gris-claro);">
+            <label class="obligatorio">Pasar todo lo que hay en «${escapar(deLaTienda.find(x => String(x.id) === b.dataset.id)?.nombre || '')}» a</label>
+            <select id="sc-destino-${b.dataset.id}">${otras.map(x => `<option value="${x.id}">${escapar(x.nombre)}</option>`).join('')}</select>
+            <div class="grupo-botones"><button class="btn btn-azul btn-chico sc-ok">Pasar todo</button><button class="btn btn-gris btn-chico sc-no">Cancelar</button></div></div>`;
+          panel.querySelector('.sc-no').onclick = () => { panel.classList.add('oculto'); panel.innerHTML = ''; };
+          panel.querySelector('.sc-ok').onclick = async (e) => {
+            const destino = document.getElementById('sc-destino-' + b.dataset.id).value;
+            if (!confirm('¿Pasar todo a la otra sección? Los equipos y productos cambian de sección.')) return;
+            e.target.disabled = true;
+            try {
+              await api('POST', `/api/catalogos/secciones/${b.dataset.id}/mover?destino=${destino}`);
+              mostrarMensaje(root, 'Listo: todo pasó a la otra sección.', 'ok');
+              dibujarSecciones(cont);
+            } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); e.target.disabled = false; }
+          };
+        });
         document.getElementById('ct-seccion-tienda').value = codti;
         document.getElementById('ct-seccion-tienda').onchange = (e) => { codti = Number(e.target.value); render(); };
         document.getElementById('ct-seccion-guardar').onclick = async (e) => {

@@ -20,7 +20,31 @@ const Sesion = (() => {
     guardar(s);
   }
 
-  return { obtener, guardar, limpiar, activa, cambiarTienda };
+  /** ¿Puede esta persona hacer la acción? root siempre; los demás según los permisos que root dio a su rol (se piden al entrar). */
+  function tiene(...codigos) {
+    const s = obtener();
+    if (!s) return false;
+    if (s.rol === 'ROOT') return true;
+    return codigos.some(c => (s.permisos || []).includes(c));
+  }
+  /** Los permisos de su rol cambian en el servidor sin que ella vuelva a entrar: se traen una vez por carga de la página. */
+  let permisosPedidos = false;
+  async function cargarPermisos(forzar) {
+    const s = obtener();
+    if (!s || (permisosPedidos && !forzar)) return false;
+    try {
+      const r = await api('GET', '/api/permisos/mios');
+      permisosPedidos = true;
+      const actual = obtener();
+      if (!actual) return false;
+      const cambio = JSON.stringify(actual.permisos || null) !== JSON.stringify(r.permisos || []);
+      actual.permisos = r.permisos || [];
+      guardar(actual);
+      return cambio;
+    } catch { return false; }
+  }
+
+  return { obtener, guardar, limpiar, activa, cambiarTienda, tiene, cargarPermisos };
 })();
 
 /** true si el modelo de datos habla de "éxito" (StandardApiResponse envuelto); si no, se usa el JSON tal cual. */

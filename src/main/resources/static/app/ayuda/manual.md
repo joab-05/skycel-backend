@@ -46,66 +46,50 @@ Cada persona tiene un rol y el sistema solo le muestra lo que le corresponde.
 | Configuración de la computadora (servidor, impresora, ticket) | No | Sí | Sí | No |
 | Empleados | No | No | Sí | No |
 
+> El usuario **root** puede cambiar qué puede hacer cada rol en **Permisos** (en la barra de la izquierda, sección Administración): marca o quita casillas y el cambio vale para la web y para JSystem. La tabla de arriba es lo que trae el sistema de fábrica.
+>
 > Un **encargado** solo ve la información de su propia tienda. Un **administrador** puede cambiar de sucursal o ver todas a la vez.
 > Un **técnico** solo ve las órdenes de servicio del taller.
 
 ## Punto de Venta
 
-Aquí se cobra. A la izquierda está el **catálogo**, en el centro el **carrito** y a la derecha los datos del **cliente** y el **pago**.
+Aquí se cobra. En la computadora, a la izquierda está el **catálogo** y a la derecha el **carrito**, el **cliente** y el **pago**; en el celular van una debajo de la otra.
 
 ### Antes de empezar
-La caja de tu tienda debe estar **abierta** (sección Caja). Si está cerrada, al entrar al punto de venta el sistema te pide abrirla con su fondo inicial. Sin caja abierta no se puede cobrar.
-
-> Las ventas hechas **sin conexión** se aceptan siempre y entran al turno que esté abierto cuando se envían.
+La caja de tu tienda debe estar **abierta** (sección Caja). Si está cerrada, al entrar al punto de venta aparece el formulario para abrirla con su fondo inicial. Sin caja abierta no se puede cobrar. Quien puede abrir y cerrar la caja (todos los vendedores y encargados) también ve el botón **Cerrar caja** arriba a la derecha.
 
 ### Buscar y agregar productos
-El catálogo **no se muestra completo**: aparece cuando escribes algo en el buscador o eliges una categoría (Equipos, Accesorios, Servicios).
-1. Pulsa **F2** (o haz clic en el buscador) y escribe parte del nombre o el código del artículo.
-2. Pulsa **Enter**: si el texto es el código exacto de un producto, o queda un solo resultado, se agrega al carrito y el buscador queda listo para el siguiente. Así funciona el lector de códigos de barras.
-3. También puedes hacer clic sobre el producto de la lista.
+El catálogo **no se muestra completo**: aparece cuando escribes algo en el buscador o eliges una categoría (Equipos, Accesorios...). Escribe parte del nombre, el código o el IMEI, y toca el producto para agregarlo. Los accesorios y servicios se agregan con un toque; si tocas el mismo otra vez, se suma la cantidad (sin pasar de las piezas que hay).
 
 ### Equipos (celulares y tablets)
-Cada equipo se vende por su **IMEI o número de serie**.
-1. Al agregar un equipo se pide el IMEI. El sistema revisa que esté disponible en la tienda.
-2. Después eliges la **forma de pago de ese equipo**: Efectivo, Tarjeta, Transferencia o **PayJoy**.
-3. Con PayJoy se captura el **enganche**, el **plazo** (6, 12, 24, 36 o 52 semanas) y cómo se cobró el enganche (efectivo o transferencia). El sistema muestra el pago semanal.
-4. El equipo entra al carrito con su IMEI. Cada equipo se agrega por separado.
+Cada equipo se vende por su **IMEI o número de serie**. En el catálogo cada modelo muestra sus unidades disponibles: toca la que se lleva el cliente (cada una dice su IMEI, su condición —nuevo, seminuevo o reacondicionado— y su precio).
+1. El equipo entra al carrito y se pregunta solo si es **al contado** o **a crédito (PayJoy)**. Si es al contado se cobra con la **forma de pago del carrito**, igual que lo demás que lleve el cliente.
+2. Con PayJoy captura el **enganche**, el **plazo** (**3, 6, 9 o 12 meses**) y con qué se pagó el enganche (efectivo o transferencia). El sistema no calcula saldo ni pago semanal: PayJoy agrega su interés y esas cifras salen de su plataforma.
+3. Un equipo no lleva cantidad: cada uno es un renglón con su IMEI.
 
-### Accesorios y servicios
-Entran directo al carrito. Si agregas el mismo otra vez, se suma la cantidad. El sistema no deja pasar de las piezas que hay en existencia.
+### Promoción al vender un equipo
+Si hay una promoción activa (la configura un administrador en Descuentos), al agregar junto con un equipo un **chip**, una **mica** o un **protector**, el renglón muestra **Promoción de equipo** y su precio ya rebajado; no capturas nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben.
 
-### Corregir el carrito
-- **+** y **−** cambian la cantidad de la línea marcada (la última que agregaste queda marcada sola). Con **−** en la última pieza, la línea se quita.
-- **Supr** quita la línea marcada. También puedes usar el icono de bote de basura de la línea.
-- **Limpiar carrito** borra todo.
-- Mientras escribes en un campo, **+**, **−** y **Supr** se respetan como texto (por ejemplo, en un código con guion).
-- Un equipo no se suma con **+**: cada uno lleva su propio IMEI. Con **−** se quita.
+### Pedir un descuento a un administrador
+Si un cliente pide rebaja, en el renglón toca **Pedir descuento**, escribe cuánto quieres de descuento **por pieza** y el **motivo**, y envía la solicitud. Un administrador la **aprueba** (con ese monto u otro) o la **rechaza**. Mientras tanto el renglón dice «Esperando respuesta del administrador»; cuando la resuelve verás **Descuento aprobado** (el importe ya baja) o **Descuento rechazado** con su motivo. La aprobación sirve **una sola vez**, para ese artículo, en esa sucursal y por unas horas; si cambias la cantidad o quitas el renglón, se cancela. Pedir descuentos requiere conexión.
 
 ### Cliente
-Captura el **nombre** y el **teléfono (10 dígitos)** del cliente; el correo es opcional. Pulsa **F4** para ir a esos campos. Si el cliente ya existe, se usa su registro.
+El cliente es **opcional**: si no marcas **Registrar cliente**, la venta queda de **mostrador**. Si la marcas, escribe el **teléfono (10 dígitos)** y pulsa **Buscar**: si ya existe aparece su nombre; si no, escribe su nombre y pulsa **Registrar** (quien puede crear clientes).
 
 ### Cobrar
-1. Elige la **forma de pago** del carrito: Efectivo, Tarjeta, Transferencia o Mixto.
-2. En efectivo escribe el **monto recibido**; el sistema calcula el **cambio**.
-3. Pulsa **Procesar venta** (o **F9**).
-4. Se muestra el ticket, que puedes imprimir.
+1. Elige la **forma de pago**: **Efectivo** o **Transferencia**. La **tarjeta** no se acepta por ahora: solo aparece si un administrador la habilita en **Ajustes › Formas de pago**.
+2. En efectivo escribe el **monto recibido**; el sistema calcula el **cambio**. Si el carrito lleva un equipo a crédito, lo que se cobra hoy de ese equipo es solo su enganche.
+3. Pulsa **Cobrar**.
 
-Los precios ya **incluyen IVA**. Los **descuentos** configurados por el administrador se aplican solos al cobrar; nadie los captura a mano.
-
-### Historial de ventas
-El botón **Historial de ventas** lista las ventas, permite **reimprimir** el ticket y, para encargados y administradores, **cancelar una venta**: se regresa el stock y se liberan los IMEI. No se puede cancelar una venta que:
-- salió de una orden de servicio,
-- ya tiene una devolución pedida o procesada,
-- tiene una cuenta por cobrar con abonos.
-
-En esos casos se usa **Devoluciones**.
+Si el carrito mezcla formas de cobro (por ejemplo accesorios en efectivo y un equipo a crédito), el sistema lo parte en una venta por cada una, todas juntas, y la promoción cuenta el carrito completo. Los precios ya **incluyen IVA** y los **descuentos** configurados por el administrador se aplican solos.
 
 ### Mensajes comunes
 - **«La caja está cerrada»**: abre la caja con su fondo inicial y vuelve a cobrar.
-- **«Sin stock»** o **«Stock limitado»**: no hay más piezas de ese producto en la tienda.
-- **«El IMEI no está disponible»**: el equipo ya se vendió, está en otra tienda o en traspaso, o está mal escrito. Búscalo en Inventario.
+- **«Stock insuficiente»**: no hay más piezas de ese producto en la tienda.
+- **«El IMEI no está disponible»**: el equipo ya se vendió, está en otra tienda, en traspaso o en garantía, o está mal escrito. Búscalo en Equipos.
+- **«El precio de … es $X»**: los precios los define Inventario; el punto de venta no los cambia.
 
-> En la **web** el punto de venta es más sencillo: cobra en efectivo, tarjeta o transferencia, el cliente es opcional y no maneja PayJoy, pagos mixtos ni cambios de producto. Para eso usa JSystem en la tienda.
+> En la **web** el punto de venta necesita conexión y no maneja el **pago mixto** ni los cambios de producto. Para eso usa JSystem en la tienda.
 
 ## Caja
 
@@ -171,30 +155,58 @@ Cada producto con su nombre, código, existencia y precios. Los productos con **
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
 2. Elige la **categoría principal** y, en cascada, sus subcategorías. Escribe el nombre del producto; abajo verás la **vista previa del nombre** completo con que se registrará.
-3. Captura precios y existencia. Los equipos se registran con su **IMEI** (uno por unidad).
+3. Captura precios y existencia. Los **equipos** (celulares y tablets) no llevan código: se registran con su **IMEI** (uno por línea) y se ven en **Equipos**.
 
 ### Cambiar precios y existencia
 - Solo un **administrador** edita los datos y los precios de un producto.
 - Un **encargado** o administrador puede ajustar la existencia de un **accesorio**. Los equipos no se ajustan por cantidad: cada unidad tiene su IMEI, y su existencia cambia por compra, venta, traspaso o inventario físico.
 - Un encargado o administrador puede marcar como **rezagado** un producto que no se mueve.
-- La existencia de un producto también sube al **registrar una compra** y cambia con cada venta, devolución y traspaso.
+- La existencia de un producto sube cuando **ingresas mercancía** (entrada de existencia o alta de equipos) y cambia con cada venta, devolución y traspaso.
 
 ### Movimientos
 **Movimientos** muestra el historial de cada cambio de existencia: ventas, devoluciones, traspasos, ajustes, con la fecha y quién lo hizo.
 
+## Equipos
+
+Los **celulares y las tablets** no tienen un código por modelo: cada equipo se identifica por su **IMEI** (un celular) o por su **IMEI o número de serie** (una tablet), y apunta al artículo al que pertenece. La existencia de un artículo son los equipos **disponibles** que hay de él.
+
+### Qué muestra
+Cada equipo con su IMEI o serie, el artículo, su condición (**nuevo**, **seminuevo** o **reacondicionado**), su precio (con el descuento vigente, si lo hay), su costo (si tu rol lo puede ver), los días que lleva en existencia, su **sección** y su estado. **Por artículo** resume cuántos hay de cada modelo. Un administrador ve y elige la sucursal; los demás, la suya.
+
+### Registrar equipos
+1. Pulsa **Registrar equipos** y elige el **artículo** (puedes escribir para buscarlo). Si es un modelo o un color nuevo, se registra en Inventario › Nuevo producto, con la categoría Equipos.
+2. Escribe los IMEI, **uno por línea**. Para un seminuevo con su propio costo y precio: `350000000000029; seminuevo; 800; 1500`.
+3. Captura el costo y el precio de venta de los equipos y pulsa **Registrar**.
+
+### Copiar, corregir y dar de baja
+- Solo quien puede editar artículos (un **administrador**) corrige un equipo: el **IMEI** o la serie, el **artículo**, el **precio**, el **costo**, la **condición**, el **proveedor** y la **sección** (el IMEI y el artículo mientras no haya sido vendido, traspasado ni mandado a garantía).
+- **Rezagado** marca un equipo que no se mueve; **dar de baja** lo saca de la existencia (robo, daño o error de captura) y pide el motivo.
+- **Por artículo** permite poner **el mismo precio** a todas las unidades disponibles y un **mínimo de existencias** que avisa cuando quedan pocas.
+
+### Vender, traspasar y devolver
+En el **Punto de Venta** busca el equipo por su nombre o su IMEI y toca la unidad. En **Traspasos**, los equipos viajan por IMEI. Una **devolución** de un equipo en buen estado lo regresa a la existencia.
+
 ## Inventario físico
 
-Es el conteo de lo que hay en el local para compararlo con el sistema. Está en la **web** y la usan encargados y administradores. Se hace por **secciones** y **no cambia las existencias hasta que tú lo decides**.
+Es el conteo de lo que hay en el local para compararlo con el sistema. Lo hacen **dos personas**: el **encargado cuenta** y el **administrador confirma**. Contar **no cambia las existencias**: estas solo cambian cuando el administrador cierra el inventario. Está en **Inventario físico** (menú de la izquierda).
 
-1. **Aperturar inventario**: abre la auditoría de la tienda. Solo puede haber una abierta a la vez.
-2. **Inventariar**: escanea o captura cada artículo de la sección que estás contando. Cada lectura suma una pieza; los equipos se cuentan por IMEI.
-3. **Cerrar el conteo** cuando terminaste de contar.
-4. **Catalogar diferencias**: para cada artículo que no coincide, elige:
-   - **Ajustar**: la existencia del sistema cambia a lo contado.
-   - **Justificar**: la dejas como está, con un motivo escrito.
-5. **Finalizar** la auditoría. Queda en el **historial**.
+### El encargado cuenta
+1. **Aperturar inventario**: abre el conteo de la sucursal y pregunta **qué se va a inventariar**: **todo lo que se cuente** (como siempre, se revisan las secciones contadas) o **solo ciertas categorías** —por ejemplo solo **equipos**, solo **micas**, **cargadores** o **protectores**—. Al marcar una categoría se marcan sus subcategorías (y al desmarcarla, también se desmarcan). Los **servicios** no aparecen: no tienen existencias que contar. Solo puede haber un inventario en curso a la vez.
+2. **Escanea** o escribe el código de cada producto (cada lectura suma una pieza; puedes poner otra cantidad) y el **IMEI** de cada equipo, uno por uno. El lápiz corrige una cantidad y, en un equipo, la lista de IMEI permite quitar el que escaneaste por error.
+3. **Enviar a revisión** cuando termines. Se genera el **resumen**: lo contado contra lo que dice el sistema. Si elegiste categorías, lo que hay en el sistema dentro de ellas y no escaneaste queda como **faltante** (y escanear algo de otra categoría se rechaza); si no, lo que no escaneaste en las secciones que contaste. Se avisa a los administradores. La lista de inventarios muestra qué cubrió cada uno.
 
-> Antes de contar, evita vender o mover mercancía de la sección. Contar por zonas cerradas da resultados más confiables.
+> Cuenta por zonas cerradas y evita vender o mover mercancía de la sección mientras tanto: el resultado es más confiable.
+
+### El administrador confirma
+1. Abre el inventario (arriba aparece qué sucursales tienen uno **por revisar**) y revisa el resumen: diferencias, valor al costo y, en equipos, qué IMEI no se encontraron.
+2. Para cada diferencia elige:
+   - **Ajustar**: las existencias se corregirán al cerrar.
+   - **Justificar**: no se ajusta; queda escrito el motivo.
+   Un equipo que **sobra** no se da de alta solo (no se sabe su costo ni su precio): se justifica o se registra en **Equipos**. **Ajustar todo lo pendiente** decide de una vez las que falten.
+3. Si algo no cuadra, **Devolver para recontar**: el conteo regresa al encargado y las decisiones se borran.
+4. **Confirmar y cerrar inventario**: se aplican los ajustes (a un accesorio se le suma o resta la diferencia; los equipos que no se encontraron se dan de baja) y las existencias cambian. Queda en el **historial**.
+
+Un inventario sin terminar se puede **cancelar**: no cambia nada. El resumen se puede **exportar** a Excel (CSV).
 
 ## Traspasos
 
@@ -202,7 +214,7 @@ Mueven mercancía entre sucursales (y la bodega). Quienes los manejan son encarg
 
 ### Enviar mercancía
 1. Entra a **Traspasos** y pulsa **Nuevo envío**.
-2. Elige la tienda destino y agrega los productos (la cantidad, o los IMEI si son equipos).
+2. Elige la tienda destino y agrega los productos (la cantidad, o los **IMEI** si son equipos: eliges las unidades que viajan). En una **solicitud** de equipos pides el artículo y la cantidad; quien surte elige los IMEI al aceptar.
 3. Al confirmar, la mercancía **sale del inventario** de tu tienda y queda «en tránsito».
 4. Si te equivocas antes de que la reciban, puedes **Anular** el envío.
 
@@ -247,11 +259,13 @@ El **historial** (icono del reloj) muestra cada abono. Un abono hecho **sin cone
 Registra los reclamos de garantía de los productos vendidos y su viaje hasta el proveedor y de regreso.
 
 ### Registrar una garantía
-1. Entra a **Garantías** y pulsa **Nueva garantía**.
-2. **Busca la venta** (por folio o por IMEI). El sistema revisa si el producto **sigue en garantía** según los días que cubre ese artículo.
-3. Captura el motivo del reclamo y los datos de contacto, y pulsa **Recibir producto**. Se genera un folio **GAR-…**.
+1. Entra a **Garantías** y pulsa **Recibir garantía**.
+2. Elige de dónde viene el producto: **Venta de este sistema** (escribe el número de venta y el IMEI o el código; **Revisar si todavía tiene garantía** te dice hasta cuándo cubre), **Venta anterior** o **Equipo de vitrina**.
+3. Escribe la **falla reportada**, cómo se recibe y los datos de contacto, y pulsa **Recibir garantía**. Se genera un folio **GAR-…**.
 
-> Si el producto se vendió con el **sistema anterior**, marca «Se vendió con el sistema anterior» y captura la fecha de compra, el nombre del producto, los días de garantía (que aún deben estar vigentes) y, si los tienes, el IMEI, el folio y el proveedor.
+> Si el producto se vendió con el **sistema anterior**, elige «Venta anterior» y captura la fecha de compra, el nombre del producto y los días de garantía (que aún deben estar vigentes) y, si los tienes, el IMEI y el ticket.
+
+> Un **equipo de vitrina** (aún sin vender) al que le detectas una falla también va con el proveedor: elige «Equipo de vitrina» y escribe su IMEI. No hay venta ni cliente; mientras está fuera **no cuenta en la existencia** y vuelve a ella cuando la garantía se entrega. Si el proveedor lo cambia por otro, captura el IMEI del equipo nuevo en el paso «Cambio físico».
 
 ### El recorrido
 | Paso | Quién lo registra |
@@ -273,7 +287,7 @@ Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en e
 ### Recibir un equipo
 1. Entra a **Órdenes de Servicio** (en la web: **Recibir equipo**) y pulsa **Nueva orden**.
 2. Busca o captura al **cliente** (nombre y teléfono).
-3. Captura marca, modelo, IMEI, **accesorios que deja**, **estado físico** y la **falla reportada**.
+3. Captura marca, modelo, IMEI, **accesorios que deja**, **estado físico** y la **falla reportada**, y el **tiempo estimado en horas**: el sistema dice «Se le promete para el…» con día y hora.
 4. Si el cliente deja un **anticipo**, regístralo con su forma de pago. En efectivo entra a la caja del turno.
 5. Pulsa **Recibir equipo**. Se genera el folio **OS-…** que se le entrega al cliente.
 
@@ -299,14 +313,12 @@ Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las 
 
 Las **recargas, pagos de servicios, pines y pagos de PayJoy** se operan en los sistemas de los proveedores; no pasan por las ventas ni por la caja del sistema. Este corte los resume cada día para cuadrarlos contra los reportes de los proveedores.
 
-1. El **encargado** abre **Corte del día** y captura, por servicio, cuántas operaciones hizo y el importe. La comisión se calcula sola. Los saldos son opcionales.
+1. El **encargado** abre **Corte de servicios**, elige el **día** (y la sucursal, si es administrador) y captura, por servicio, cuántas **operaciones** hizo y el **importe**. La comisión se calcula sola. Los **saldos del proveedor** son opcionales.
 2. **Guardar corte** lo deja capturado. Puedes corregirlo mientras no esté confirmado.
-3. Un **administrador** lo compara con los reportes del proveedor y pulsa **Confirmar con los reportes**. Si hay diferencias debe escribir un comentario.
+3. Un **administrador** lo compara con los reportes del proveedor, escribe el importe de cada uno y pulsa **Confirmar corte**. Si hay diferencias debe escribir un comentario.
 4. Si hay que cambiar algo ya confirmado, un administrador usa **Reabrir para corregir**.
 
-**Historial y resumen** muestra los cortes anteriores. **Servicios y comisiones** (administrador) permite dar de alta servicios y fijar su comisión.
-
-El corte también se puede capturar **sin conexión**.
+En **Servicios** (administrador) se dan de alta los servicios y se fija su comisión por operación. El corte también se puede capturar **sin conexión** en JSystem.
 
 ## Compras y Proveedores
 
@@ -314,9 +326,9 @@ El corte también se puede capturar **sin conexión**.
 Directorio de los proveedores con los que se trabaja (**Nuevo proveedor**, editar). Los productos se registran con su proveedor.
 
 ### Compras y cuentas por pagar
-Registra la **mercancía que llega** de un proveedor y lo que se le **debe**.
-1. **Registrar compra**: elige el proveedor y agrega lo que llegó con su cantidad y costo. Al guardarla, la **existencia de esos productos sube**.
-2. En el detalle de la compra puedes **registrar pagos** parciales o totales; el saldo que se le debe al proveedor baja con cada pago.
+Registra lo que se le **debe** a un proveedor por una compra.
+1. **Registrar compra**: elige el proveedor, escribe el **monto total** y la sucursal; opcionalmente el folio de su factura y la fecha de vencimiento (si no la pones, se calcula con los días de crédito del proveedor). **No hace falta capturar los productos**: la mercancía se ingresa en **Inventario** o **Equipos**, donde queda registrado el proveedor, la fecha y la hora de cada entrada.
+2. En el detalle de la compra puedes **registrar pagos** parciales o totales; el saldo que se le debe al proveedor baja con cada pago. Se paga en efectivo o transferencia (y con tarjeta solo si el negocio la acepta).
 3. El **historial** de la compra muestra cada pago. Un pago de caja se registra con el motivo «Pago a proveedor».
 
 Los encargados y administradores usan esta sección.
@@ -324,6 +336,14 @@ Los encargados y administradores usan esta sección.
 ## Descuentos
 
 El administrador define **reglas de descuento**. Cada regla puede limitarse a un **tipo de producto**, a un **producto** en particular o a una **tienda**; pedir un **monto mínimo** de compra; descontar un **porcentaje** o una **cantidad fija**; y valer solo ciertos **días de la semana** o entre dos **fechas**. El sistema las **aplica solo al cobrar**; el vendedor no captura descuentos a mano. Una regla se puede **activar o desactivar** sin borrarla.
+
+### Solicitudes de descuento (administrador)
+Arriba de la pantalla de Descuentos aparecen las **solicitudes** que piden los vendedores y encargados desde el punto de venta: sucursal, quién la pidió, el artículo, su precio, cuánto descuento piden y el motivo. Con los botones puedes **aprobar** lo pedido, **aprobar con otro monto** o **rechazar** (con un motivo opcional). La lista se actualiza sola y también llega un aviso.
+
+### Promoción al vender un equipo
+Arriba de las reglas está la **promoción al vender un equipo** (celular o tablet). Por cada equipo que se lleva el cliente: un **chip** (Telcel o Bait) **de regalo**, una **mica con $50 de descuento** (si la mica cuesta $50 o menos, va de regalo) y un **protector con $100 de descuento** si cuesta menos de $249. En **Configurar** el administrador elige qué categorías son los chips, las micas y los protectores (valen también para sus subcategorías), los montos y cuántas piezas recibe cada equipo, o la apaga.
+
+En el punto de venta se aplica sola: al agregar el chip, la mica o el protector junto con un equipo, el renglón muestra **🎁 Promoción de equipo** y el precio ya rebajado; el vendedor no captura nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben. Si el carrito se parte en varias ventas por la forma de pago, la promoción cuenta el carrito completo: el equipo de una venta da derecho al chip, la mica o el protector de la otra. También funciona sin conexión con la última configuración descargada.
 
 ## Reportes
 
@@ -401,7 +421,7 @@ Con texto escrito en un campo, **+**, **−** y **Supr** se respetan como texto.
 - Cobra en el **Punto de Venta**; usa **F2** y el lector de códigos.
 - Registra los gastos y retiros como **movimientos de caja**, siempre con su motivo.
 - Recibe equipos para reparar en **Órdenes de Servicio** y cobra los abonos en **Cuentas por Cobrar**.
-- Cuando llegue mercancía, regístrala en **Compras** o recíbela con un **traspaso**.
+- Cuando llegue mercancía, ingrésala en **Inventario** o **Equipos** (o recíbela con un **traspaso**) y registra lo que debes al proveedor en **Compras**.
 
 ### Al cerrar
 1. Cuenta el efectivo del cajón y haz el **corte** en **Caja**.

@@ -864,6 +864,13 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
 .turno { display: flex; flex-direction: column; gap: 4px; }
 .turno-abierto { border-left: 4px solid #059669; }
 .turno-cerrado { border-left: 4px solid #d97706; }
+/* La cuenta del cajón: fondo + ventas + entradas − salidas = esperado */
+.cuenta-cajon { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 4px; }
+.cuenta-cajon .op { color: var(--gris-medio); font-weight: 700; }
+.cc-casilla { flex: 1 1 110px; background: var(--gris-claro); border-radius: 12px; padding: 8px 12px; }
+.cc-casilla small { display: block; font-size: 11px; color: var(--gris-medio); font-weight: 600; }
+.cc-casilla b { font-size: 15px; }
+.cc-casilla b.esperado { color: var(--verde); font-size: 17px; }
 .punto-estado { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
 .punto-estado.verde { background: #059669; }
 .punto-estado.ambar { background: #d97706; }
