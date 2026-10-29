@@ -12,6 +12,7 @@ public class DescuentoReglaRequestDto {
 
     private String tipoProducto;         // "CELULAR"|"ACCESORIO"|"SERVICIO"|"TABLET"|null = todos
     private Integer idProductoMaster;    // null = todos los artículos (del tipo, si se indicó)
+    private Short idCategoria;           // null = cualquier categoría; una principal vale también para sus subcategorías
     private Integer codti;               // null = todas las sucursales
 
     private BigDecimal montoMinimo;      // null/0 = sin mínimo

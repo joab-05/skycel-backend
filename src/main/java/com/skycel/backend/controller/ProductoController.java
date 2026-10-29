@@ -24,6 +24,7 @@ public class ProductoController {
     private final ProductoService productoService;
     private final com.skycel.backend.service.MovimientoInventarioService movimientoInventarioService;
     private final com.skycel.backend.service.PermisoService permisoService;
+    private final com.skycel.backend.service.ExistenciaTiendasService existenciaTiendasService;
 
     /** Quién puede ver cuánto costó la mercancía: los roles con el permiso COSTOS_VER (por omisión administradores y encargados). */
     private boolean veCostos(org.springframework.security.core.userdetails.UserDetails u) {
@@ -87,6 +88,17 @@ public class ProductoController {
     public ResponseEntity<List<ProductoResponseDTO>> getInventarioPorTienda(@PathVariable Integer codti,
             @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
         return ResponseEntity.ok(sinCostosSiAplica(productoService.obtenerStockPorTienda(codti), user));
+    }
+
+    @Operation(summary = "Existencias de un artículo en todas las sucursales",
+            description = "Dónde hay existencia de lo que se busca (nombre, código o IMEI/serie; mínimo 2 letras), para pedirlo en un traspaso. " +
+                    "Sin costos. Con excluir se omite la sucursal de quien busca.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/existencias")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<com.skycel.backend.dto.producto.ExistenciaTiendaDto>> existenciasEnTiendas(
+            @RequestParam String texto, @RequestParam(required = false) Integer excluir) {
+        return ResponseEntity.ok(existenciaTiendasService.buscar(texto, excluir));
     }
 
     @Operation(summary = "Stock disponible por tienda (stock > 0)")

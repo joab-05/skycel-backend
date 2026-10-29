@@ -29,6 +29,11 @@ public class NominaDeduccion {
     @Column(name = "monto", nullable = false, precision = 12, scale = 2)
     private BigDecimal monto;
 
+    // Cuando esta deducción es el faltante de un corte de caja; null en las demás.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idsesion_caja")
+    private SesionCaja sesion;
+
     // Cuando esta deducción es el abono a un préstamo del empleado; null si es una deducción libre.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "idprestamo")

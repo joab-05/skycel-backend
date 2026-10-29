@@ -64,14 +64,14 @@ El catálogo **no se muestra completo**: aparece cuando escribes algo en el busc
 ### Equipos (celulares y tablets)
 Cada equipo se vende por su **IMEI o número de serie**. En el catálogo cada modelo muestra sus unidades disponibles: toca la que se lleva el cliente (cada una dice su IMEI, su condición —nuevo, seminuevo o reacondicionado— y su precio).
 1. El equipo entra al carrito y se pregunta solo si es **al contado** o **a crédito (PayJoy)**. Si es al contado se cobra con la **forma de pago del carrito**, igual que lo demás que lleve el cliente.
-2. Con PayJoy captura el **enganche**, el **plazo** (**3, 6, 9 o 12 meses**) y con qué se pagó el enganche (efectivo o transferencia). El sistema no calcula saldo ni pago semanal: PayJoy agrega su interés y esas cifras salen de su plataforma.
+2. Con PayJoy captura el **enganche**, el **plazo** (**3, 6, 9 o 12 meses**) y con qué se pagó el enganche: por omisión es **igual que el resto de la venta** (si eliges Transferencia, el enganche va por transferencia y no pide efectivo); si el enganche se paga distinto, elígelo ahí mismo. El sistema no calcula saldo ni pago semanal: PayJoy agrega su interés y esas cifras salen de su plataforma.
 3. Un equipo no lleva cantidad: cada uno es un renglón con su IMEI.
 
 ### Promoción al vender un equipo
 Si hay una promoción activa (la configura un administrador en Descuentos), al agregar junto con un equipo un artículo de la promoción (por ejemplo un **chip**, una **mica** o un **protector**), el renglón muestra **Promoción de equipo** y su precio ya rebajado; no capturas nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben.
 
 ### Pedir un descuento a un administrador
-Si un cliente pide rebaja, en el renglón toca **Pedir descuento**, escribe cuánto quieres de descuento **por pieza** y el **motivo**, y envía la solicitud. Un administrador la **aprueba** (con ese monto u otro) o la **rechaza**. Mientras tanto el renglón dice «Esperando respuesta del administrador»; cuando la resuelve verás **Descuento aprobado** (el importe ya baja) o **Descuento rechazado** con su motivo. La aprobación sirve **una sola vez**, para ese artículo, en esa sucursal y por unas horas; si cambias la cantidad o quitas el renglón, se cancela. Pedir descuentos requiere conexión.
+Si un cliente pide rebaja, en el renglón toca **Pedir descuento**, elige cómo lo pides —el **monto a descontar** o el **precio con el descuento** (por ejemplo, «que quede en $450»)—, escribe la cifra **por pieza** y el **motivo**, y envía la solicitud. El sistema te muestra cuánto se descuenta y en cuánto queda. Un administrador la **aprueba** (con ese monto u otro) o la **rechaza**. Mientras tanto el renglón dice «Esperando respuesta del administrador»; cuando la resuelve verás **Descuento aprobado** (el importe ya baja) o **Descuento rechazado** con su motivo. La aprobación sirve **una sola vez**, para ese artículo, en esa sucursal y por unas horas; si cambias la cantidad o quitas el renglón, se cancela. Pedir descuentos requiere conexión.
 
 ### Cliente
 El cliente es **opcional**: si no marcas **Registrar cliente**, la venta queda de **mostrador**. Si la marcas, escribe el **teléfono (10 dígitos)** y pulsa **Buscar**: si ya existe aparece su nombre; si no, escribe su nombre y pulsa **Registrar** (quien puede crear clientes).
@@ -156,7 +156,7 @@ Un **encargado** o **administrador** revisa la solicitud: **Aprobar y ejecutar**
 Muestra los productos de **tu tienda**, su existencia, su precio y el mínimo que conviene tener.
 
 ### Qué muestra
-Cada producto con su nombre, código, existencia y precios. Los productos con **poca existencia** aparecen marcados; el menú muestra cuántos son. **Valorización** (JSystem) da el valor del inventario a costo y a precio de venta, y **Exportar** lo saca a Excel.
+Cada producto con su nombre, código, existencia y precios. Los productos con **poca existencia** aparecen marcados; el menú muestra cuántos son. Al buscar o filtrar, el **conteo** se actualiza (por ejemplo «Mostrando 12 de 480 productos»). Con **En todas las tiendas** buscas el artículo en las demás sucursales —nombre, código o IMEI— y ves dónde hay existencia; con **Pedir traspaso** le mandas la solicitud a esa tienda. **Valorización** (JSystem) da el valor del inventario a costo y a precio de venta, y **Exportar** lo saca a Excel.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
@@ -293,7 +293,7 @@ Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en e
 ### Recibir un equipo
 1. Entra a **Órdenes de Servicio** (en la web: **Recibir equipo**) y pulsa **Nueva orden**.
 2. Busca o captura al **cliente** (nombre y teléfono).
-3. Captura marca, modelo, IMEI, **accesorios que deja**, **estado físico** y la **falla reportada**, y el **tiempo estimado en horas**: el sistema dice «Se le promete para el…» con día y hora.
+3. Captura marca, modelo, IMEI, **accesorios que deja**, **estado físico** y la **falla reportada**, y el **tiempo estimado**, en **horas o días** (por omisión, **3 horas**): el sistema dice «Se le promete para el…» con día y hora. El máximo es 30 días.
 4. Si el cliente deja un **anticipo**, regístralo con su forma de pago. En efectivo entra a la caja del turno.
 5. Pulsa **Recibir equipo**. Se genera el folio **OS-…** que se le entrega al cliente.
 
@@ -349,7 +349,7 @@ Los encargados y administradores usan esta sección.
 
 ## Descuentos
 
-El administrador define **reglas de descuento**. Cada regla puede limitarse a un **tipo de producto**, a un **producto** en particular o a una **tienda**; pedir un **monto mínimo** de compra; descontar un **porcentaje** o una **cantidad fija**; y valer solo ciertos **días de la semana** o entre dos **fechas**. El sistema las **aplica solo al cobrar**; el vendedor no captura descuentos a mano. Una regla se puede **activar o desactivar** sin borrarla.
+El administrador define **reglas de descuento**. Cada regla puede limitarse a una **categoría** (una **principal**, que vale también para todas sus subcategorías, o solo una **subcategoría**), a un **tipo de producto**, a un **producto** en particular o a una **tienda**; pedir un **monto mínimo** de compra; descontar un **porcentaje** o una **cantidad fija**; y valer solo ciertos **días de la semana** o entre dos **fechas**. El sistema las **aplica solo al cobrar**; el vendedor no captura descuentos a mano. Una regla se puede **activar o desactivar** sin borrarla.
 
 ### Solicitudes de descuento (administrador)
 Arriba de la pantalla de Descuentos aparecen las **solicitudes** que piden los vendedores y encargados desde el punto de venta: sucursal, quién la pidió, el artículo, su precio, cuánto descuento piden y el motivo. Con los botones puedes **aprobar** lo pedido, **aprobar con otro monto** o **rechazar** (con un motivo opcional). La lista se actualiza sola y también llega un aviso.
@@ -396,7 +396,7 @@ Elige la **sucursal** (si eres administrador) y el **periodo** (Hoy, Ayer, 7 dí
 Sección de administración (los descansos también los ve el encargado).
 
 - **Empleados**: personal, sucursal y **rol de acceso**. Aquí se da de alta a quien va a usar el sistema, se le asigna su rol y se cambia su contraseña si la olvidó. Los técnicos se marcan con su rol, y uno de ellos puede ser el **técnico encargado**, que reparte las órdenes del taller.
-- **Nómina**: períodos de pago con las **percepciones** y **deducciones** de cada empleado y su pago. **Historial de nómina** guarda los períodos anteriores.
+- **Nómina**: períodos de pago con las **percepciones** y **deducciones** de cada empleado y su pago. **Historial de nómina** guarda los períodos anteriores. Los **faltantes de caja** se descuentan solos: al abrir el período y al pagar, el sistema agrega como deducción el faltante de cada corte cerrado en el período ("Faltante de caja del 10/10/2026 · Caja 1"), a quien cerró el turno (si lo cerró un administrador, a quien lo abrió). **Traer faltantes de caja** los actualiza en cualquier momento. Si quitas esa deducción, el faltante queda **perdonado** y no se vuelve a cargar. Los sobrantes no se compensan.
 - **Comisiones**: comisiones por ventas del periodo y su pago.
 - **Descansos**: descansos y vacaciones del personal, con su saldo.
 

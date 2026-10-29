@@ -70,6 +70,16 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
            "ORDER BY p.stock ASC, p.codpro ASC")
     List<Producto> findBajoStockByTienda(Integer codti);
 
+    /** Accesorios con existencia, de todas las sucursales activas, cuyo nombre o código contiene el texto (la búsqueda entre tiendas). */
+    @Query("""
+            SELECT p FROM Producto p JOIN FETCH p.tienda t JOIN FETCH p.productoMaster m
+            WHERE p.activo = true AND t.activo = true AND p.stock > 0
+              AND m.tipo = com.skycel.backend.domain.enums.TipoProducto.ACCESORIO
+              AND (LOWER(m.nombreBase) LIKE LOWER(CONCAT('%', :texto, '%')) OR LOWER(p.codpro) LIKE LOWER(CONCAT('%', :texto, '%')))
+            ORDER BY m.nombreBase ASC, t.nombre ASC
+            """)
+    List<Producto> existenciasPorTexto(@Param("texto") String texto, org.springframework.data.domain.Pageable pagina);
+
     /** Accesorios de la tienda compatibles con un modelo (o "Universal"), con stock. */
     @Query("SELECT p FROM Producto p WHERE p.tienda.codti = :codti AND p.activo = true AND p.stock > 0 " +
            "AND p.productoMaster.tipo = com.skycel.backend.domain.enums.TipoProducto.ACCESORIO " +

@@ -62,6 +62,20 @@ public interface ProductoImeiRepository extends JpaRepository<ProductoImei, Long
             """)
     List<EquipoRezagadoRow> rezagados(@Param("limite") LocalDateTime limite, @Param("codtis") List<Integer> codtis);
 
+    /**
+     * Cuántas unidades disponibles hay de cada artículo en cada sucursal activa, cuando su nombre o el IMEI/serie contiene el
+     * texto (la búsqueda entre tiendas). Cada fila: idprodmaster, nombre, codti, tienda, esAlmacen, unidades, precio menor.
+     */
+    @Query("""
+            SELECT pm.idprodmaster, pm.nombreBase, t.codti, t.nombre, t.esAlmacen, COUNT(pi), MIN(pi.precioVenta)
+            FROM ProductoImei pi JOIN pi.productoMaster pm JOIN pi.tienda t
+            WHERE pi.estado = 'DISPONIBLE' AND t.activo = true
+              AND (LOWER(pm.nombreBase) LIKE LOWER(CONCAT('%', :texto, '%')) OR LOWER(pi.imei) LIKE LOWER(CONCAT('%', :texto, '%')))
+            GROUP BY pm.idprodmaster, pm.nombreBase, t.codti, t.nombre, t.esAlmacen
+            ORDER BY pm.nombreBase ASC, t.nombre ASC
+            """)
+    List<Object[]> existenciasEquipos(@Param("texto") String texto);
+
     /** Unidades (de cualquier estado) cuyo IMEI o serie contiene el texto: sirve para buscar en el punto de venta. */
     @Query("""
             SELECT pi FROM ProductoImei pi JOIN FETCH pi.productoMaster pm

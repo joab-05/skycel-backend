@@ -53,6 +53,11 @@ public class NominaController {
         return ResponseEntityBuilder.ok(service.cerrarPeriodo(idperiodo), "periodo");
     }
 
+    @PostMapping("/periodos/{idperiodo}/faltantes")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> actualizarFaltantes(@PathVariable Integer idperiodo) {
+        return ResponseEntityBuilder.ok(service.actualizarFaltantes(idperiodo), "resultado");
+    }
+
     @GetMapping("/periodos/{idperiodo}/detalles")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> porPeriodo(@PathVariable Integer idperiodo) {
         return ResponseEntityBuilder.ok(service.porPeriodo(idperiodo), "resultado");

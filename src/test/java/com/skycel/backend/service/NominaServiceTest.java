@@ -38,6 +38,7 @@ class NominaServiceTest {
     @Mock private NominaDeduccionRepository deduccionRepository;
     @Mock private EmpleadoPerfilRepository empleadoPerfilRepository;
     @Mock private UsuarioRepository usuarioRepository;
+    @Mock private SesionCajaRepository sesionRepository;
     @Mock private CajaRepository cajaRepository;
     @Mock private EmpleadoPrestamoService prestamoService;
     @Mock private MovimientoCajaService movimientoCajaService;
@@ -148,6 +149,104 @@ class NominaServiceTest {
         assertThat(d.getConcepto()).isEqualTo("Abono a préstamo");
         assertThat(d.getMonto()).isEqualByComparingTo("1000"); // topado al sueldo de 1000, aunque el saldo sea 1500
         assertThat(d.getPrestamo()).isEqualTo(prestamo);
+    }
+
+    // ── Faltantes de caja ────────────────────────────────────────────────────
+
+    private SesionCaja corteConFaltante(int id, Usuario apertura, Usuario cierre, String diferencia) {
+        return SesionCaja.builder().idsesionCaja(id).caja(Caja.builder().nombreCaja("Caja 1").build())
+                .usuarioApertura(apertura).usuarioCierre(cierre).estado(SesionCaja.CERRADA)
+                .fechaCierre(java.time.LocalDateTime.of(2026, 10, 10, 20, 0)).diferencia(new BigDecimal(diferencia)).build();
+    }
+
+    /** Abre un período de octubre con estos empleados y devuelve las líneas que se crearon. */
+    private List<NominaDetalle> abrirConEmpleados(EmpleadoPerfil... empleados) {
+        List<NominaDetalle> lineas = new java.util.ArrayList<>();
+        when(periodoRepository.findFirstByEstadoOrderByFechaInicioDesc(NominaService.PERIODO_ABIERTO)).thenReturn(Optional.empty());
+        when(empleadoPerfilRepository.findByActivoTrue()).thenReturn(List.of(empleados));
+        when(detalleRepository.save(any(NominaDetalle.class))).thenAnswer(inv -> {
+            NominaDetalle d = inv.getArgument(0);
+            if (d.getIddetalle() == null) { d.setIddetalle(idSecuencia++); lineas.add(d); }
+            return d;
+        });
+        when(detalleRepository.findByPeriodo_IdperiodoOrderByIddetalleAsc(anyInt())).thenAnswer(inv -> lineas);
+        service.abrirPeriodo(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 16), "admin");
+        return lineas;
+    }
+
+    @Test
+    @DisplayName("abrirPeriodo: el faltante de un corte cerrado en el período se descuenta solo a quien cerró el turno")
+    void abrirPeriodo_descuentaElFaltanteDelCorte() {
+        EmpleadoPerfil juan = empleado(1, "Juan", new BigDecimal("3000"));
+        SesionCaja corte = corteConFaltante(7, juan.getUsuario(), juan.getUsuario(), "-120.00");
+        when(sesionRepository.faltantesPorDescontar(any(), any())).thenReturn(List.of(corte));
+
+        abrirConEmpleados(juan);
+
+        verify(deduccionRepository).save(deduccionCaptor.capture());
+        NominaDeduccion d = deduccionCaptor.getValue();
+        assertThat(d.getConcepto()).isEqualTo("Faltante de caja del 10/10/2026 · Caja 1");
+        assertThat(d.getMonto()).isEqualByComparingTo("120");
+        assertThat(d.getSesion()).isSameAs(corte);
+        assertThat(corte.getFaltanteNomina()).isEqualTo(NominaService.FALTANTE_DESCONTADO);
+        verify(sesionRepository).save(corte);
+    }
+
+    @Test
+    @DisplayName("el rango de cortes va desde que terminó el período anterior hasta el fin de este")
+    void rangoDeCortes() {
+        EmpleadoPerfil juan = empleado(1, "Juan", new BigDecimal("3000"));
+        when(periodoRepository.findAllByOrderByFechaInicioDesc()).thenReturn(List.of(
+                NominaPeriodo.builder().idperiodo(1).fechaInicio(LocalDate.of(2026, 9, 16)).fechaFin(LocalDate.of(2026, 9, 30)).build()));
+
+        abrirConEmpleados(juan);
+
+        verify(sesionRepository).faltantesPorDescontar(java.time.LocalDateTime.of(2026, 10, 1, 0, 0), java.time.LocalDateTime.of(2026, 10, 16, 0, 0));
+    }
+
+    @Test
+    @DisplayName("si el turno lo cerró un administrador, el faltante es de quien lo abrió")
+    void faltanteCerradoPorAdministrador() {
+        EmpleadoPerfil ana = empleado(2, "Ana", new BigDecimal("2500"));
+        SesionCaja corte = corteConFaltante(8, ana.getUsuario(), admin, "-50.00");
+        when(sesionRepository.faltantesPorDescontar(any(), any())).thenReturn(List.of(corte));
+
+        abrirConEmpleados(ana);
+
+        verify(deduccionRepository).save(deduccionCaptor.capture());
+        assertThat(deduccionCaptor.getValue().getMonto()).isEqualByComparingTo("50");
+        assertThat(deduccionCaptor.getValue().getDetalle().getEmpleado()).isSameAs(ana);
+    }
+
+    @Test
+    @DisplayName("el faltante de alguien que no está en la nómina no se descuenta y queda pendiente")
+    void faltanteDeQuienNoEstaEnLaNomina() {
+        EmpleadoPerfil juan = empleado(1, "Juan", new BigDecimal("3000"));
+        Usuario otro = Usuario.builder().idusuario(999).username("otro").rol(Rol.VENDEDOR).build();
+        SesionCaja corte = corteConFaltante(9, otro, otro, "-30.00");
+        when(sesionRepository.faltantesPorDescontar(any(), any())).thenReturn(List.of(corte));
+
+        abrirConEmpleados(juan);
+
+        verify(deduccionRepository, never()).save(any(NominaDeduccion.class));
+        assertThat(corte.getFaltanteNomina()).isNull();
+    }
+
+    @Test
+    @DisplayName("quitar la deducción de un faltante lo perdona: no se vuelve a cargar")
+    void quitarDeduccionPerdonaElFaltante() {
+        NominaDetalle detalle = detallePendiente(10);
+        SesionCaja corte = corteConFaltante(7, detalle.getEmpleado().getUsuario(), detalle.getEmpleado().getUsuario(), "-120.00");
+        corte.setFaltanteNomina(NominaService.FALTANTE_DESCONTADO);
+        NominaDeduccion d = NominaDeduccion.builder().iddeduccion(5).detalle(detalle).concepto("Faltante de caja").monto(new BigDecimal("120")).sesion(corte).build();
+        when(deduccionRepository.findById(5)).thenReturn(Optional.of(d));
+        when(detalleRepository.findById(10)).thenReturn(Optional.of(detalle));
+
+        service.eliminarDeduccion(5);
+
+        assertThat(corte.getFaltanteNomina()).isEqualTo(NominaService.FALTANTE_PERDONADO);
+        verify(sesionRepository).save(corte);
+        verify(deduccionRepository).delete(d);
     }
 
     // ── Percepciones / deducciones ───────────────────────────────────────────

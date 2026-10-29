@@ -3,7 +3,9 @@ package com.skycel.backend.service;
 import com.skycel.backend.domain.entity.DescuentoRegla;
 import com.skycel.backend.domain.entity.Producto;
 import com.skycel.backend.domain.enums.TipoProducto;
+import com.skycel.backend.domain.entity.Categoria;
 import com.skycel.backend.dto.descuento.DescuentoReglaRequestDto;
+import com.skycel.backend.repository.CategoriaRepository;
 import com.skycel.backend.repository.DescuentoReglaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -36,6 +38,7 @@ public class DescuentoService {
             DayOfWeek.THURSDAY, "JUE", DayOfWeek.FRIDAY, "VIE", DayOfWeek.SATURDAY, "SAB", DayOfWeek.SUNDAY, "DOM");
 
     private final DescuentoReglaRepository repository;
+    private final CategoriaRepository categoriaRepository;
 
     // ── Cálculo (el POS y la venta lo usan) ─────────────────────────────────────
 
@@ -54,8 +57,12 @@ public class DescuentoService {
         TipoProducto tipo = master != null ? master.getTipo() : null;
         Integer idProdMaster = master != null ? master.getIdprodmaster() : null;
 
-        List<DescuentoRegla> candidatas = repository.findByActivoTrue().stream()
-                .filter(r -> aplicaAlAlcance(r, tipo, idProdMaster, codti))
+        List<DescuentoRegla> activas = repository.findByActivoTrue();
+        // la ruta de categorías del artículo solo se arma si alguna regla es por categoría (evita recorrer el árbol para nada)
+        Set<Short> categorias = master != null && master.getCategoria() != null && activas.stream().anyMatch(r -> r.getIdCategoria() != null)
+                ? PromocionEquipoService.ruta(master.getCategoria()) : Set.of();
+        List<DescuentoRegla> candidatas = activas.stream()
+                .filter(r -> aplicaAlAlcance(r, tipo, idProdMaster, codti, categorias))
                 .filter(r -> r.getMontoMinimo() == null || r.getMontoMinimo().signum() <= 0
                         || precioLista.compareTo(r.getMontoMinimo()) >= 0)
                 .filter(r -> aplicaHoy(r, momento))
@@ -73,7 +80,13 @@ public class DescuentoService {
     }
 
     static boolean aplicaAlAlcance(DescuentoRegla r, TipoProducto tipo, Integer idProdMaster, Integer codti) {
+        return aplicaAlAlcance(r, tipo, idProdMaster, codti, Set.of());
+    }
+
+    /** @param categorias el id de la categoría del artículo y el de todas las que la contienen */
+    static boolean aplicaAlAlcance(DescuentoRegla r, TipoProducto tipo, Integer idProdMaster, Integer codti, Set<Short> categorias) {
         if (r.getTipoProducto() != null && r.getTipoProducto() != tipo) return false;
+        if (r.getIdCategoria() != null && !categorias.contains(r.getIdCategoria())) return false;
         if (r.getIdProductoMaster() != null && !r.getIdProductoMaster().equals(idProdMaster)) return false;
         if (r.getCodti() != null && !r.getCodti().equals(codti)) return false;
         return true;
@@ -164,8 +177,12 @@ public class DescuentoService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha de inicio no puede ser posterior a la de fin.");
         }
 
+        if (dto.getIdCategoria() != null && !categoriaRepository.existsById(dto.getIdCategoria()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La categoría elegida no existe.");
+
         r.setNombre(dto.getNombre().trim());
         r.setTipoProducto(tipo);
+        r.setIdCategoria(dto.getIdCategoria());
         r.setIdProductoMaster(dto.getIdProductoMaster());
         r.setCodti(dto.getCodti());
         r.setMontoMinimo(dto.getMontoMinimo());
@@ -176,6 +193,15 @@ public class DescuentoService {
         r.setFechaInicio(aplicacion == RANGO_FECHA ? dto.getFechaInicio() : null);
         r.setFechaFin(aplicacion == RANGO_FECHA ? dto.getFechaFin() : null);
         r.setActivo(dto.getActivo() == null || dto.getActivo());
+    }
+
+    /** «Accesorios › Protectores»: la categoría con las que la contienen. */
+    static String rutaTexto(Categoria c) {
+        StringBuilder sb = new StringBuilder(c.getNombre());
+        Set<Short> vistas = new HashSet<>();
+        for (Categoria p = c.getCategoriaSuperior(); p != null && vistas.add(p.getIdcat()); p = p.getCategoriaSuperior())
+            sb.insert(0, p.getNombre() + " › ");
+        return sb.toString();
     }
 
     private DescuentoRegla buscarOFallar(Integer id) {
@@ -189,6 +215,8 @@ public class DescuentoService {
         m.put("nombre", r.getNombre());
         m.put("tipoProducto", r.getTipoProducto());
         m.put("idProductoMaster", r.getIdProductoMaster());
+        m.put("idCategoria", r.getIdCategoria());
+        m.put("categoria", r.getIdCategoria() == null ? null : categoriaRepository.findById(r.getIdCategoria()).map(DescuentoService::rutaTexto).orElse(null));
         m.put("codti", r.getCodti());
         m.put("montoMinimo", r.getMontoMinimo());
         m.put("descuentoPorcentaje", r.getDescuentoPorcentaje());

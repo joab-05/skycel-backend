@@ -164,6 +164,9 @@ function posAplicarPromocion() {
 
 function posMetodoCarrito() { return Number(document.getElementById('pv-metodo')?.value || 1); }
 
+/** Con qué se paga el enganche de un equipo a crédito: lo que se elija en el renglón o, si no se eligió, lo mismo que el resto de la venta (en Mixto, efectivo). */
+const posMetodoEnganche = (i) => i.metodoEnganche || (posMetodoCarrito() === 4 ? 1 : posMetodoCarrito());
+
 /** Lo que se cobra en cada forma de pago cuando el método es Mixto (efectivo, tarjeta y transferencia). */
 function posMixtoDesglose() {
   const n = (id) => posRedondear(Number(document.getElementById(id)?.value) || 0);
@@ -175,8 +178,8 @@ const posMixtoPagos = () => Object.entries(posMixtoDesglose()).filter(([, m]) =>
 function posGrupos() {
   const grupos = new Map();
   for (const i of posCarrito) {
-    const clave = i.formaPago === 'PayJoy' ? 'PJ' + i.metodoEnganche : 'C' + posMetodoCarrito();
-    if (!grupos.has(clave)) grupos.set(clave, { clave, payjoy: i.formaPago === 'PayJoy', metodo: i.formaPago === 'PayJoy' ? i.metodoEnganche : posMetodoCarrito(), mixto: i.formaPago !== 'PayJoy' && posMetodoCarrito() === 4, items: [] });
+    const clave = i.formaPago === 'PayJoy' ? 'PJ' + posMetodoEnganche(i) : 'C' + posMetodoCarrito();
+    if (!grupos.has(clave)) grupos.set(clave, { clave, payjoy: i.formaPago === 'PayJoy', metodo: i.formaPago === 'PayJoy' ? posMetodoEnganche(i) : posMetodoCarrito(), mixto: i.formaPago !== 'PayJoy' && posMetodoCarrito() === 4, items: [] });
     grupos.get(clave).items.push(i);
   }
   return [...grupos.values()].sort((a, b) => Number(b.items.some(x => x.esEquipo)) - Number(a.items.some(x => x.esEquipo)));
@@ -187,7 +190,7 @@ function posTotales() {
   const enganches = posCarrito.filter(i => i.formaPago === 'PayJoy').reduce((s, i) => s + Number(i.enganche || 0), 0);
   const metodo = posMetodoCarrito();
   const efectivoContado = metodo === 1 ? contado : (metodo === 4 && contado > 0 ? posMixtoDesglose()[1] : 0);
-  const efectivo = efectivoContado + posCarrito.filter(i => i.formaPago === 'PayJoy' && i.metodoEnganche === 1).reduce((s, i) => s + posCobroHoy(i), 0);
+  const efectivo = efectivoContado + posCarrito.filter(i => i.formaPago === 'PayJoy' && posMetodoEnganche(i) === 1).reduce((s, i) => s + posCobroHoy(i), 0);
   return { contado: posRedondear(contado), enganches: posRedondear(enganches), total: posRedondear(contado + enganches), efectivo: posRedondear(efectivo) };
 }
 
@@ -515,7 +518,7 @@ function agregarAlCarritoPOS(p, cantidad, precio, imei, condicion) {
       idprodmaster: p.idProductoMaster, codpro: p.esEquipo ? null : p.codpro, nombre: p.nombreProductoMaster, tipo: p.tipo,
       esEquipo: !!p.esEquipo, idCategoria: p.idCategoria, cantidad, precio: Number(precio), imei: imei || null, condicion: condicion || null,
       stockMax: p.tipo === 'ACCESORIO' ? Number(p.stock) : null,
-      formaPago: 'Contado', enganche: 0, plazoMeses: 12, metodoEnganche: 1,
+      formaPago: 'Contado', enganche: 0, plazoMeses: 12, metodoEnganche: 0,
       sol: null, pidiendo: false, piezasPromo: 0, descuentoPromo: 0, promoTexto: null,
     });
   }
@@ -559,7 +562,7 @@ function actualizarCarritoPOS() {
   posAplicarPromocion();
   if (posCarrito.length === 0) { cont.innerHTML = '<div class="vacio">Agrega productos desde el catálogo.</div>'; }
   else {
-    const metodosEnganche = [[1, 'Efectivo'], [3, 'Transferencia']].concat(posConfig.aceptaTarjeta ? [[2, 'Tarjeta']] : []);
+    const metodosEnganche = [[0, 'Igual que el resto de la venta'], [1, 'Efectivo'], [3, 'Transferencia']].concat(posConfig.aceptaTarjeta ? [[2, 'Tarjeta']] : []);
     cont.innerHTML = posCarrito.map((i, idx) => {
       const payjoy = i.formaPago === 'PayJoy';
       const sol = i.sol;
@@ -595,8 +598,11 @@ function actualizarCarritoPOS() {
         ${!sol && !i.pidiendo ? `<button class="btn btn-gris btn-chico pv-pedir" data-idx="${idx}" style="margin-top:8px;">${ic('tags')} Pedir descuento</button>` : ''}
         ${i.pidiendo ? `
         <div class="mensaje info" style="display:block;">
-          <label style="margin:0 0 2px 0;">Descuento por pieza ($)</label>
+          <label style="margin:0 0 2px 0;">¿Cómo lo pides?</label>
+          <select class="pv-sol-forma" data-idx="${idx}"><option value="monto">Monto a descontar</option><option value="precio">Precio con el descuento</option></select>
+          <label class="pv-sol-etq" style="margin:6px 0 2px 0;">Descuento por pieza ($)</label>
           <input type="number" inputmode="decimal" min="0" step="1" class="pv-sol-monto" data-idx="${idx}">
+          <div class="ayuda pv-sol-efecto" style="font-weight:600;"></div>
           <label style="margin:6px 0 2px 0;">¿Por qué se pide? (obligatorio)</label>
           <input class="pv-sol-motivo" data-idx="${idx}" maxlength="200">
           <div class="ayuda">Un administrador recibe el aviso y la aprueba o la rechaza; si la aprueba, la verás aquí y se aplica al cobrar.</div>
@@ -629,12 +635,29 @@ function actualizarCarritoPOS() {
     cont.querySelectorAll('.pv-pedir').forEach(b => b.onclick = () => { item(b).pidiendo = true; actualizarCarritoPOS(); });
     cont.querySelectorAll('.pv-sol-cancelar').forEach(b => b.onclick = () => { item(b).pidiendo = false; actualizarCarritoPOS(); });
     cont.querySelectorAll('.pv-sol-retirar').forEach(b => b.onclick = () => { posReiniciarSolicitud(item(b), true); actualizarCarritoPOS(); });
+    // El descuento se pide por el monto que se quita o por el precio en que debe quedar el artículo
+    const descuentoPedido = (fila, i) => {
+      const escrito = Number(fila.querySelector('.pv-sol-monto').value);
+      const porPrecio = fila.querySelector('.pv-sol-forma').value === 'precio';
+      return { escrito, porPrecio, monto: posRedondear(porPrecio ? i.precio - escrito : escrito) };
+    };
+    cont.querySelectorAll('.pv-sol-forma, .pv-sol-monto').forEach(el => {
+      const fila = el.closest('.orden-item');
+      const i = item(fila);
+      const refrescar = () => {
+        const d = descuentoPedido(fila, i);
+        fila.querySelector('.pv-sol-etq').textContent = d.porPrecio ? 'Precio final por pieza ($)' : 'Descuento por pieza ($)';
+        fila.querySelector('.pv-sol-efecto').textContent = !(d.escrito > 0) ? ''
+          : (d.monto > 0 && d.monto < i.precio ? `Se descuentan ${formatoDinero(d.monto)} · queda en ${formatoDinero(i.precio - d.monto)}` : `Debe quedar entre $0 y ${formatoDinero(i.precio)}`);
+      };
+      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', refrescar);
+    });
     cont.querySelectorAll('.pv-sol-enviar').forEach(b => b.onclick = async () => {
       const i = item(b);
       const fila = b.closest('.orden-item');
-      const monto = Number(fila.querySelector('.pv-sol-monto').value);
+      const { escrito, porPrecio, monto } = descuentoPedido(fila, i);
       const motivo = fila.querySelector('.pv-sol-motivo').value.trim();
-      if (!(monto > 0) || monto >= i.precio) { mostrarMensaje(root, 'Indica un descuento mayor a $0 y menor al precio del artículo.', 'error'); return; }
+      if (!(escrito > 0) || !(monto > 0) || monto >= i.precio) { mostrarMensaje(root, porPrecio ? 'Indica un precio final mayor a $0 y menor al precio del artículo.' : 'Indica un descuento mayor a $0 y menor al precio del artículo.', 'error'); return; }
       if (!motivo) { mostrarMensaje(root, 'Escribe el motivo del descuento.', 'error'); return; }
       b.disabled = true;
       try { await posEnviarSolicitud(i, monto, motivo, Sesion.obtener().codti); mostrarMensaje(root, 'Solicitud enviada: un administrador la revisará.', 'ok'); }

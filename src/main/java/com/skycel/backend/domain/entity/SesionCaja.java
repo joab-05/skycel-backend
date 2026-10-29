@@ -82,6 +82,13 @@ public class SesionCaja {
     @Column(name = "observaciones", columnDefinition = "TEXT")
     private String observaciones;
 
+    /**
+     * Qué pasó con el faltante de este corte (cuando la diferencia es negativa): null = todavía no se descuenta a nadie,
+     * 1 = ya es una deducción de nómina, 2 = el administrador lo perdonó (quitó la deducción).
+     */
+    @Column(name = "faltante_nomina", columnDefinition = "TINYINT")
+    private Byte faltanteNomina;
+
     /** El corte completo al cerrar, en JSON (ver SesionCajaResponseDto.ResumenDto). */
     @Column(name = "detalle", columnDefinition = "MEDIUMTEXT")
     private String detalle;

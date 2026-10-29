@@ -6,13 +6,16 @@ import com.skycel.backend.domain.entity.NominaDeduccion;
 import com.skycel.backend.domain.entity.NominaDetalle;
 import com.skycel.backend.domain.entity.NominaPercepcion;
 import com.skycel.backend.domain.entity.NominaPeriodo;
+import com.skycel.backend.domain.entity.SesionCaja;
 import com.skycel.backend.domain.entity.Usuario;
+import com.skycel.backend.domain.enums.Rol;
 import com.skycel.backend.repository.CajaRepository;
 import com.skycel.backend.repository.EmpleadoPerfilRepository;
 import com.skycel.backend.repository.NominaDeduccionRepository;
 import com.skycel.backend.repository.NominaDetalleRepository;
 import com.skycel.backend.repository.NominaPercepcionRepository;
 import com.skycel.backend.repository.NominaPeriodoRepository;
+import com.skycel.backend.repository.SesionCajaRepository;
 import com.skycel.backend.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,16 +25,21 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * Nómina quincenal: al abrir un período se genera una línea (NominaDetalle) por cada empleado activo, con
  * su sueldo base como primera percepción y, si tiene un préstamo activo, una deducción sugerida por el saldo
  * pendiente. Percepciones y deducciones se pueden agregar/editar libremente mientras la línea siga pendiente.
+ * Los faltantes de caja (corte con menos efectivo del esperado) se descuentan solos como deducción de quien cerró el turno.
  * Solo ROOT/ADMIN: es dinero de nómina, no se delega a encargados de tienda.
  */
 @Service
@@ -47,12 +55,17 @@ public class NominaService {
     private static final String CONCEPTO_SUELDO_BASE = "Sueldo base";
     private static final String CONCEPTO_ABONO_PRESTAMO = "Abono a préstamo";
 
+    /** Lo que pasó con el faltante de un corte (ver {@link SesionCaja#getFaltanteNomina()}). */
+    public static final byte FALTANTE_DESCONTADO = 1;
+    public static final byte FALTANTE_PERDONADO = 2;
+
     private final NominaPeriodoRepository periodoRepository;
     private final NominaDetalleRepository detalleRepository;
     private final NominaPercepcionRepository percepcionRepository;
     private final NominaDeduccionRepository deduccionRepository;
     private final EmpleadoPerfilRepository empleadoPerfilRepository;
     private final UsuarioRepository usuarioRepository;
+    private final SesionCajaRepository sesionRepository;
     private final CajaRepository cajaRepository;
     private final EmpleadoPrestamoService prestamoService;
     private final MovimientoCajaService movimientoCajaService;
@@ -91,7 +104,77 @@ public class NominaService {
             }
             recalcularTotales(detalle);
         }
+        descontarFaltantes(periodo);
         return toMapPeriodo(periodo);
+    }
+
+    /**
+     * Pasa a deducciones los faltantes de caja que todavía no se descuentan: los de los cortes cerrados desde donde terminó el
+     * período anterior (o desde el inicio de este, si es el primero) hasta el fin de este. Cada faltante se carga a quien cerró el
+     * turno; si lo cerró un administrador, a quien lo abrió. Solo a las líneas que siguen pendientes de pago. Si el administrador
+     * quita la deducción, el faltante queda perdonado y no se vuelve a cargar.
+     *
+     * @return cuántos faltantes se descontaron
+     */
+    @Transactional
+    public int descontarFaltantes(NominaPeriodo periodo) {
+        if (periodo.getFechaInicio() == null || periodo.getFechaFin() == null) return 0;
+        LocalDate desde = periodoRepository.findAllByOrderByFechaInicioDesc().stream()
+                .filter(p -> !p.getIdperiodo().equals(periodo.getIdperiodo()) && p.getFechaInicio().isBefore(periodo.getFechaInicio()))
+                .map(p -> p.getFechaFin().plusDays(1)).findFirst()
+                .map(f -> f.isBefore(periodo.getFechaInicio()) ? f : periodo.getFechaInicio())
+                .orElse(periodo.getFechaInicio());
+        List<SesionCaja> faltantes = sesionRepository.faltantesPorDescontar(desde.atStartOfDay(), periodo.getFechaFin().plusDays(1).atStartOfDay());
+        if (faltantes == null || faltantes.isEmpty()) return 0;
+
+        Map<Integer, NominaDetalle> porUsuario = new HashMap<>();
+        for (NominaDetalle d : detalleRepository.findByPeriodo_IdperiodoOrderByIddetalleAsc(periodo.getIdperiodo()))
+            if (d.getEstado() == DETALLE_PENDIENTE && d.getEmpleado().getUsuario() != null)
+                porUsuario.put(d.getEmpleado().getUsuario().getIdusuario(), d);
+
+        Set<NominaDetalle> tocados = new LinkedHashSet<>();
+        int descontados = 0;
+        for (SesionCaja s : faltantes) {
+            Usuario responsable = responsableDelFaltante(s);
+            NominaDetalle detalle = responsable == null ? null : porUsuario.get(responsable.getIdusuario());
+            if (detalle == null) continue;
+            deduccionRepository.save(NominaDeduccion.builder().detalle(detalle).concepto(conceptoFaltante(s))
+                    .monto(s.getDiferencia().negate()).sesion(s).build());
+            s.setFaltanteNomina(FALTANTE_DESCONTADO);
+            sesionRepository.save(s);
+            tocados.add(detalle);
+            descontados++;
+        }
+        tocados.forEach(this::recalcularTotales);
+        return descontados;
+    }
+
+    /** Trae a un período abierto los faltantes de caja que se hayan registrado desde que se abrió. */
+    @Transactional
+    public Map<String, Object> actualizarFaltantes(Integer idperiodo) {
+        NominaPeriodo periodo = periodoDe(idperiodo);
+        if (periodo.getEstado() != PERIODO_ABIERTO)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este período ya está cerrado.");
+        return Map.of("descontados", descontarFaltantes(periodo));
+    }
+
+    /** A quién se le carga el faltante de un corte: a quien lo cerró; si lo cerró un administrador, a quien abrió el turno. */
+    static Usuario responsableDelFaltante(SesionCaja s) {
+        Usuario cierre = s.getUsuarioCierre(), apertura = s.getUsuarioApertura();
+        if (cierre == null) return apertura;
+        if (esDirectivo(cierre) && apertura != null && !esDirectivo(apertura)) return apertura;
+        return cierre;
+    }
+
+    private static boolean esDirectivo(Usuario u) {
+        return u.getRol() == Rol.ROOT || u.getRol() == Rol.ADMIN;
+    }
+
+    private static String conceptoFaltante(SesionCaja s) {
+        String fecha = s.getFechaCierre() != null ? s.getFechaCierre().toLocalDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "";
+        String caja = s.getCaja() != null && s.getCaja().getNombreCaja() != null ? " · " + s.getCaja().getNombreCaja() : "";
+        String concepto = "Faltante de caja del " + fecha + caja;
+        return concepto.length() > 100 ? concepto.substring(0, 100) : concepto;
     }
 
     @Transactional(readOnly = true)
@@ -171,6 +254,10 @@ public class NominaService {
         NominaDeduccion d = deduccionRepository.findById(iddeduccion)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deducción no encontrada: " + iddeduccion));
         NominaDetalle detalle = detalleEditable(d.getDetalle().getIddetalle());
+        if (d.getSesion() != null) {                    // quitar un faltante de caja es perdonarlo: no se vuelve a cargar
+            d.getSesion().setFaltanteNomina(FALTANTE_PERDONADO);
+            sesionRepository.save(d.getSesion());
+        }
         deduccionRepository.delete(d);
         recalcularTotales(detalle);
         return detalle(detalle.getIddetalle());
@@ -179,6 +266,7 @@ public class NominaService {
     @Transactional
     public Map<String, Object> pagar(Integer iddetalle, Integer idCaja, String username) {
         NominaDetalle detalle = detalleEditable(iddetalle);
+        descontarFaltantes(detalle.getPeriodo());       // los faltantes de caja que hayan llegado desde que se abrió el período
         if (detalle.getTotalNeto().signum() < 0)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "El neto de esta línea es negativo ($" + detalle.getTotalNeto() + "); ajuste percepciones o deducciones antes de pagar.");
@@ -289,6 +377,7 @@ public class NominaService {
         m.put("concepto", d.getConcepto());
         m.put("monto", d.getMonto());
         m.put("idprestamo", d.getPrestamo() != null ? d.getPrestamo().getIdprestamo() : null);
+        m.put("idsesionCaja", d.getSesion() != null ? d.getSesion().getIdsesionCaja() : null);
         return m;
     }
 }

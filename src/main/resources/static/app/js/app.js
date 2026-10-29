@@ -782,6 +782,11 @@ function filaLista(titulo, meta, derecha) {
 
 // ── Recepción de equipo ──────────────────────────────────────────────────
 
+/** El tiempo estimado de la orden en horas: el número escrito por su unidad (horas o días). */
+function rcHorasEstimadas() {
+  return Math.floor(Number(document.getElementById('rc-horas').value)) * Number(document.getElementById('rc-unidad').value);
+}
+
 async function pantallaRecepcion() {
   const s = Sesion.obtener();
   if (!Sesion.tiene('ORDEN_RECIBIR')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para recibir equipos.</div>'; return; }
@@ -833,8 +838,11 @@ async function pantallaRecepcion() {
       <textarea id="rc-estado-fisico" placeholder="Golpes, rayones, daños visibles (opcional)"></textarea>
       <label class="obligatorio">Falla reportada</label>
       <textarea id="rc-falla" placeholder="Lo que dice el cliente que tiene"></textarea>
-      <label class="obligatorio">Tiempo estimado (horas)</label>
-      <input id="rc-horas" type="number" inputmode="numeric" min="1" max="720" value="24">
+      <label class="obligatorio">Tiempo estimado</label>
+      <div class="fila" style="align-items:center;">
+        <input id="rc-horas" type="number" inputmode="numeric" min="1" max="720" value="3" style="max-width:120px;">
+        <select id="rc-unidad" style="max-width:120px;"><option value="1">horas</option><option value="24">días</option></select>
+      </div>
       <div id="rc-entrega" class="ayuda"></div>
       <div id="rc-tecnico-cont"></div>
 
@@ -929,12 +937,13 @@ async function pantallaRecepcion() {
   negocioAceptaTarjeta().then(ok => { if (!ok) selMetodo.querySelector('option[value="2"]')?.remove(); });
   // «Se le promete para el ...»: las horas a partir de ahora
   const pintarEntrega = () => {
-    const h = Math.floor(Number(document.getElementById('rc-horas').value));
+    const h = rcHorasEstimadas();
     const el = document.getElementById('rc-entrega');
     el.textContent = h >= 1 && h <= 720
       ? 'Se le promete para el ' + new Date(Date.now() + h * 3600000).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
   };
   document.getElementById('rc-horas').addEventListener('input', pintarEntrega);
+  document.getElementById('rc-unidad').addEventListener('change', pintarEntrega);
   pintarEntrega();
   selMetodo.onchange = () => document.getElementById('rc-anticipo-folio-cont').classList.toggle('oculto', selMetodo.value === '1');
 
@@ -960,8 +969,8 @@ async function pantallaRecepcion() {
     const codti = SUPERIOR.includes(s.rol) ? Number(document.getElementById('rc-codti')?.value || tiendaSel) : undefined;
     const idTecnicoSel = document.getElementById('rc-tecnico')?.value;
 
-    const horasEstimadas = Math.floor(Number(document.getElementById('rc-horas').value));
-    if (!(horasEstimadas >= 1 && horasEstimadas <= 720)) { mostrarMensaje(root, 'Indica el tiempo estimado en horas (de 1 a 720).', 'error'); return; }
+    const horasEstimadas = rcHorasEstimadas();
+    if (!(horasEstimadas >= 1 && horasEstimadas <= 720)) { mostrarMensaje(root, 'Indica el tiempo estimado: de 1 a 720 horas (hasta 30 días).', 'error'); return; }
     const payload = {
       codti,
       idcliente,
@@ -2922,7 +2931,9 @@ async function dibujarPeriodoActivo(cont, p) {
         <div class="tarjeta" style="text-align:center; margin-bottom:0;"><div class="ayuda">Total neto</div><div style="font-size:18px; font-weight:700;">${formatoDinero(p.totalNeto)}</div></div>
       </div>
       <button id="nm-cerrar" class="btn btn-ambar" style="margin-top:10px;" ${Number(p.totalPendientes) > 0 ? 'disabled' : ''}>${ic('circle-check')} Cerrar período</button>
+      <button id="nm-faltantes" class="btn btn-gris" style="margin-top:8px;">${ic('refresh-cw')} Traer faltantes de caja</button>
       <button class="btn btn-gris" style="margin-top:8px;" onclick="navegar('#/nomina-historial')">${ic('history')} Ver períodos anteriores</button>
+      <div class="ayuda" style="margin-top:6px;">Los faltantes de los cortes de caja se descuentan solos (a quien cerró el turno) al abrir el período y al pagar.</div>
     </div>
     <div id="nm-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>`;
 
@@ -2930,6 +2941,14 @@ async function dibujarPeriodoActivo(cont, p) {
     if (!confirm('¿Cerrar este período de nómina? Ya no se podrá modificar.')) return;
     try { await api('POST', `/api/nomina/periodos/${p.idperiodo}/cerrar`, undefined); cargarNomina(); }
     catch (err) { alert(err.message || 'No se pudo cerrar.'); }
+  };
+
+  document.getElementById('nm-faltantes').onclick = async () => {
+    try {
+      const r = await api('POST', `/api/nomina/periodos/${p.idperiodo}/faltantes`, undefined);
+      alert(r.descontados ? `${r.descontados} faltante(s) de caja se agregaron como deducción.` : 'No hay faltantes nuevos por descontar.');
+      cargarNomina();
+    } catch (err) { alert(err.message || 'No se pudieron traer los faltantes.'); }
   };
 
   const listaEl = document.getElementById('nm-lista');
@@ -3029,7 +3048,7 @@ async function cargarNominaDetalle(iddetalle, s) {
       const el = document.getElementById(contId);
       el.innerHTML = items.length === 0 ? '<div class="vacio">Sin líneas.</div>' : items.map(it => `
         <div class="detalle-fila">
-          <span class="k">${escapar(it.concepto)}${it.idprestamo ? ' <span class="ayuda">(abono a préstamo)</span>' : ''}</span>
+          <span class="k">${escapar(it.concepto)}${it.idprestamo ? ' <span class="ayuda">(abono a préstamo)</span>' : ''}${it.idsesionCaja ? ' <span class="ayuda">(del corte de caja; si lo quitas se perdona)</span>' : ''}</span>
           <span class="v">${formatoDinero(it.monto)}${editable ? ` <button class="btn-icono nmd-del" data-tipo="${tipo}" data-id="${tipo === 'percepcion' ? it.idpercepcion : it.iddeduccion}">${ic('x')}</button>` : ''}</span>
         </div>`).join('');
     };
@@ -3127,19 +3146,67 @@ async function pantallaInventario() {
         <div class="buscador buscar-ic">${ic('search')}<input id="iv-buscar" placeholder="Nombre, código, marca o modelo"></div>
         <select id="iv-cat" aria-label="Categoría"><option value="">Todas las categorías</option></select>
         <label class="casilla-chica"><input type="checkbox" id="iv-bajo-stock"> Solo bajo stock</label>
+        <label class="casilla-chica" title="Busca el artículo en las demás sucursales para pedirlo en un traspaso"><input type="checkbox" id="iv-todas"> En todas las tiendas</label>
       </div>
-      <div id="iv-lista" style="margin-top:10px;"><div class="vacio">Cargando...</div></div>
+      <div id="iv-conteo" class="ayuda" style="margin-top:8px;"></div>
+      <div id="iv-lista" style="margin-top:6px;"><div class="vacio">Cargando...</div></div>
     </div>`;
 
   let codti = s.codti;
   let productosInv = [];
+  // Con «En todas las tiendas» se busca el artículo en las demás sucursales para pedirlo en un traspaso
+  let busquedaTiendas = 0, pausaTiendas = null, existencias = [];
+  const buscarEnTiendas = () => {
+    const q = document.getElementById('iv-buscar').value.trim();
+    const cont = document.getElementById('iv-lista');
+    const conteo = document.getElementById('iv-conteo');
+    const esta = ++busquedaTiendas;
+    clearTimeout(pausaTiendas);
+    if (q.length < 2) { conteo.textContent = ''; cont.innerHTML = '<div class="vacio">Escribe al menos 2 letras del nombre, código o IMEI para ver dónde hay.</div>'; return; }
+    conteo.textContent = 'Buscando en las demás tiendas...';
+    pausaTiendas = setTimeout(async () => {
+      try {
+        const r = await api('GET', `/api/productos/existencias?texto=${encodeURIComponent(q)}&excluir=${codti ?? ''}`);
+        if (esta !== busquedaTiendas) return;
+        existencias = r;
+        conteo.textContent = r.length === 0 ? 'Sin existencia en las demás tiendas' : `${new Set(r.map(x => x.nombre)).size} artículos en ${new Set(r.map(x => x.codti)).size} tiendas`;
+        const puedePedir = Sesion.tiene('TRASPASOS');
+        cont.innerHTML = r.length === 0 ? `<div class="vacio">Ninguna otra tienda tiene existencia de «${escapar(q)}».</div>` : r.map((x, i) => `
+          <div class="orden-item">
+            <div class="orden-cab"><span class="orden-folio">${escapar(x.nombre)}</span><span style="font-weight:700;">${Number(x.existencia)}</span></div>
+            <div class="orden-cliente">${escapar(x.tienda)}${x.esAlmacen ? ' (bodega)' : ''} · ${x.esEquipo ? 'Equipo (IMEI)' : escapar(x.codpro)}${x.precio != null ? ' · ' + formatoDinero(x.precio) : ''}</div>
+            ${puedePedir ? `<button class="btn btn-azul btn-chico iv-pedir" data-i="${i}" style="margin-top:6px;">${ic('arrow-left-right')} Pedir traspaso</button>` : ''}
+          </div>`).join('');
+        cont.querySelectorAll('.iv-pedir').forEach(b => b.onclick = async () => {
+          const x = existencias[Number(b.dataset.i)];
+          const texto = prompt(`¿Cuántas piezas le pides a ${x.tienda}? (hay ${Number(x.existencia)})`, '1');
+          if (texto === null) return;
+          const cantidad = Number(texto);
+          if (!(cantidad > 0) || cantidad > Number(x.existencia) || (x.esEquipo && !Number.isInteger(cantidad))) { mostrarMensaje(root, 'Escribe una cantidad válida, que no pase de la existencia.', 'error'); return; }
+          b.disabled = true;
+          try {
+            const t = await api('POST', '/api/traspasos/solicitudes', { codtiOrigen: codti, codtiDestino: x.codti, lineas: [x.esEquipo ? { idprodmaster: x.idprodmaster, cantidad } : { codpro: x.codpro, cantidad }] });
+            mostrarMensaje(root, `Solicitud #${t.idtraspaso} enviada a ${x.tienda}. La ves en Traspasos.`, 'ok');
+          } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+          b.disabled = false;
+        });
+      } catch (err) {
+        if (esta === busquedaTiendas) { conteo.textContent = ''; cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`; }
+      }
+    }, 350);
+  };
   const refrescarListaInventario = () => {
+    const conteo = document.getElementById('iv-conteo');
+    if (document.getElementById('iv-todas').checked) { buscarEnTiendas(); return; }
+    busquedaTiendas++;
     const q = document.getElementById('iv-buscar').value.trim();
     const cat = document.getElementById('iv-cat').value;
     const soloBajo = document.getElementById('iv-bajo-stock').checked;
     let lista = filtrarProductos(productosInv, q);
     if (cat) lista = lista.filter(p => (p.categoriaPrincipal || p.nombreCategoria) === cat);
     if (soloBajo) lista = lista.filter(p => p.bajoStock);
+    // lo que muestra la lista con los filtros de ahora
+    conteo.textContent = lista.length === productosInv.length ? `${lista.length} productos` : `Mostrando ${lista.length} de ${productosInv.length} productos`;
     dibujarInventario(document.getElementById('iv-lista'), lista, verCosto);
   };
   const llenarCategorias = () => {
@@ -3191,6 +3258,12 @@ async function pantallaInventario() {
   document.getElementById('iv-buscar').addEventListener('input', refrescarListaInventario);
   document.getElementById('iv-bajo-stock').addEventListener('change', refrescarListaInventario);
   document.getElementById('iv-cat').addEventListener('change', refrescarListaInventario);
+  document.getElementById('iv-todas').addEventListener('change', (e) => {
+    document.getElementById('iv-cat').disabled = e.target.checked;
+    document.getElementById('iv-bajo-stock').disabled = e.target.checked;
+    document.getElementById('iv-buscar').placeholder = e.target.checked ? 'Nombre, código o IMEI del artículo' : 'Nombre, código, marca o modelo';
+    refrescarListaInventario();
+  });
   cargar();
 
   if (document.getElementById('iv-catalogos')) document.getElementById('iv-catalogos').onclick = () => navegar('#/catalogos');
@@ -4238,7 +4311,7 @@ const DESCUENTO_DIA_NOMBRE = { LUN: 'Lunes', MAR: 'Martes', MIE: 'Miércoles', J
 
 function descripcionDescuento(r) {
   const partes = [];
-  partes.push(r.tipoProducto ? DESCUENTO_TIPO_NOMBRE[r.tipoProducto] || r.tipoProducto : 'Todos los artículos');
+  partes.push(r.categoria || (r.tipoProducto ? DESCUENTO_TIPO_NOMBRE[r.tipoProducto] || r.tipoProducto : 'Todos los artículos'));
   if (r.codti) partes.push('en esta sucursal');
   if (Number(r.montoMinimo) > 0) partes.push(`desde ${formatoDinero(r.montoMinimo)}`);
   const cuando = r.aplicacion === 'DIAS_SEMANA' ? (r.diasSemana || []).map(d => DESCUENTO_DIA_NOMBRE[d] || d).join(', ')
@@ -4301,16 +4374,29 @@ async function pantallaDescuentos() {
   cargar();
 }
 
-function dibujarFormularioDescuento(cont, tiendas, regla, alGuardar) {
+async function dibujarFormularioDescuento(cont, tiendas, regla, alGuardar) {
   cont.classList.remove('oculto');
   const editando = !!regla;
+  // La categoría: una principal vale también para sus subcategorías; una subcategoría, solo para ella
+  let categorias = [];
+  try { categorias = await cargarCategorias(); } catch { /* sin categorías solo queda el tipo de artículo */ }
+  const porId = new Map(categorias.map(x => [x.idcat, x]));
+  const rutaCat = (x) => { const n = []; for (let k = x; k && n.length < 6; k = porId.get(k.idCategoriaSuperior)) n.unshift(k.nombre); return n.join(' › '); };
+  const opcionesCat = categorias.map(x => ({ id: x.idcat, texto: rutaCat(x) })).sort((a, b) => a.texto.localeCompare(b.texto, 'es'));
   cont.innerHTML = `
     <div class="tarjeta">
       <h2 style="margin-top:0;">${editando ? 'Editar regla' : 'Nueva regla'}</h2>
       <label class="obligatorio">Nombre</label>
       <input id="df-nombre" maxlength="100" placeholder="Ej. Descuento de fin de semana" value="${editando ? escapar(regla.nombre) : ''}">
 
-      <label>Aplica a</label>
+      <label>Categoría</label>
+      <select id="df-cat">
+        <option value="">Cualquier categoría</option>
+        ${opcionesCat.map(o => `<option value="${o.id}" ${editando && regla.idCategoria === o.id ? 'selected' : ''}>${escapar(o.texto)}</option>`).join('')}
+      </select>
+      <div class="ayuda">Una categoría principal vale también para todas sus subcategorías; una subcategoría, solo para ella.</div>
+
+      <label>Tipo de artículo</label>
       <select id="df-tipo">
         <option value="">Todos los artículos</option>
         ${Object.entries(DESCUENTO_TIPO_NOMBRE).map(([v, n]) => `<option value="${v}" ${editando && regla.tipoProducto === v ? 'selected' : ''}>${n}</option>`).join('')}
@@ -4355,6 +4441,12 @@ function dibujarFormularioDescuento(cont, tiendas, regla, alGuardar) {
       </div>
     </div>`;
 
+  // elegir una categoría ya define el tipo de artículo: el tipo solo se usa cuando no hay categoría
+  const selCat = document.getElementById('df-cat'), selTipo = document.getElementById('df-tipo');
+  const alternarTipo = () => { selTipo.disabled = !!selCat.value; if (selCat.value) selTipo.value = ''; };
+  selCat.onchange = alternarTipo;
+  alternarTipo();
+
   let tipoDescuento = editando && regla.descuentoPorcentaje != null ? 'porciento' : 'fijo';
   let aplicacion = editando ? regla.aplicacion : 'SIEMPRE';
   const segFijo = document.getElementById('df-seg-fijo'), segPorciento = document.getElementById('df-seg-porciento');
@@ -4385,6 +4477,7 @@ function dibujarFormularioDescuento(cont, tiendas, regla, alGuardar) {
     const payload = {
       nombre,
       tipoProducto: document.getElementById('df-tipo').value || null,
+      idCategoria: document.getElementById('df-cat').value ? Number(document.getElementById('df-cat').value) : null,
       codti: document.getElementById('df-tienda').value ? Number(document.getElementById('df-tienda').value) : null,
       montoMinimo: document.getElementById('df-minimo').value ? Number(document.getElementById('df-minimo').value) : null,
       descuentoFijo: tipoDescuento === 'fijo' ? valor : null,
@@ -4423,7 +4516,7 @@ const AUDITORIA_CAMPO_NOMBRE = {
   diasGarantia: 'Días de garantía', tipo: 'Tipo', username: 'Usuario', nombreCompleto: 'Nombre completo',
   rol: 'Rol', telefono: 'Teléfono', email: 'Correo', tecnicoEncargado: 'Técnico encargado',
   sueldoBase: 'Sueldo base', nombre: 'Nombre', ubicacion: 'Ubicación', esAlmacen: 'Es almacén',
-  tipoProducto: 'Aplica a', idProductoMaster: 'Artículo específico', codti: 'Sucursal',
+  tipoProducto: 'Tipo de artículo', idCategoria: 'Categoría', idProductoMaster: 'Artículo específico', codti: 'Sucursal',
   montoMinimo: 'Monto mínimo', descuentoPorcentaje: 'Descuento (%)', descuentoFijo: 'Descuento ($)',
   aplicacion: 'Cuándo aplica', diasSemana: 'Días', fechaInicio: 'Desde', fechaFin: 'Hasta',
 };

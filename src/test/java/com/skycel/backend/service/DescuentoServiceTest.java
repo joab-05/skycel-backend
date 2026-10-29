@@ -1,11 +1,13 @@
 package com.skycel.backend.service;
 
+import com.skycel.backend.domain.entity.Categoria;
 import com.skycel.backend.domain.entity.DescuentoRegla;
 import com.skycel.backend.domain.entity.Producto;
 import com.skycel.backend.domain.entity.ProductoMaster;
 import com.skycel.backend.domain.entity.Tienda;
 import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.dto.descuento.DescuentoReglaRequestDto;
+import com.skycel.backend.repository.CategoriaRepository;
 import com.skycel.backend.repository.DescuentoReglaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,11 +34,12 @@ import static org.mockito.Mockito.*;
 class DescuentoServiceTest {
 
     @Mock private DescuentoReglaRepository repository;
+    @Mock private CategoriaRepository categoriaRepository;
     private DescuentoService service;
 
     @BeforeEach
     void setUp() {
-        service = new DescuentoService(repository);
+        service = new DescuentoService(repository, categoriaRepository);
         lenient().when(repository.save(any(DescuentoRegla.class))).thenAnswer(i -> i.getArgument(0));
     }
 
@@ -96,6 +99,45 @@ class DescuentoServiceTest {
 
         assertThat(service.calcularDescuento(accesorio(2), new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("5");
         assertThat(service.calcularDescuento(celular(), new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("una regla de una categoría principal vale para sus subcategorías; la de una subcategoría, solo para ella")
+    void reglaPorCategoria() {
+        Categoria accesorios = Categoria.builder().idcat((short) 1).nombre("Accesorios").build();
+        Categoria protectores = Categoria.builder().idcat((short) 2).nombre("Protectores").categoriaSuperior(accesorios).build();
+        Categoria cargadores = Categoria.builder().idcat((short) 3).nombre("Cargadores").categoriaSuperior(accesorios).build();
+        Producto protector = accesorio(2);
+        protector.getProductoMaster().setCategoria(protectores);
+        Producto cargador = accesorio(2);
+        cargador.getProductoMaster().setCategoria(cargadores);
+
+        DescuentoRegla principal = reglaBase(); principal.setIdCategoria((short) 1); principal.setDescuentoFijo(new BigDecimal("10"));
+        when(repository.findByActivoTrue()).thenReturn(List.of(principal));
+        assertThat(service.calcularDescuento(protector, new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("10");
+        assertThat(service.calcularDescuento(cargador, new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("10");
+
+        DescuentoRegla sub = reglaBase(); sub.setIdCategoria((short) 2); sub.setDescuentoFijo(new BigDecimal("30"));
+        when(repository.findByActivoTrue()).thenReturn(List.of(sub));
+        assertThat(service.calcularDescuento(protector, new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("30");
+        assertThat(service.calcularDescuento(cargador, new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("0");
+        assertThat(service.calcularDescuento(accesorio(2), new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("0");   // sin categoría
+    }
+
+    @Test
+    @DisplayName("al guardar una regla por categoría, la categoría debe existir")
+    void categoriaInexistente() {
+        DescuentoReglaRequestDto dto = new DescuentoReglaRequestDto();
+        dto.setNombre("Protectores");
+        dto.setDescuentoFijo(new BigDecimal("10"));
+        dto.setIdCategoria((short) 99);
+        when(categoriaRepository.existsById((short) 99)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.crear(dto)).isInstanceOf(ResponseStatusException.class).hasMessageContaining("categoría");
+
+        when(categoriaRepository.existsById((short) 2)).thenReturn(true);
+        dto.setIdCategoria((short) 2);
+        assertThat(service.crear(dto).get("idCategoria")).isEqualTo((short) 2);
     }
 
     // ── Cálculo: monto mínimo ────────────────────────────────────────────────

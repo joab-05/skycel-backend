@@ -44,6 +44,13 @@ public class DescuentoRegla {
     @Column(name = "idprodmaster")
     private Integer idProductoMaster;
 
+    /**
+     * null = aplica a cualquier categoría. Una categoría principal vale para todas sus subcategorías; una subcategoría, solo para
+     * lo que cuelga de ella (igual que las reglas de la promoción al vender un equipo).
+     */
+    @Column(name = "idcategoria")
+    private Short idCategoria;
+
     /** null = aplica en todas las sucursales. */
     @Column(name = "codti")
     private Integer codti;
