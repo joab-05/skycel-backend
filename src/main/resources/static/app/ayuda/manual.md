@@ -220,12 +220,12 @@ Mueven mercancía entre sucursales (y la bodega). Quienes los manejan son encarg
 
 ### Enviar mercancía
 1. Entra a **Traspasos** y pulsa **Nuevo envío**.
-2. Elige la tienda destino y agrega los productos (la cantidad, o los **IMEI** si son equipos: eliges las unidades que viajan). En una **solicitud** de equipos pides el artículo y la cantidad; quien surte elige los IMEI al aceptar.
+2. Elige la tienda destino y agrega los productos (la cantidad, o los **IMEI** si son equipos: eliges las unidades que viajan).
 3. Al confirmar, la mercancía **sale del inventario** de tu tienda y queda «en tránsito».
 4. Si te equivocas antes de que la reciban, puedes **Anular** el envío.
 
 ### Pedir mercancía
-Con **Nueva solicitud** le pides a otra tienda que te surta algo. La otra tienda la **lee** y la **acepta** (**Aceptar y enviar**, que genera el envío) o la **rechaza**.
+Con **Nueva solicitud** le pides a otra tienda que te surta algo. En los **equipos** eliges los **IMEI o series** concretos de la lista de la tienda que surte (la cantidad sale de las que marques); en los accesorios escribes la cantidad. **No se puede pedir más de lo que la otra tienda tiene**: el sistema lo revisa. Quien surte puede cambiar las unidades al aceptar. La otra tienda la **lee** y la **acepta** (**Aceptar y enviar**, que genera el envío) o la **rechaza**.
 
 ### Recibir mercancía
 1. Abre el traspaso que llegó y pulsa **Recibir**.

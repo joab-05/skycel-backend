@@ -132,6 +132,9 @@ class TraspasoServiceTest {
         });
         lenient().when(productoImeiRepository.findByImei(anyString())).thenAnswer(inv -> Optional.ofNullable(imeis.get((String) inv.getArgument(0))));
         lenient().when(productoImeiRepository.save(any(ProductoImei.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(productoImeiRepository.countByProductoMaster_IdprodmasterAndTienda_CodtiAndEstado(anyInt(), anyInt(), anyString())).thenAnswer(inv ->
+                imeis.values().stream().filter(u -> u.getProductoMaster().getIdprodmaster().equals(inv.getArgument(0))
+                        && u.getTienda().getCodti().equals(inv.getArgument(1)) && u.getEstado().equals(inv.getArgument(2))).count());
         lenient().when(productoMasterRepository.findById(1)).thenReturn(Optional.of(celular));
     }
 
@@ -170,6 +173,14 @@ class TraspasoServiceTest {
         TraspasoLineaRequestDto l = new TraspasoLineaRequestDto();
         l.setIdprodmaster(idprodmaster);
         l.setCantidad(new BigDecimal(cantidad));
+        return l;
+    }
+
+    /** Una solicitud de equipos con las unidades concretas que se piden. */
+    private TraspasoLineaRequestDto pedidoConImeis(int idprodmaster, String... imeisPedidos) {
+        TraspasoLineaRequestDto l = new TraspasoLineaRequestDto();
+        l.setIdprodmaster(idprodmaster);
+        l.setImeis(List.of(imeisPedidos));
         return l;
     }
 
@@ -742,6 +753,49 @@ class TraspasoServiceTest {
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("servicio");
             assertThatThrownBy(() -> pedir(linea("NO-EXISTE", "1")))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no existe");
+        }
+
+        @Test
+        @DisplayName("no se puede pedir más de lo que tiene la tienda que surte (accesorios ni equipos)")
+        void noMasDeLoQueHay() {
+            stock("ACC-000001", almacen, accesorio, "10", negro);
+            equipo(almacen, "350000000000011");
+
+            assertThatThrownBy(() -> pedir(linea("ACC-000001", "11")))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("solo tiene 10");
+            assertThatThrownBy(() -> pedir(pedidoEquipos(1, "2")))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("solo tiene 1");
+            assertThat(pedir(linea("ACC-000001", "10"))).isPositive();
+        }
+
+        @Test
+        @DisplayName("pedir equipos por IMEI: una unidad por renglón, deben estar disponibles en quien surte; al aceptar viajan esos")
+        void pedirEquiposPorImei() {
+            ProductoImei u1 = equipo(almacen, "350000000000011");
+            ProductoImei u2 = equipo(almacen, "350000000000029");
+            equipo(zocalo, "350000000000037");                       // está en la tienda que pide, no en la que surte
+            ProductoImei vendido = equipo(almacen, "350000000000045");
+            vendido.setEstado("VENDIDO");
+
+            assertThatThrownBy(() -> pedir(pedidoConImeis(1, "350000000000045")))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no está disponible");
+            assertThatThrownBy(() -> pedir(pedidoConImeis(1, "350000000000037")))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no está disponible");
+            assertThatThrownBy(() -> pedir(pedidoConImeis(1, "350000000000011", "350000000000011")))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("repetido");
+            assertThatThrownBy(() -> pedir(pedidoConImeis(1, "999")))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no está registrado");
+
+            detalles.clear();
+            int id = pedir(pedidoConImeis(1, "350000000000011", "350000000000029"));
+            assertThat(detalles).hasSize(2).allSatisfy(d -> assertThat(d.getCantidad()).isEqualByComparingTo("1"));
+
+            // al aceptar sin elegir otros, viajan las unidades que se pidieron
+            TraspasoResponseDto envio = service.aceptar(id, null, "root");
+            assertThat(envio.getLineas()).hasSize(1);
+            assertThat(envio.getLineas().get(0).getImeis()).containsExactlyInAnyOrder("350000000000011", "350000000000029");
+            assertThat(u1.getEstado()).isEqualTo("TRASPASADO");
+            assertThat(u2.getEstado()).isEqualTo("TRASPASADO");
         }
 
         @Test

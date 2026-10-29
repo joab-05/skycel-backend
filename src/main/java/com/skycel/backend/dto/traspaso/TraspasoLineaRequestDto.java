@@ -22,6 +22,10 @@ public class TraspasoLineaRequestDto {
     @Positive(message = "La cantidad debe ser mayor a 0")
     private BigDecimal cantidad;
 
-    /** Solo en un ENVIO de equipos (celular o tablet): los IMEI o números de serie que viajan (uno por unidad). */
+    /**
+     * Equipos (celular o tablet): los IMEI o números de serie, uno por unidad. En un ENVIO son los que viajan; en una SOLICITUD, los que se
+     * piden (deben estar disponibles en la tienda que surte; quien surte puede cambiarlos al aceptar). Una solicitud sin IMEI pide solo
+     * artículo y cantidad.
+     */
     private List<String> imeis;
 }

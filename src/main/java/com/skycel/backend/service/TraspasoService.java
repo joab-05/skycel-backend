@@ -115,15 +115,41 @@ public class TraspasoService {
                 if (!esEquipo(master.getTipo())) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'" + master.getNombreBase() + "' no es un equipo: pídalo por su código.");
                 }
-                if (l.getImeis() != null && !l.getImeis().isEmpty()) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "En una solicitud no se indican los IMEI: los elige la tienda que surte.");
-                }
                 if (!vistos.add("M" + master.getIdprodmaster())) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El artículo '" + master.getNombreBase() + "' está repetido en la solicitud.");
                 }
+                List<String> imeis = l.getImeis() == null ? List.of() : l.getImeis().stream()
+                        .filter(x -> x != null && !x.isBlank()).map(x -> x.trim().toUpperCase()).collect(Collectors.toList());
+                if (!imeis.isEmpty()) {
+                    // se piden unidades concretas (IMEI o serie): una por renglón, y tienen que estar disponibles en la tienda que surte
+                    if (new HashSet<>(imeis).size() != imeis.size()) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hay un IMEI repetido en la solicitud de '" + master.getNombreBase() + "'.");
+                    }
+                    for (String imei : imeis) {
+                        ProductoImei u = productoImeiRepository.findByImei(imei)
+                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI o serie '" + imei + "' no está registrado."));
+                        if (u.getProductoMaster() == null || !master.getIdprodmaster().equals(u.getProductoMaster().getIdprodmaster())) {
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI o serie '" + imei + "' no es de '" + master.getNombreBase() + "'.");
+                        }
+                        if (!IMEI_DISPONIBLE.equals(u.getEstado()) || u.getTienda() == null || !surte.getCodti().equals(u.getTienda().getCodti())) {
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                    "El IMEI o serie '" + imei + "' no está disponible en " + surte.getNombre() + ".");
+                        }
+                        detalleRepository.save(TraspasoDetalle.builder().traspaso(solicitud).productoMaster(master)
+                                .cantidad(BigDecimal.ONE).imei(imei).build());
+                    }
+                    continue;
+                }
+                // sin IMEI (clientes anteriores): se pide el artículo y la cantidad, sin pasar de lo que tiene quien surte
+                int pedida = enteroPositivo(l.getCantidad(), master.getNombreBase());
+                long disponibles = productoImeiRepository.countByProductoMaster_IdprodmasterAndTienda_CodtiAndEstado(
+                        master.getIdprodmaster(), surte.getCodti(), IMEI_DISPONIBLE);
+                if (pedida > disponibles) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, surte.getNombre() + " solo tiene " + disponibles
+                            + " disponible(s) de '" + master.getNombreBase() + "'; no se pueden pedir " + pedida + ".");
+                }
                 detalleRepository.save(TraspasoDetalle.builder().traspaso(solicitud).productoMaster(master)
-                        .cantidad(BigDecimal.valueOf(enteroPositivo(l.getCantidad(), master.getNombreBase()))).build());
+                        .cantidad(BigDecimal.valueOf(pedida)).build());
                 continue;
             }
             String codpro = l.getCodpro().trim();
@@ -143,6 +169,10 @@ public class TraspasoService {
             }
             if (l.getCantidad() == null || l.getCantidad().signum() <= 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cantidad de '" + codpro + "' debe ser mayor a 0.");
+            }
+            if (l.getCantidad().compareTo(stockDe(p)) > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, surte.getNombre() + " solo tiene " + stockDe(p).stripTrailingZeros().toPlainString()
+                        + " de '" + codpro + "'; no se pueden pedir " + l.getCantidad().stripTrailingZeros().toPlainString() + ".");
             }
             detalleRepository.save(TraspasoDetalle.builder().traspaso(solicitud).codpro(codpro).cantidad(l.getCantidad()).build());
         }
@@ -489,7 +519,10 @@ public class TraspasoService {
         Usuario usuario = usuarioPorUsername(username);
         Traspaso s = solicitudPendiente(id, usuario);
 
-        List<TraspasoDetalle> pedidos = detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(id);
+        // un equipo pedido por IMEI son varios renglones de una unidad: se agrupan por artículo
+        Map<String, List<TraspasoDetalle>> pedidos = new LinkedHashMap<>();
+        for (TraspasoDetalle d : detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(id))
+            pedidos.computeIfAbsent(claveDe(d), k -> new ArrayList<>()).add(d);
         Map<String, List<String>> elegidas = new HashMap<>();
         if (dto != null && dto.getEquipos() != null) {
             for (AceptarSolicitudRequestDto.UnidadesElegidasDto e : dto.getEquipos()) {
@@ -498,22 +531,27 @@ public class TraspasoService {
                 elegidas.put(clave, e.getImeis() == null ? List.of() : e.getImeis());
             }
         }
-        Set<String> pedidosClaves = pedidos.stream().map(TraspasoService::claveDe).collect(Collectors.toSet());
         for (String clave : elegidas.keySet()) {
-            if (!pedidosClaves.contains(clave)) {
+            if (!pedidos.containsKey(clave)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'" + clave + "' no está en la solicitud.");
             }
         }
 
         List<LineaDespacho> lineas = new ArrayList<>();
-        for (TraspasoDetalle d : pedidos) {
-            List<String> imeis = elegidas.getOrDefault(claveDe(d), List.of());
-            if (d.getCodpro() == null && imeis.size() != d.getCantidad().intValue()) {
+        for (Map.Entry<String, List<TraspasoDetalle>> e : pedidos.entrySet()) {
+            TraspasoDetalle d = e.getValue().get(0);
+            BigDecimal total = e.getValue().stream().map(TraspasoDetalle::getCantidad).reduce(BigDecimal.ZERO, BigDecimal::add);
+            List<String> imeis = elegidas.getOrDefault(e.getKey(), List.of());
+            if (d.getCodpro() == null && imeis.isEmpty()) {
+                // si se pidieron unidades concretas, esas viajan salvo que quien surte elija otras
+                imeis = e.getValue().stream().map(TraspasoDetalle::getImei).filter(Objects::nonNull).collect(Collectors.toList());
+            }
+            if (d.getCodpro() == null && imeis.size() != total.intValue()) {
                 String nombre = d.getProductoMaster() != null ? d.getProductoMaster().getNombreBase() : "el equipo";
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Elija los " + d.getCantidad().intValue() + " IMEI que envía de '" + nombre + "'.");
+                        "Elija los " + total.intValue() + " IMEI que envía de '" + nombre + "'.");
             }
-            lineas.add(new LineaDespacho(d.getCodpro(), d.getCantidad(), imeis));
+            lineas.add(new LineaDespacho(d.getCodpro(), total, imeis));
         }
         // quien surte (destino de la solicitud) es el origen del envío, y quien pidió (origen) lo recibe
         Traspaso envio = despachar(s.getTiendaDestino(), s.getTiendaOrigen(), usuario, lineas, s.getIdtraspaso());

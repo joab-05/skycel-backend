@@ -3175,10 +3175,12 @@ async function pantallaInventario() {
           <div class="orden-item">
             <div class="orden-cab"><span class="orden-folio">${escapar(x.nombre)}</span><span style="font-weight:700;">${Number(x.existencia)}</span></div>
             <div class="orden-cliente">${escapar(x.tienda)}${x.esAlmacen ? ' (bodega)' : ''} · ${x.esEquipo ? 'Equipo (IMEI)' : escapar(x.codpro)}${x.precio != null ? ' · ' + formatoDinero(x.precio) : ''}</div>
-            ${puedePedir ? `<button class="btn btn-azul btn-chico iv-pedir" data-i="${i}" style="margin-top:6px;">${ic('arrow-left-right')} Pedir traspaso</button>` : ''}
+            ${puedePedir ? `<button class="btn btn-azul btn-chico iv-pedir" data-i="${i}" style="margin-top:6px;">${ic('arrow-left-right')} ${x.esEquipo ? 'Elegir equipos en la solicitud' : 'Pedir traspaso'}</button>` : ''}
           </div>`).join('');
         cont.querySelectorAll('.iv-pedir').forEach(b => b.onclick = async () => {
           const x = existencias[Number(b.dataset.i)];
+          // un equipo se pide por IMEI o serie: se elige en el formulario de la solicitud
+          if (x.esEquipo) { navegar('#/traspaso-nuevo/solicitud'); return; }
           const texto = prompt(`¿Cuántas piezas le pides a ${x.tienda}? (hay ${Number(x.existencia)})`, '1');
           if (texto === null) return;
           const cantidad = Number(texto);
@@ -5982,8 +5984,8 @@ async function pantallaTraspasoNuevo(tipo) {
           <button class="btn btn-rojo btn-chico tn-quitar" data-i="${i}">Quitar</button>
         </div>
         <div class="orden-cliente">${l.p.esEquipo ? 'Equipos' : escapar(l.p.codpro)} · ${l.p.esEquipo ? 'Disponibles' : 'Stock'}: ${Number(l.p.stock)}</div>
-        ${esEnvio && esEquipoTipo(l.p.tipo)
-          ? `<div style="margin-top:6px;">${(l.p.imeisDisponibles || []).map(u => `
+        ${esEquipoTipo(l.p.tipo)
+          ? `<div class="ayuda" style="margin-top:6px;">${esEnvio ? 'Elige los equipos que viajan:' : 'Elige los equipos que pides (quien surte puede cambiarlos al aceptar):'}</div><div style="margin-top:2px;">${(l.p.imeisDisponibles || []).map(u => `
               <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
                 <input type="checkbox" class="tn-imei" data-i="${i}" value="${escapar(u.imei)}" ${l.imeis.includes(u.imei) ? 'checked' : ''} style="width:auto;"> ${escapar(u.imei)}${u.condicion && u.condicion !== 'NUEVO' ? ' · ' + escapar(nombreCondicionEquipo(u.condicion)) : ''}
               </label>`).join('')}</div>`
@@ -6007,9 +6009,10 @@ async function pantallaTraspasoNuevo(tipo) {
     if (lineas.length === 0) { mostrarMensaje(root, 'Agrega al menos un producto.', 'error'); return; }
     const detalle = [];
     for (const l of lineas) {
-      if (esEnvio && esEquipoTipo(l.p.tipo)) {
-        if (l.imeis.length === 0) { mostrarMensaje(root, `Elige los equipos que envías de ${l.p.nombreProductoMaster}.`, 'error'); return; }
-        detalle.push({ cantidad: l.imeis.length, imeis: l.imeis });
+      if (esEquipoTipo(l.p.tipo)) {
+        if (l.imeis.length === 0) { mostrarMensaje(root, `Elige los equipos que ${esEnvio ? 'envías' : 'pides'} de ${l.p.nombreProductoMaster}.`, 'error'); return; }
+        // un envío manda las unidades; una solicitud pide el artículo con las unidades que se quieren
+        detalle.push(esEnvio ? { cantidad: l.imeis.length, imeis: l.imeis } : { idprodmaster: l.p.idProductoMaster, cantidad: l.imeis.length, imeis: l.imeis });
       } else {
         if (!l.cantidad || l.cantidad < 1 || l.cantidad > Number(l.p.stock)) {
           mostrarMensaje(root, `La cantidad de ${l.p.nombreProductoMaster} debe estar entre 1 y ${Number(l.p.stock)}.`, 'error'); return;
