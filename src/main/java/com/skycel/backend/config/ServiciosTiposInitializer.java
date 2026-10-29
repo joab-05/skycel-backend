@@ -15,5 +15,6 @@ public class ServiciosTiposInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         corteServiciosService.asegurarTiposBase();
+        corteServiciosService.migrarAlModeloDeGanancia();
     }
 }

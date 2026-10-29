@@ -41,7 +41,18 @@ public class CorteServiciosLinea {
     @Column(name = "comision", nullable = false, precision = 12, scale = 2)
     private BigDecimal comision;
 
-    /** Saldo del proveedor (en su plataforma) al empezar el día. Opcional. */
+    /** Porcentaje de ganancia y costo por operación vigentes al capturar (el catálogo puede cambiar después). */
+    @Column(name = "porcentaje_ganancia", precision = 5, scale = 2)
+    private BigDecimal porcentajeGanancia;
+
+    @Column(name = "costo_por_operacion", precision = 10, scale = 2)
+    private BigDecimal costoPorOperacion;
+
+    /** Lo que le queda al negocio de esta línea: % de lo vendido + operaciones × (comisión − costo del proveedor). null en cortes viejos. */
+    @Column(name = "ganancia", precision = 12, scale = 2)
+    private BigDecimal ganancia;
+
+    /** Saldo del proveedor (en su plataforma) al empezar el día. Ya no se captura; se conserva en los cortes viejos. */
     @Column(name = "saldo_inicial", precision = 12, scale = 2)
     private BigDecimal saldoInicial;
 

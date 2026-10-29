@@ -651,7 +651,8 @@ public class VentaService {
      */
     private PromocionEquipoService.Previos previosDeLaOperacion(VentaRequestDto dto, Tienda tienda, Usuario vendedor) {
         if (dto.getIdOperacion() == null || dto.getIdOperacion().isBlank()) return PromocionEquipoService.Previos.NINGUNOS;
-        int equipos = 0, chips = 0, micas = 0, protectores = 0;
+        int equipos = 0;
+        java.util.Map<String, Integer> usadas = new java.util.HashMap<>();
         for (Venta v : ventaRepository.findByIdOperacion(dto.getIdOperacion().trim())) {
             if (v.getEstado() == null || v.getEstado() != ESTADO_COMPLETADA) continue;
             if (!v.getTienda().getCodti().equals(tienda.getCodti())
@@ -659,12 +660,10 @@ public class VentaService {
             for (VentaDetalle d : ventaDetalleRepository.findByVenta_Idventa(v.getIdventa())) {
                 TipoProducto t = d.getProductoMaster().getTipo();
                 if (t == TipoProducto.CELULAR || t == TipoProducto.TABLET) equipos += d.getCantidad();
-                if ("CHIP".equals(d.getPromoTipo())) chips += d.getCantidad();
-                else if ("MICA".equals(d.getPromoTipo())) micas += d.getCantidad();
-                else if ("PROTECTOR".equals(d.getPromoTipo())) protectores += d.getCantidad();
+                if (d.getPromoTipo() != null) usadas.merge(d.getPromoTipo(), (int) d.getCantidad(), Integer::sum);
             }
         }
-        return new PromocionEquipoService.Previos(equipos, chips, micas, protectores);
+        return new PromocionEquipoService.Previos(equipos, usadas);
     }
 
     private void aplicarPromocionEquipo(List<LineaResuelta> lineas, PromocionEquipoService.Previos previos) {

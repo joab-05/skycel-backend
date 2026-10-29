@@ -52,7 +52,7 @@ public class VentaDetalle {
     private BigDecimal costoUnitarioCompra;
 
     /** Qué parte de la promoción de equipo recibió esta línea (CHIP, MICA o PROTECTOR); null = ninguna. */
-    @Column(name = "promo_tipo", length = 12)
+    @Column(name = "promo_tipo", length = 16)
     private String promoTipo;
 
     @Column(name = "es_regalo", columnDefinition = "TINYINT(1) DEFAULT 0")

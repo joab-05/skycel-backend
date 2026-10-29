@@ -68,7 +68,7 @@ Cada equipo se vende por su **IMEI o número de serie**. En el catálogo cada mo
 3. Un equipo no lleva cantidad: cada uno es un renglón con su IMEI.
 
 ### Promoción al vender un equipo
-Si hay una promoción activa (la configura un administrador en Descuentos), al agregar junto con un equipo un **chip**, una **mica** o un **protector**, el renglón muestra **Promoción de equipo** y su precio ya rebajado; no capturas nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben.
+Si hay una promoción activa (la configura un administrador en Descuentos), al agregar junto con un equipo un artículo de la promoción (por ejemplo un **chip**, una **mica** o un **protector**), el renglón muestra **Promoción de equipo** y su precio ya rebajado; no capturas nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben.
 
 ### Pedir un descuento a un administrador
 Si un cliente pide rebaja, en el renglón toca **Pedir descuento**, escribe cuánto quieres de descuento **por pieza** y el **motivo**, y envía la solicitud. Un administrador la **aprueba** (con ese monto u otro) o la **rechaza**. Mientras tanto el renglón dice «Esperando respuesta del administrador»; cuando la resuelve verás **Descuento aprobado** (el importe ya baja) o **Descuento rechazado** con su motivo. La aprobación sirve **una sola vez**, para ese artículo, en esa sucursal y por unas horas; si cambias la cantidad o quitas el renglón, se cancela. Pedir descuentos requiere conexión.
@@ -112,6 +112,13 @@ Cualquier empleado de la tienda puede abrir o cerrar la caja. Solo puede haber u
 Fondo inicial + ventas cobradas en efectivo + abonos y anticipos en efectivo + entradas − salidas (incluidas las devoluciones en efectivo).
 
 > Las ventas con tarjeta o transferencia, y la parte de PayJoy que no es enganche en efectivo, **no** meten dinero al cajón.
+
+### Caja de la bodega
+La **bodega** también lleva su propia caja: ahí llega el **efectivo de las ventas de las tiendas**.
+1. Un administrador entra a **Caja**, elige la **bodega** en el selector de sucursal y pulsa **Nueva caja** (la primera queda como principal).
+2. Cada día se **abre** con su fondo, como cualquier caja.
+3. Cuando una tienda entrega su efectivo, la tienda registra una **salida** con el motivo **Traslado a bodega** y la bodega registra una **entrada** con el motivo **Efectivo de sucursal**; en la nota escribe de qué tienda y de qué día es.
+4. Al final del día se **cierra** con su corte, y el saldo de la bodega queda cuadrado con lo que entregó cada tienda.
 
 ### Cerrar la caja (corte)
 1. Cuenta el efectivo del cajón (billetes y monedas) y pulsa **Cerrar caja (corte)**.
@@ -310,14 +317,22 @@ Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las 
 
 ## Corte de Servicios
 
-Las **recargas, pagos de servicios, pines y pagos de PayJoy** se operan en los sistemas de los proveedores; no pasan por las ventas ni por la caja del sistema. Este corte los resume cada día para cuadrarlos contra los reportes de los proveedores.
+Los **saldos (recargas), pagos de servicios, pines y pagos de PayJoy** se operan en los sistemas de los proveedores; no pasan por las ventas ni por la caja del sistema. Este corte sirve para saber **cuánto se vende** en cada servicio y **cuánto te queda de ganancia**, por día, por sucursal y mes con mes.
 
-1. El **encargado** abre **Corte de servicios**, elige el **día** (y la sucursal, si es administrador) y captura, por servicio, cuántas **operaciones** hizo y el **importe**. La comisión se calcula sola. Los **saldos del proveedor** son opcionales.
+1. El **encargado** abre **Corte de servicios**, elige el **día** (y la sucursal, si es administrador) y captura, por servicio, cuántas **operaciones** hizo y el **importe** vendido. La **ganancia se calcula sola**.
 2. **Guardar corte** lo deja capturado. Puedes corregirlo mientras no esté confirmado.
 3. Un **administrador** lo compara con los reportes del proveedor, escribe el importe de cada uno y pulsa **Confirmar corte**. Si hay diferencias debe escribir un comentario.
 4. Si hay que cambiar algo ya confirmado, un administrador usa **Reabrir para corregir**.
 
-En **Servicios** (administrador) se dan de alta los servicios y se fija su comisión por operación. El corte también se puede capturar **sin conexión** en JSystem.
+### Cómo se calcula la ganancia
+- **Servicel** y **Tae Recargas**: un **porcentaje de lo vendido** (8.1 % y 7.6 %). Si vendes $10,000 en Servicel, ganas $810.
+- **Pagos de servicios**: se le cobran **$15 al cliente** y el proveedor cobra **$4** por operación; quedan **$11** por cada pago.
+- **Pagos PayJoy**: solo se cuentan los **clientes que pagaron** (cuántas personas pagan con nosotros). La comisión de PayJoy llega por separado y no se calcula aquí; si quieres, anota el importe recibido.
+
+### Cuánto se vende y cuánto queda
+Debajo del corte está el resumen del periodo (este mes, el mes pasado, los últimos 30 días o este año): **lo vendido y la ganancia** por servicio, por sucursal (administrador) y **mes con mes** de los últimos 6 meses. Lo de PayJoy aparece en su renglón, pero no suma a lo vendido.
+
+En **Servicios** (administrador) se dan de alta los servicios y se define cómo se gana con cada uno: el **porcentaje de ganancia**, la **comisión que se cobra al cliente** por operación, **lo que cobra el proveedor** por operación, o si **solo se cuentan** las operaciones. Un cambio aplica a los cortes nuevos; los ya capturados conservan lo que valía al capturarlos. El corte también se puede capturar **sin conexión** en JSystem.
 
 ## Compras y Proveedores
 
@@ -340,9 +355,19 @@ El administrador define **reglas de descuento**. Cada regla puede limitarse a un
 Arriba de la pantalla de Descuentos aparecen las **solicitudes** que piden los vendedores y encargados desde el punto de venta: sucursal, quién la pidió, el artículo, su precio, cuánto descuento piden y el motivo. Con los botones puedes **aprobar** lo pedido, **aprobar con otro monto** o **rechazar** (con un motivo opcional). La lista se actualiza sola y también llega un aviso.
 
 ### Promoción al vender un equipo
-Arriba de las reglas está la **promoción al vender un equipo** (celular o tablet). Por cada equipo que se lleva el cliente: un **chip** (Telcel o Bait) **de regalo**, una **mica con $50 de descuento** (si la mica cuesta $50 o menos, va de regalo) y un **protector con $100 de descuento** si cuesta menos de $249. En **Configurar** el administrador elige qué categorías son los chips, las micas y los protectores (valen también para sus subcategorías), los montos y cuántas piezas recibe cada equipo, o la apaga.
+Arriba de las reglas está la **promoción al vender un equipo** (celular o tablet). Por cada equipo que se lleva el cliente, ciertos artículos (por ejemplo un **chip**, una **mica** o un **protector**) reciben un descuento. En **Configurar** el administrador arma una **lista de reglas**; cada regla dice:
 
-En el punto de venta se aplica sola: al agregar el chip, la mica o el protector junto con un equipo, el renglón muestra **🎁 Promoción de equipo** y el precio ya rebajado; el vendedor no captura nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben. Si el carrito se parte en varias ventas por la forma de pago, la promoción cuenta el carrito completo: el equipo de una venta da derecho al chip, la mica o el protector de la otra. También funciona sin conexión con la última configuración descargada.
+- a qué **categoría** de artículos aplica (vale también para sus subcategorías);
+- un **rango de precio de lista** (por ejemplo, protectores de hasta $249), o sin rango;
+- cuántas **piezas por cada equipo** reciben el descuento;
+- el **descuento**: **de regalo** (gratis), un **porcentaje**, un **monto en pesos** o un **precio final fijo**;
+- el **redondeo** del precio que queda: al peso o a múltiplos de $5 o $10, hacia arriba o hacia abajo.
+
+Ejemplo: *protectores de hasta $249, 50 % de descuento, redondeado al peso hacia arriba* → un protector de $249 paga **$125** y uno de $199 paga **$100**. Mientras escribes la regla, el sistema te muestra cuánto pagaría un artículo del precio que quieras probar.
+
+Las reglas se revisan **en orden** (con las flechas las subes o bajas): a cada pieza le toca la primera regla que le corresponde y todavía tiene cupo. Cada regla se puede **apagar** sin borrarla, y el interruptor **Promoción activa** apaga todas. Las tiendas con un JSystem anterior deben actualizarse antes de usar descuentos en porcentaje o con redondeo.
+
+En el punto de venta se aplica sola: al agregar el artículo junto con un equipo, el renglón muestra **🎁 Promoción de equipo** y el precio ya rebajado; el vendedor no captura nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben. Si el carrito se parte en varias ventas por la forma de pago, la promoción cuenta el carrito completo: el equipo de una venta da derecho al descuento de la otra. También funciona sin conexión con la última configuración descargada.
 
 ## Reportes
 

@@ -72,6 +72,7 @@ public class MotivoCajaService {
             new MotivoBase(PAGO_NOMINA,          SALIDA,  CAT_NOMINA),
             new MotivoBase(PRESTAMO_EMPLEADO,    SALIDA,  CAT_NOMINA),
             new MotivoBase("Traslado a bodega",  SALIDA,  CAT_TRASLADO),
+            new MotivoBase("Efectivo de sucursal", ENTRADA, CAT_TRASLADO),   // lo que la bodega recibe de las tiendas
             new MotivoBase("Retiro de dueño",    SALIDA,  CAT_PERSONAL)
     );
 

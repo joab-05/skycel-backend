@@ -1,6 +1,7 @@
 package com.skycel.backend.controller;
 
 import com.skycel.backend.dto.promocion.PromocionEquipoDto;
+import com.skycel.backend.dto.promocion.PromocionReglasDto;
 import com.skycel.backend.service.PromocionEquipoService;
 import com.skycel.backend.shared.dto.StandardApiResponse;
 import com.skycel.backend.shared.response.ResponseEntityBuilder;
@@ -27,6 +28,19 @@ public class PromocionEquipoController {
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<PromocionEquipoDto>> obtener() {
         return ResponseEntityBuilder.ok(promocionEquipoService.obtener(), "promocion");
+    }
+
+    @GetMapping("/reglas")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<PromocionReglasDto>> reglas() {
+        return ResponseEntityBuilder.ok(promocionEquipoService.obtenerReglas(), "reglas de la promocion");
+    }
+
+    @PutMapping("/reglas")
+    @PreAuthorize("@permisos.tiene('DESCUENTOS')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<PromocionReglasDto>> guardarReglas(@RequestBody PromocionReglasDto dto) {
+        return ResponseEntityBuilder.updated(promocionEquipoService.guardarReglas(dto), "reglas de la promocion");
     }
 
     @PutMapping

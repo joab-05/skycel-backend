@@ -20,7 +20,7 @@ async function cargarConfigPOS() {
   try {
     const [negocio, promo, categorias] = await Promise.all([
       api('GET', '/api/configuracion/negocio'),
-      api('GET', '/api/promociones/equipo'),
+      api('GET', '/api/promociones/equipo/reglas'),
       cargarCategorias(),   // el árbol, ya aplanado
     ]);
     posConfig.aceptaTarjeta = !!negocio?.aceptaTarjeta;
@@ -109,8 +109,30 @@ const posImporte = (i) => posRedondear(i.piezasPromo * posPrecioConPromo(i) + (i
 /** Lo que se cobra hoy por el renglón: todo si es de contado; solo el enganche si es a crédito. */
 const posCobroHoy = (i) => (i.formaPago === 'PayJoy' ? Number(i.enganche || 0) : posImporte(i));
 
+/** Pesos a centavos enteros (así los porcentajes y redondeos dan lo mismo que en el servidor). */
+const posCentavos = (n) => Math.round(Number(n) * 100);
+
+/** Lo que paga el cliente (en centavos) por una pieza de ese precio con la regla: el descuento y su redondeo, siempre entre $0 y el precio. */
+function posCentavosQueQuedan(r, precio) {
+  const p = posCentavos(precio);
+  let nuevo;
+  switch (r.tipo) {
+    case 'REGALO': nuevo = 0; break;
+    case 'PORCENTAJE': nuevo = Math.floor((p * (10000 - posCentavos(r.valor)) + 5000) / 10000); break;
+    case 'MONTO': nuevo = p - Math.min(posCentavos(r.valor), p); break;
+    default: nuevo = Math.min(posCentavos(r.valor), p);   // PRECIO_FINAL
+  }
+  if (r.tipo !== 'REGALO' && r.redondeo && r.redondeo !== 'NINGUNO') {
+    const paso = (r.redondeo.startsWith('CINCO') ? 5 : r.redondeo.startsWith('DIEZ') ? 10 : 1) * 100;
+    const resto = nuevo % paso;
+    if (resto) nuevo = r.redondeo.endsWith('ARRIBA') ? nuevo - resto + paso : nuevo - resto;
+  }
+  return Math.max(0, Math.min(nuevo, p));
+}
+
 /**
- * Reparte la promoción de equipo entre los renglones, en el orden en que aparecen: tantas piezas de cada cosa como equipos haya.
+ * Reparte la promoción de equipo entre los renglones, en el orden en que aparecen: a cada pieza le toca la primera regla de la lista
+ * que le corresponde (su categoría y su rango de precio) y todavía tiene cupo (piezas por equipo × equipos del carrito).
  * Es la misma regla del servidor (que la vuelve a calcular al cobrar).
  */
 function posAplicarPromocion() {
@@ -119,21 +141,23 @@ function posAplicarPromocion() {
   if (!p || !p.activo) return;
   const equipos = posCarrito.filter(i => i.esEquipo).reduce((s, i) => s + i.cantidad, 0);
   if (equipos === 0) return;
-  let chips = equipos * (p.chipsPorEquipo || 0), micas = equipos * (p.micasPorEquipo || 0), protectores = equipos * (p.protectoresPorEquipo || 0);
-  const enCategoria = (ruta, id) => id != null && ruta.has(id);
+  const reglas = (p.reglas || []).filter(r => r.activa !== false);
+  const cupo = new Map(reglas.map(r => [r, equipos * r.piezasPorEquipo]));
   for (const l of posCarrito) {
     if (l.esEquipo || l.precio <= 0) continue;
     const ruta = posRutaCategoria(l.idCategoria);
-    if (enCategoria(ruta, p.idCategoriaChip) && chips > 0) {
-      l.piezasPromo = Math.min(l.cantidad, chips); chips -= l.piezasPromo; l.descuentoPromo = l.precio;
-    } else if (enCategoria(ruta, p.idCategoriaMica) && micas > 0) {
-      l.piezasPromo = Math.min(l.cantidad, micas); micas -= l.piezasPromo; l.descuentoPromo = Math.min(l.precio, Number(p.descuentoMica));
-    } else if (enCategoria(ruta, p.idCategoriaProtector) && protectores > 0 && l.precio < Number(p.protectorPrecioMenorA)) {
-      l.piezasPromo = Math.min(l.cantidad, protectores); protectores -= l.piezasPromo; l.descuentoPromo = Math.min(l.precio, Number(p.descuentoProtector));
-    }
-    if (l.piezasPromo > 0) {
+    const c = posCentavos(l.precio);
+    for (const r of reglas) {
+      const disponibles = cupo.get(r);
+      if (disponibles <= 0 || r.idCategoria == null || !ruta.has(r.idCategoria)) continue;
+      if (r.precioDesde != null && c < posCentavos(r.precioDesde)) continue;
+      if (r.precioHasta != null && c > posCentavos(r.precioHasta)) continue;
+      l.piezasPromo = Math.min(l.cantidad, disponibles);
+      cupo.set(r, disponibles - l.piezasPromo);
+      l.descuentoPromo = (c - posCentavosQueQuedan(r, l.precio)) / 100;
       const pzas = l.piezasPromo === 1 ? '' : l.piezasPromo + ' pzas · ';
       l.promoTexto = l.descuentoPromo >= l.precio - 0.004 ? `Promoción de equipo: ${pzas}de regalo` : `Promoción de equipo: ${pzas}−${formatoDinero(l.descuentoPromo)} c/u`;
+      break;
     }
   }
 }

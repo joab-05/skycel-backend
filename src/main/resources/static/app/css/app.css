@@ -711,6 +711,11 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
 /* Botón principal oscuro; el verde queda solo para mover dinero (cobrar, abonar, pagar) */
 .btn-verde { background: var(--oscuro); }
 .btn-verde.btn-dinero { background: var(--verde); }
+/* Tablas de resumen sencillas (se ven bien también en el celular) */
+.tabla-simple { width: 100%; border-collapse: collapse; font-size: 14px; margin: 4px 0 14px; }
+.tabla-simple th { text-align: left; font-size: 12px; font-weight: 700; color: var(--gris-medio); padding: 8px 6px; border-bottom: 1px solid var(--borde); }
+.tabla-simple td { padding: 9px 6px; border-bottom: 1px solid var(--gris-claro); color: var(--texto); }
+.tabla-simple .num { text-align: right; white-space: nowrap; }
 /* Pago mixto: cuánto se cobra en cada forma de pago */
 .mixto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 8px; }
 .mixto-estado { font-size: 13px; font-weight: 700; margin: 8px 0 2px; }

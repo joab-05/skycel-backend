@@ -11,7 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -32,13 +34,17 @@ public class CorteServiciosService {
     public static final byte CONFIRMADO = 2;
     public static final byte CON_DIFERENCIAS = 3;
 
-    private record TipoBase(String nombre, String comision, int orden) {}
+    /** Lo que gana el negocio con cada servicio: porcentaje de lo vendido, comisión al cliente y costo del proveedor por operación. */
+    private record TipoBase(String nombre, String comision, String porcentaje, String costo, boolean soloConteo, int orden) {}
 
     private static final List<TipoBase> TIPOS_BASE = List.of(
-            new TipoBase("Recargas", "0", 1),
-            new TipoBase("Pagos de servicios", "15", 2),
-            new TipoBase("Pines electrónicos", "15", 3),
-            new TipoBase("Pagos PayJoy", "0", 4));
+            new TipoBase("Servicel", "0", "8.1", "0", false, 1),
+            new TipoBase("Tae Recargas", "0", "7.6", "0", false, 2),
+            new TipoBase("Pagos de servicios", "15", "0", "4", false, 3),   // al cliente $15; el proveedor cobra $4: quedan $11
+            new TipoBase("Pines electrónicos", "15", "0", "0", false, 4),
+            new TipoBase("Pagos PayJoy", "0", "0", "0", true, 5));          // solo se cuentan los clientes que pagan aquí
+
+    private static final BigDecimal CIEN = new BigDecimal("100");
 
     private final ServicioTipoRepository          tipoRepository;
     private final CorteServiciosRepository        corteRepository;
@@ -52,9 +58,40 @@ public class CorteServiciosService {
     @Transactional
     public void asegurarTiposBase() {
         if (tipoRepository.count() > 0) return;
+        for (TipoBase t : TIPOS_BASE) crearBase(t);
+    }
+
+    private void crearBase(TipoBase t) {
+        tipoRepository.save(ServicioTipo.builder().nombre(t.nombre()).comisionPorOperacion(new BigDecimal(t.comision()))
+                .porcentajeGanancia(new BigDecimal(t.porcentaje())).costoPorOperacion(new BigDecimal(t.costo()))
+                .soloConteo(t.soloConteo()).orden(t.orden()).activo(true).build());
+    }
+
+    /**
+     * Pone al día el catálogo de un negocio que ya tenía el catálogo anterior (Recargas, Pagos de servicios, Pines y PayJoy):
+     * agrega Servicel y Tae Recargas con su porcentaje, anota los $4 que cobra el proveedor por pago de servicio y deja PayJoy
+     * como conteo. Se hace una sola vez: si ya existe Servicel o Tae Recargas, no se toca nada.
+     */
+    @Transactional
+    public void migrarAlModeloDeGanancia() {
+        if (!tipoRepository.existsByNombreIgnoreCase("Recargas")
+                || tipoRepository.existsByNombreIgnoreCase("Servicel") || tipoRepository.existsByNombreIgnoreCase("Tae Recargas")) return;
         for (TipoBase t : TIPOS_BASE) {
-            tipoRepository.save(ServicioTipo.builder().nombre(t.nombre()).comisionPorOperacion(new BigDecimal(t.comision()))
-                    .orden(t.orden()).activo(true).build());
+            if (t.porcentaje().equals("8.1") || t.porcentaje().equals("7.6")) crearBase(t);
+        }
+        for (ServicioTipo t : tipoRepository.findAll()) {
+            if (t.getNombre().equalsIgnoreCase("Pagos de servicios") && t.getCostoPorOperacion().signum() == 0
+                    && t.getComisionPorOperacion().compareTo(new BigDecimal("15")) == 0) {
+                t.setCostoPorOperacion(new BigDecimal("4"));
+            }
+            if (t.getNombre().equalsIgnoreCase("Pagos PayJoy")) t.setSoloConteo(true);
+            // Servicel y Tae Recargas van primero; el resto conserva su orden de antes después de ellos
+            if (t.getNombre().equalsIgnoreCase("Pagos de servicios")) t.setOrden(3);
+            else if (t.getNombre().equalsIgnoreCase("Pines electrónicos")) t.setOrden(4);
+            else if (t.getNombre().equalsIgnoreCase("Pagos PayJoy")) t.setOrden(5);
+            // «Recargas» pasa a ser Servicel y Tae Recargas: si nunca se usó, se retira de la captura
+            if (t.getNombre().equalsIgnoreCase("Recargas") && !lineaRepository.existsByTipo_Idtipo(t.getIdtipo())) t.setActivo(false);
+            tipoRepository.save(t);
         }
     }
 
@@ -73,6 +110,9 @@ public class CorteServiciosService {
         }
         int orden = dto.getOrden() != null ? dto.getOrden() : (int) tipoRepository.count() + 1;
         return toDto(tipoRepository.save(ServicioTipo.builder().nombre(nombre).comisionPorOperacion(dto.getComisionPorOperacion())
+                .porcentajeGanancia(dto.getPorcentajeGanancia() != null ? dto.getPorcentajeGanancia() : BigDecimal.ZERO)
+                .costoPorOperacion(dto.getCostoPorOperacion() != null ? dto.getCostoPorOperacion() : BigDecimal.ZERO)
+                .soloConteo(Boolean.TRUE.equals(dto.getSoloConteo()))
                 .orden(orden).activo(true).build()));
     }
 
@@ -87,6 +127,9 @@ public class CorteServiciosService {
         }
         t.setNombre(nombre);
         t.setComisionPorOperacion(dto.getComisionPorOperacion());
+        if (dto.getPorcentajeGanancia() != null) t.setPorcentajeGanancia(dto.getPorcentajeGanancia());
+        if (dto.getCostoPorOperacion() != null) t.setCostoPorOperacion(dto.getCostoPorOperacion());
+        if (dto.getSoloConteo() != null) t.setSoloConteo(dto.getSoloConteo());
         if (dto.getOrden() != null) t.setOrden(dto.getOrden());
         if (dto.getActivo() != null) t.setActivo(dto.getActivo());
         return toDto(tipoRepository.save(t));
@@ -123,14 +166,18 @@ public class CorteServiciosService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El servicio «" + tipo.getNombre() + "» está repetido.");
             }
             int operaciones = l.getOperaciones() != null ? l.getOperaciones() : 0;
-            boolean cobraComision = tipo.getComisionPorOperacion().signum() > 0;
+            boolean cobraComision = tipo.getComisionPorOperacion().signum() > 0 || tipo.getCostoPorOperacion().signum() > 0
+                    || Boolean.TRUE.equals(tipo.getSoloConteo());
             if (cobraComision && l.getMonto().signum() > 0 && operaciones == 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Indique cuántas operaciones hubo de «" + tipo.getNombre() + "»: la comisión se cobra por operación.");
+                        "Indique cuántas operaciones hubo de «" + tipo.getNombre() + "»"
+                                + (Boolean.TRUE.equals(tipo.getSoloConteo()) ? " (cuántos clientes pagaron)." : ": la comisión se cobra por operación."));
             }
             nuevas.add(CorteServiciosLinea.builder().tipo(tipo).nombreTipo(tipo.getNombre())
                     .comisionPorOperacion(tipo.getComisionPorOperacion()).operaciones(operaciones).monto(l.getMonto())
                     .comision(tipo.getComisionPorOperacion().multiply(BigDecimal.valueOf(operaciones)))
+                    .porcentajeGanancia(tipo.getPorcentajeGanancia()).costoPorOperacion(tipo.getCostoPorOperacion())
+                    .ganancia(gananciaDe(tipo, operaciones, l.getMonto()))
                     .saldoInicial(l.getSaldoInicial()).fondeo(l.getFondeo()).saldoFinal(l.getSaldoFinal()).build());
         }
 
@@ -242,7 +289,7 @@ public class CorteServiciosService {
                 .map(this::toDto).orElse(null);
     }
 
-    /** Totales por servicio de los cortes de un periodo. */
+    /** Totales por servicio y por sucursal de los cortes de un periodo, con lo que queda de ganancia. */
     @Transactional(readOnly = true)
     public ResumenServiciosResponseDto resumen(Integer codti, LocalDate desde, LocalDate hasta, String username) {
         Usuario usuario = usuarioPorUsername(username);
@@ -251,26 +298,90 @@ public class CorteServiciosService {
         LocalDate ini = desde != null ? desde : fin.withDayOfMonth(1);
         List<CorteServicios> cortes = corteRepository.buscar(filtro, ini, fin, null);
 
-        Map<String, int[]> ops = new LinkedHashMap<>();
-        Map<String, BigDecimal[]> importes = new LinkedHashMap<>();
-        BigDecimal totalMonto = BigDecimal.ZERO, totalComision = BigDecimal.ZERO;
+        Map<String, Acumulado> porServicio = new LinkedHashMap<>();
+        Map<Integer, Acumulado> porSucursal = new LinkedHashMap<>();
+        Acumulado total = new Acumulado();
         for (CorteServicios c : cortes) {
             for (CorteServiciosLinea l : lineaRepository.findByCorte_IdcorteOrderByIdlinea(c.getIdcorte())) {
-                ops.computeIfAbsent(l.getNombreTipo(), k -> new int[1])[0] += l.getOperaciones();
-                BigDecimal[] v = importes.computeIfAbsent(l.getNombreTipo(), k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
-                v[0] = v[0].add(l.getMonto());
-                v[1] = v[1].add(l.getComision());
-                totalMonto = totalMonto.add(l.getMonto());
-                totalComision = totalComision.add(l.getComision());
+                boolean conteo = Boolean.TRUE.equals(l.getTipo().getSoloConteo());
+                porServicio.computeIfAbsent(l.getNombreTipo(), k -> new Acumulado()).sumar(l, conteo);
+                Acumulado suc = porSucursal.computeIfAbsent(c.getTienda().getCodti(), k -> new Acumulado());
+                suc.nombre = c.getTienda().getNombre();
+                // Lo que solo se cuenta (PayJoy) no es una venta de saldo: aparece en su renglón pero no suma al total ni a la sucursal
+                if (!conteo) { suc.sumar(l, false); total.sumar(l, false); }
             }
         }
-        List<ResumenServiciosResponseDto.TipoDto> porServicio = new ArrayList<>();
-        importes.forEach((nombre, v) -> porServicio.add(ResumenServiciosResponseDto.TipoDto.builder()
-                .nombre(nombre).operaciones(ops.get(nombre)[0]).monto(v[0]).comision(v[1]).build()));
+        List<ResumenServiciosResponseDto.TipoDto> servicios = new ArrayList<>();
+        porServicio.forEach((nombre, a) -> servicios.add(ResumenServiciosResponseDto.TipoDto.builder()
+                .nombre(nombre).operaciones(a.operaciones).monto(a.monto).comision(a.comision).ganancia(a.ganancia).soloConteo(a.soloConteo).build()));
+        List<ResumenServiciosResponseDto.SucursalDto> sucursales = new ArrayList<>();
+        porSucursal.forEach((id, a) -> sucursales.add(ResumenServiciosResponseDto.SucursalDto.builder()
+                .codti(id).nombre(a.nombre).operaciones(a.operaciones).monto(a.monto).ganancia(a.ganancia).build()));
+        sucursales.sort(Comparator.comparing(ResumenServiciosResponseDto.SucursalDto::getMonto).reversed());
         return ResumenServiciosResponseDto.builder().desde(ini).hasta(fin).cortes(cortes.size())
                 .cortesSinConfirmar((int) cortes.stream().filter(c -> c.getEstado() == CAPTURADO).count())
                 .cortesConDiferencias((int) cortes.stream().filter(c -> c.getEstado() == CON_DIFERENCIAS).count())
-                .totalMonto(totalMonto).totalComision(totalComision).porServicio(porServicio).build();
+                .totalMonto(total.monto).totalComision(total.comision).totalGanancia(total.ganancia).totalOperaciones(total.operaciones)
+                .porServicio(servicios).porSucursal(sucursales).build();
+    }
+
+    /**
+     * Lo vendido y lo ganado en servicios mes con mes (los últimos {@code cantidad} meses, el actual incluido), para ver
+     * cuánto se vende en saldos al mes y cuánto queda.
+     */
+    @Transactional(readOnly = true)
+    public List<MesServiciosDto> meses(Integer codti, int cantidad, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        Integer filtro = filtroTienda(usuario, codti);
+        int n = Math.max(1, Math.min(cantidad, 24));
+        YearMonth actual = YearMonth.now();
+        YearMonth primero = actual.minusMonths(n - 1L);
+        Map<YearMonth, Acumulado> porMes = new TreeMap<>();
+        for (int k = 0; k < n; k++) porMes.put(primero.plusMonths(k), new Acumulado());
+        for (CorteServicios c : corteRepository.buscar(filtro, primero.atDay(1), actual.atEndOfMonth(), null)) {
+            Acumulado a = porMes.get(YearMonth.from(c.getFecha()));
+            if (a == null) continue;
+            a.cortes++;
+            for (CorteServiciosLinea l : lineaRepository.findByCorte_IdcorteOrderByIdlinea(c.getIdcorte())) {
+                if (!Boolean.TRUE.equals(l.getTipo().getSoloConteo())) a.sumar(l, false);
+            }
+        }
+        List<MesServiciosDto> r = new ArrayList<>();
+        porMes.forEach((mes, a) -> r.add(MesServiciosDto.builder().mes(mes.toString()).cortes(a.cortes)
+                .operaciones(a.operaciones).monto(a.monto).ganancia(a.ganancia).build()));
+        return r;
+    }
+
+    /** Suma de líneas de corte: operaciones, importe, comisión cobrada y ganancia. */
+    private static final class Acumulado {
+        String nombre;
+        int cortes, operaciones;
+        BigDecimal monto = BigDecimal.ZERO, comision = BigDecimal.ZERO, ganancia = BigDecimal.ZERO;
+        boolean soloConteo;
+
+        void sumar(CorteServiciosLinea l, boolean conteo) {
+            operaciones += l.getOperaciones();
+            monto = monto.add(l.getMonto());
+            comision = comision.add(l.getComision());
+            ganancia = ganancia.add(gananciaDeLinea(l));
+            if (conteo) soloConteo = true;
+        }
+    }
+
+    /**
+     * Lo que queda de ganancia: el porcentaje de lo vendido más, por cada operación, la comisión que se cobra menos lo que cobra el
+     * proveedor. Los servicios que solo se cuentan no llevan ganancia.
+     */
+    public static BigDecimal gananciaDe(ServicioTipo tipo, int operaciones, BigDecimal monto) {
+        if (Boolean.TRUE.equals(tipo.getSoloConteo())) return BigDecimal.ZERO.setScale(2);
+        BigDecimal porcentaje = monto.multiply(tipo.getPorcentajeGanancia()).divide(CIEN, 2, RoundingMode.HALF_UP);
+        BigDecimal porOperacion = tipo.getComisionPorOperacion().subtract(tipo.getCostoPorOperacion()).multiply(BigDecimal.valueOf(operaciones));
+        return porcentaje.add(porOperacion).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /** La ganancia guardada en la línea; un corte viejo (sin ganancia guardada) toma su comisión. */
+    private static BigDecimal gananciaDeLinea(CorteServiciosLinea l) {
+        return l.getGanancia() != null ? l.getGanancia() : l.getComision();
     }
 
     // ── Permisos ─────────────────────────────────────────────────────────────
@@ -329,23 +440,29 @@ public class CorteServiciosService {
 
     private ServicioTipoDto toDto(ServicioTipo t) {
         return ServicioTipoDto.builder().idtipo(t.getIdtipo()).nombre(t.getNombre())
-                .comisionPorOperacion(t.getComisionPorOperacion()).orden(t.getOrden()).activo(t.getActivo()).build();
+                .comisionPorOperacion(t.getComisionPorOperacion()).porcentajeGanancia(t.getPorcentajeGanancia())
+                .costoPorOperacion(t.getCostoPorOperacion()).soloConteo(t.getSoloConteo()).orden(t.getOrden()).activo(t.getActivo()).build();
     }
 
     private CorteServiciosResponseDto toDto(CorteServicios c) {
         List<CorteServiciosLinea> lineas = lineaRepository.findByCorte_IdcorteOrderByIdlinea(c.getIdcorte());
         boolean confirmado = c.getEstado() != CAPTURADO;
-        BigDecimal totalMonto = BigDecimal.ZERO, totalComision = BigDecimal.ZERO, totalProveedor = BigDecimal.ZERO;
+        BigDecimal totalMonto = BigDecimal.ZERO, totalComision = BigDecimal.ZERO, totalProveedor = BigDecimal.ZERO, totalGanancia = BigDecimal.ZERO, totalVendido = BigDecimal.ZERO;
         List<CorteServiciosResponseDto.LineaDto> dtos = new ArrayList<>();
         for (CorteServiciosLinea l : lineas) {
             totalMonto = totalMonto.add(l.getMonto());
             totalComision = totalComision.add(l.getComision());
+            totalGanancia = totalGanancia.add(gananciaDeLinea(l));
+            if (!Boolean.TRUE.equals(l.getTipo().getSoloConteo())) totalVendido = totalVendido.add(l.getMonto());
             BigDecimal consumo = l.getSaldoInicial() != null && l.getSaldoFinal() != null
                     ? l.getSaldoInicial().add(l.getFondeo() != null ? l.getFondeo() : BigDecimal.ZERO).subtract(l.getSaldoFinal()) : null;
             if (l.getMontoProveedor() != null) totalProveedor = totalProveedor.add(l.getMontoProveedor());
             dtos.add(CorteServiciosResponseDto.LineaDto.builder().idlinea(l.getIdlinea()).idtipo(l.getTipo().getIdtipo())
                     .nombre(l.getNombreTipo()).comisionPorOperacion(l.getComisionPorOperacion()).operaciones(l.getOperaciones())
-                    .monto(l.getMonto()).comision(l.getComision()).saldoInicial(l.getSaldoInicial()).fondeo(l.getFondeo())
+                    .monto(l.getMonto()).comision(l.getComision())
+                    .porcentajeGanancia(l.getPorcentajeGanancia()).costoPorOperacion(l.getCostoPorOperacion())
+                    .ganancia(gananciaDeLinea(l)).soloConteo(Boolean.TRUE.equals(l.getTipo().getSoloConteo()))
+                    .saldoInicial(l.getSaldoInicial()).fondeo(l.getFondeo())
                     .saldoFinal(l.getSaldoFinal()).consumoSaldo(consumo)
                     .diferenciaSaldo(consumo != null ? consumo.subtract(l.getMonto()) : null)
                     .montoProveedor(l.getMontoProveedor())
@@ -357,7 +474,7 @@ public class CorteServiciosService {
                 .nombreCaptura(c.getUsuarioCaptura().getNombreCompleto()).fechaCaptura(c.getFechaCaptura()).observaciones(c.getObservaciones())
                 .nombreConfirma(c.getUsuarioConfirma() != null ? c.getUsuarioConfirma().getNombreCompleto() : null)
                 .fechaConfirmacion(c.getFechaConfirmacion()).comentarioConfirmacion(c.getComentarioConfirmacion())
-                .totalMonto(totalMonto).totalComision(totalComision)
+                .totalMonto(totalMonto).totalComision(totalComision).totalVendido(totalVendido).totalGanancia(totalGanancia)
                 .totalProveedor(confirmado ? totalProveedor : null).totalDiferencia(confirmado ? totalMonto.subtract(totalProveedor) : null)
                 .lineas(dtos).build();
     }

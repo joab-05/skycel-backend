@@ -5,7 +5,10 @@ import com.skycel.backend.domain.entity.PromocionEquipo;
 import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.dto.promocion.PromocionEquipoDto;
 import com.skycel.backend.repository.CategoriaRepository;
+import com.skycel.backend.repository.PromocionEquipoReglaRepository;
 import com.skycel.backend.repository.PromocionEquipoRepository;
+import com.skycel.backend.service.PromocionEquipoService.Previos;
+import com.skycel.backend.service.PromocionEquipoService.Regla;
 import com.skycel.backend.service.PromocionEquipoService.Beneficio;
 import com.skycel.backend.service.PromocionEquipoService.EntradaLinea;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +35,7 @@ class PromocionEquipoServiceTest {
     private static final Short CHIP = 10, MICA = 20, PROTECTOR = 30, CABLE = 40;
 
     @Mock private PromocionEquipoRepository repository;
+    @Mock private PromocionEquipoReglaRepository reglaRepository;
     @Mock private CategoriaRepository categoriaRepository;
     @InjectMocks private PromocionEquipoService service;
 
@@ -214,5 +218,110 @@ class PromocionEquipoServiceTest {
         dto.setDescuentoMica(new BigDecimal("-1"));
 
         assertThatThrownBy(() -> service.actualizar(dto)).isInstanceOf(ResponseStatusException.class).hasMessageContaining("descuento de la mica");
+    }
+
+    // ── Reglas configurables ──────────────────────────────────────────────────
+
+    private static Regla regla(String clave, Short categoria, String desde, String hasta, int piezas, String tipo, String valor, String redondeo) {
+        return new Regla(clave, categoria, desde == null ? null : new BigDecimal(desde), hasta == null ? null : new BigDecimal(hasta),
+                piezas, tipo, new BigDecimal(valor), redondeo);
+    }
+
+    private static List<Beneficio> con(List<Regla> reglas, EntradaLinea... lineas) {
+        return PromocionEquipoService.calcular(true, reglas, List.of(lineas), Previos.NINGUNOS);
+    }
+
+    @Test
+    @DisplayName("protector a la mitad redondeado hacia arriba: $249 queda en $125 y $199 en $100")
+    void protectorALaMitad() {
+        List<Regla> reglas = List.of(regla("R1", PROTECTOR, null, "249", 1, "PORCENTAJE", "50", "PESO_ARRIBA"));
+
+        assertThat(con(reglas, equipo(), acc(PROTECTOR, "249", 1)).get(1).descuentoPorPieza()).isEqualByComparingTo("124");   // paga $125
+        assertThat(con(reglas, equipo(), acc(PROTECTOR, "199", 1)).get(1).descuentoPorPieza()).isEqualByComparingTo("99");    // paga $100
+        assertThat(con(reglas, equipo(), acc(PROTECTOR, "99", 1)).get(1).descuentoPorPieza()).isEqualByComparingTo("49");     // paga $50
+        assertThat(con(reglas, equipo(), acc(PROTECTOR, "250", 1)).get(1).piezas()).isZero();                                 // fuera del rango
+    }
+
+    @Test
+    @DisplayName("el rango de precio incluye los dos extremos; sin extremo no hay límite")
+    void rangoDePrecio() {
+        List<Regla> reglas = List.of(regla("R1", PROTECTOR, "100", "200", 1, "PORCENTAJE", "50", "NINGUNO"));
+
+        assertThat(con(reglas, equipo(), acc(PROTECTOR, "99.99", 1)).get(1).piezas()).isZero();
+        assertThat(con(reglas, equipo(), acc(PROTECTOR, "100", 1)).get(1).piezas()).isEqualTo(1);
+        assertThat(con(reglas, equipo(), acc(PROTECTOR, "200", 1)).get(1).piezas()).isEqualTo(1);
+        assertThat(con(reglas, equipo(), acc(PROTECTOR, "200.01", 1)).get(1).piezas()).isZero();
+    }
+
+    @Test
+    @DisplayName("tipos de descuento: regalo, porcentaje, monto (si cuesta menos, gratis) y precio final")
+    void tiposDeDescuento() {
+        EntradaLinea mica = acc(MICA, "180", 1);
+        EntradaLinea barata = acc(MICA, "40", 1);
+
+        assertThat(con(List.of(regla("R", MICA, null, null, 1, "REGALO", "0", "NINGUNO")), equipo(), mica).get(1).descuentoPorPieza()).isEqualByComparingTo("180");
+        assertThat(con(List.of(regla("R", MICA, null, null, 1, "PORCENTAJE", "25", "NINGUNO")), equipo(), mica).get(1).descuentoPorPieza()).isEqualByComparingTo("45");
+        assertThat(con(List.of(regla("R", MICA, null, null, 1, "MONTO", "50", "NINGUNO")), equipo(), mica).get(1).descuentoPorPieza()).isEqualByComparingTo("50");
+        assertThat(con(List.of(regla("R", MICA, null, null, 1, "MONTO", "50", "NINGUNO")), equipo(), barata).get(1).descuentoPorPieza()).isEqualByComparingTo("40");
+        assertThat(con(List.of(regla("R", MICA, null, null, 1, "PRECIO_FINAL", "99", "NINGUNO")), equipo(), mica).get(1).descuentoPorPieza()).isEqualByComparingTo("81");
+        assertThat(con(List.of(regla("R", MICA, null, null, 1, "PRECIO_FINAL", "99", "NINGUNO")), equipo(), barata).get(1).descuentoPorPieza()).isEqualByComparingTo("0");   // ya cuesta menos
+    }
+
+    @Test
+    @DisplayName("redondeo del precio que queda: al peso o a múltiplos de 5 y 10, hacia arriba o hacia abajo")
+    void redondeos() {
+        // 35 % de descuento a $199 = $129.35
+        assertThat(PromocionEquipoService.redondear(new BigDecimal("129.35"), "PESO_ARRIBA")).isEqualByComparingTo("130");
+        assertThat(PromocionEquipoService.redondear(new BigDecimal("129.35"), "PESO_ABAJO")).isEqualByComparingTo("129");
+        assertThat(PromocionEquipoService.redondear(new BigDecimal("129.35"), "CINCO_ARRIBA")).isEqualByComparingTo("130");
+        assertThat(PromocionEquipoService.redondear(new BigDecimal("129.35"), "CINCO_ABAJO")).isEqualByComparingTo("125");
+        assertThat(PromocionEquipoService.redondear(new BigDecimal("129.35"), "DIEZ_ARRIBA")).isEqualByComparingTo("130");
+        assertThat(PromocionEquipoService.redondear(new BigDecimal("129.35"), "DIEZ_ABAJO")).isEqualByComparingTo("120");
+        assertThat(PromocionEquipoService.redondear(new BigDecimal("129.35"), "NINGUNO")).isEqualByComparingTo("129.35");
+        // el redondeo nunca deja el precio por encima del original ni por debajo de $0
+        Regla r = regla("R", PROTECTOR, null, null, 1, "PORCENTAJE", "1", "DIEZ_ARRIBA");
+        assertThat(PromocionEquipoService.descuentoPorPieza(r, new BigDecimal("95"))).isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("las reglas se revisan en orden: a cada pieza le toca la primera que le corresponde y aún tiene cupo")
+    void ordenYCupo() {
+        List<Regla> reglas = List.of(
+                regla("R1", PROTECTOR, null, "100", 1, "REGALO", "0", "NINGUNO"),
+                regla("R2", PROTECTOR, null, null, 1, "PORCENTAJE", "50", "PESO_ARRIBA"));
+
+        List<Beneficio> b = con(reglas, equipo(), acc(PROTECTOR, "80", 1), acc(PROTECTOR, "300", 1), acc(PROTECTOR, "300", 1));
+
+        assertThat(b.get(1).tipo()).isEqualTo("R1");
+        assertThat(b.get(1).descuentoPorPieza()).isEqualByComparingTo("80");
+        assertThat(b.get(2).tipo()).isEqualTo("R2");
+        assertThat(b.get(2).descuentoPorPieza()).isEqualByComparingTo("150");
+        assertThat(b.get(3).piezas()).isZero();                       // R2 ya dio su única pieza por equipo
+    }
+
+    @Test
+    @DisplayName("la primera versión de la promoción es una lista de tres reglas con el mismo resultado")
+    void equivalenciaConLaPrimeraVersion() {
+        List<Regla> reglas = PromocionEquipoService.reglasDeLaConfiguracionPlana(promo());
+
+        assertThat(reglas).extracting(Regla::clave).containsExactly("CHIP", "MICA", "PROTECTOR");
+        for (String precio : List.of("30", "50", "99", "180", "248", "249", "250")) {
+            for (Short cat : List.of(CHIP, MICA, PROTECTOR, CABLE)) {
+                List<EntradaLinea> lineas = List.of(equipo(), acc(cat, precio, 1));
+                assertThat(PromocionEquipoService.calcular(true, reglas, lineas, Previos.NINGUNOS))
+                        .isEqualTo(PromocionEquipoService.calcular(promo(), lineas));
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("lo que ya recibió cada regla en otras ventas de la misma operación se descuenta del cupo, por su clave")
+    void cupoUsadoPorClave() {
+        List<Regla> reglas = List.of(regla("R7", PROTECTOR, null, null, 2, "PORCENTAJE", "50", "PESO_ARRIBA"));
+
+        List<Beneficio> b = PromocionEquipoService.calcular(true, reglas, List.of(acc(PROTECTOR, "200", 3)),
+                new Previos(1, java.util.Map.of("R7", 1)));
+
+        assertThat(b.get(0).piezas()).isEqualTo(1);                   // 1 equipo × 2 piezas − 1 ya entregada
     }
 }

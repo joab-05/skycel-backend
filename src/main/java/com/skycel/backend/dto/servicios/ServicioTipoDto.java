@@ -26,6 +26,19 @@ public class ServicioTipoDto {
     @DecimalMax(value = "100000", message = "La comisión es demasiado alta")
     private BigDecimal comisionPorOperacion;
 
+    /** Porcentaje de lo vendido que queda de ganancia (8.1 = 8.1 %). Opcional: 0. */
+    @PositiveOrZero(message = "El porcentaje de ganancia no puede ser negativo")
+    @DecimalMax(value = "100", message = "El porcentaje de ganancia no puede pasar de 100")
+    private BigDecimal porcentajeGanancia;
+
+    /** Lo que el proveedor cobra al negocio por operación (se resta de la comisión). Opcional: 0. */
+    @PositiveOrZero(message = "El costo por operación no puede ser negativo")
+    @DecimalMax(value = "100000", message = "El costo por operación es demasiado alto")
+    private BigDecimal costoPorOperacion;
+
+    /** true = solo se cuentan las operaciones, sin calcular ganancia (pagos PayJoy). Opcional: false. */
+    private Boolean soloConteo;
+
     private Integer orden;
 
     private Boolean activo;

@@ -13,5 +13,6 @@ public class CajaRequestDto {
     @NotNull(message = "La tienda es obligatoria")
     private Integer codti;
 
-    private Boolean esCajaPrincipal = false;
+    /** Si no se indica, la primera caja de la tienda queda como principal. */
+    private Boolean esCajaPrincipal;
 }

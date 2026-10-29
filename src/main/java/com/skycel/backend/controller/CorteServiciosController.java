@@ -103,6 +103,18 @@ public class CorteServiciosController {
         return ResponseEntityBuilder.ok(corteService.resumen(codti, desde, hasta, user.getUsername()), "resumen");
     }
 
+    @Operation(summary = "Lo vendido y lo ganado en servicios, mes con mes",
+            description = "Los últimos meses (6 por omisión, hasta 24), el actual incluido. Un administrador ve todas las sucursales o la que indique con codti.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/meses")
+    @PreAuthorize("@permisos.tiene('CORTE_SERVICIOS_CAPTURAR')")
+    public ResponseEntity<StandardApiResponse<List<MesServiciosDto>>> meses(
+            @RequestParam(required = false) Integer codti,
+            @RequestParam(defaultValue = "6") int cantidad,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(corteService.meses(codti, cantidad, user.getUsername()), "meses");
+    }
+
     @Operation(summary = "Consultar un corte")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{id}")

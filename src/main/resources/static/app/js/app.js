@@ -32,7 +32,7 @@ function formatoFecha(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) + ' ' +
-    d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 /** Sin centavos cuando son cero ($15,999); con ellos si el monto los trae (una comisión, un porcentaje): $1,234.50. Igual que JSystem. */
 function formatoDinero(n) {
@@ -539,7 +539,7 @@ async function pantallaMenu() {
         const u = document.getElementById('dh-ultimas');
         if (u) u.innerHTML = ultimas.length ? ultimas.map(v => {
           const cliente = v.nombreCliente || 'Público general';
-          const cuando = new Date(v.fechaVenta).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace('.', '');
+          const cuando = new Date(v.fechaVenta).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }).replace('.', '');
           const meta = [cuando, v.nombreVendedor || v.usernameVendedor, v.descripcionMetodoPago].filter(Boolean).join(' · ');
           return filaLista(cliente, meta, `<span class="fl-monto">${formatoDinero(v.total)}</span>`);
         }).join('') : '<div class="vacio">Aún no hay ventas en esta semana.</div>';
@@ -599,7 +599,7 @@ function saludoDelDia() {
   const h = new Date().getHours();
   return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
 }
-function horaActual() { return new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }); }
+function horaActual() { return new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }); }
 
 /** Cabecera de pantalla como la de JSystem: título grande, subtítulo gris y, a la derecha, las acciones principales. */
 function cabeceraPantalla(titulo, subtitulo, acciones) {
@@ -932,7 +932,7 @@ async function pantallaRecepcion() {
     const h = Math.floor(Number(document.getElementById('rc-horas').value));
     const el = document.getElementById('rc-entrega');
     el.textContent = h >= 1 && h <= 720
-      ? 'Se le promete para el ' + new Date(Date.now() + h * 3600000).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+      ? 'Se le promete para el ' + new Date(Date.now() + h * 3600000).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
   };
   document.getElementById('rc-horas').addEventListener('input', pintarEntrega);
   pintarEntrega();
@@ -4132,8 +4132,9 @@ async function pantallaCaja() {
     try {
       const tiendas = await api('GET', '/api/tiendas');
       const sel = document.getElementById('cj-codti');
-      const visibles = tiendas.filter(t => !t.esAlmacen);
-      sel.innerHTML = visibles.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join('');
+      // La bodega también lleva caja: ahí llega el efectivo de las ventas de las tiendas
+      const visibles = tiendas.filter(t => t.activo !== false);
+      sel.innerHTML = visibles.map(t => `<option value="${t.codti}">${escapar(t.nombre)}${t.esAlmacen ? ' (bodega)' : ''}</option>`).join('');
       codti = seleccionar ?? (visibles.find(t => t.codti === s.codti)?.codti ?? visibles[0]?.codti);
       if (codti != null) sel.value = codti;
       sel.onchange = () => { codti = Number(sel.value); cargarCajaYSaldo(); };
@@ -4154,7 +4155,7 @@ async function pantallaCaja() {
           <label>Teléfono</label>
           <input id="ns-telefono" inputmode="tel" placeholder="Opcional">
           <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
-            <input type="checkbox" id="ns-almacen" style="width:auto;"> Es almacén (sin caja ni venta al público)
+            <input type="checkbox" id="ns-almacen" style="width:auto;"> Es almacén o bodega (no vende al público; puede llevar su propia caja)
           </label>
           <button id="ns-guardar" class="btn btn-verde">Guardar sucursal</button>
         </div>`;
@@ -4171,7 +4172,7 @@ async function pantallaCaja() {
             esAlmacen: document.getElementById('ns-almacen').checked,
           });
           mostrarMensaje(root, `Sucursal "${nueva.nombre}" creada.`, 'ok');
-          await cargarTiendas(nueva.esAlmacen ? undefined : nueva.codti);
+          await cargarTiendas(nueva.codti);
           cargarCajaYSaldo();
         } catch (err) {
           mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');

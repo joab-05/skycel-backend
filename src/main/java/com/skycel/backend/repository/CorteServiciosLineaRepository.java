@@ -12,4 +12,6 @@ public interface CorteServiciosLineaRepository extends JpaRepository<CorteServic
     List<CorteServiciosLinea> findByCorte_IdcorteOrderByIdlinea(Integer idcorte);
 
     void deleteByCorte_Idcorte(Integer idcorte);
+
+    boolean existsByTipo_Idtipo(Integer idtipo);
 }

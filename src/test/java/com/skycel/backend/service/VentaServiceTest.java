@@ -1645,7 +1645,7 @@ class VentaServiceTest {
 
             ventaService.crear(request, ID_VENDEDOR);
 
-            verify(promocionEquipoService).calcularConPrevios(any(), eq(new PromocionEquipoService.Previos(1, 0, 1, 0)));
+            verify(promocionEquipoService).calcularConPrevios(any(), eq(new PromocionEquipoService.Previos(1, java.util.Map.of("MICA", 1))));
             verify(ventaRepository, atLeastOnce()).save(ventaCaptor.capture());
             assertThat(ventaCaptor.getAllValues().get(0).getIdOperacion()).isEqualTo("OP-1");
         }

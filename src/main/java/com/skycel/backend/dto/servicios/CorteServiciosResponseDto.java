@@ -26,6 +26,10 @@ public class CorteServiciosResponseDto {
     private String  comentarioConfirmacion;
     private BigDecimal totalMonto;
     private BigDecimal totalComision;
+    /** Lo vendido (importe de los servicios, sin contar los que solo se cuentan, como PayJoy). */
+    private BigDecimal totalVendido;
+    /** Lo que le queda al negocio de todo el corte (sin contar los servicios que solo se cuentan). */
+    private BigDecimal totalGanancia;
     /** Suma de lo que reporta el proveedor (null mientras no se confirme). */
     private BigDecimal totalProveedor;
     /** Suma de las diferencias (monto - proveedor). */
@@ -42,6 +46,12 @@ public class CorteServiciosResponseDto {
         private Integer operaciones;
         private BigDecimal monto;
         private BigDecimal comision;
+        private BigDecimal porcentajeGanancia;
+        private BigDecimal costoPorOperacion;
+        /** Lo que queda de ganancia en este servicio. */
+        private BigDecimal ganancia;
+        /** true = el servicio solo se cuenta (no tiene ganancia calculada). */
+        private Boolean soloConteo;
         private BigDecimal saldoInicial;
         private BigDecimal fondeo;
         private BigDecimal saldoFinal;
