@@ -626,17 +626,11 @@ function cuentaDelCajon(t) {
   const r = t.resumen;
   let ventasEfectivo = 0, otrasEntradas = 0;
   (r?.movimientos || []).forEach(m => { if (m.tipo !== 1) return; if (m.motivo === 'Venta') ventasEfectivo += Number(m.total); else otrasEntradas += Number(m.total); });
-  const caja = (valor, etiqueta, clase) => `<div class="cc-casilla"><small>${etiqueta}</small><b class="${clase || ''}">${valor}</b></div>`;
   const nv = r ? r.numVentas : 0;
   const porMetodo = (r?.ventasPorMetodo || []).map(m => `${escapar(m.metodo)} ${formatoDinero(m.total)}`).join(' · ');
+  // La cuenta del cajón en una sola línea (el efectivo esperado es la cifra grande de «Saldo en caja», aquí no se repite en una casilla)
   return `
-    <div class="cuenta-cajon">
-      ${caja(formatoDinero(t.fondoInicial), 'Fondo inicial')}<span class="op">+</span>
-      ${caja(formatoDinero(ventasEfectivo), 'Ventas en efectivo')}<span class="op">+</span>
-      ${caja(formatoDinero(otrasEntradas), 'Otras entradas', 'monto-ok')}<span class="op">−</span>
-      ${caja(formatoDinero(r?.totalSalidas || 0), 'Salidas', 'monto-rojo')}<span class="op">=</span>
-      ${caja(formatoDinero(t.efectivoEsperado), 'Efectivo esperado', 'esperado')}
-    </div>
+    <div class="ayuda">Efectivo esperado ${formatoDinero(t.efectivoEsperado)} = fondo ${formatoDinero(t.fondoInicial)} + ventas en efectivo ${formatoDinero(ventasEfectivo)} + otras entradas ${formatoDinero(otrasEntradas)} − salidas ${formatoDinero(r?.totalSalidas || 0)}</div>
     <div class="ayuda">${nv === 0 ? 'Sin ventas todavía' : `${nv} ${nv === 1 ? 'venta' : 'ventas'} por ${formatoDinero(r.totalVentas)} en total${porMetodo ? ' · ' + porMetodo : ''}`}${r && r.numAbonos > 0 ? ` · incluye ${r.numAbonos} abono(s) de clientes por ${formatoDinero(r.totalAbonos)}` : ''}</div>`;
 }
 
