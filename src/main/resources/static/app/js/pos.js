@@ -4,7 +4,7 @@
  *  - al vender un equipo, la promoción (chip de regalo, mica y protector con descuento) se aplica sola con la misma regla que el servidor;
  *  - un vendedor puede pedir un descuento a un administrador y verlo aprobado o rechazado aquí mismo;
  *  - la tarjeta solo aparece si el negocio ya la acepta;
- *  - un carrito se parte en una venta por cada forma de cobro (todas con el mismo idOperacion);
+ *  - un carrito es UNA sola venta (equipo a crédito, accesorios y todo lo demás juntos); si se paga de varias formas es un pago Mixto;
  *  - el pago mixto reparte lo de contado entre efectivo, tarjeta y transferencia (una sola venta con su desglose).
  * Funciona con conexión; sin ella, usa JSystem en la tienda.
  */
@@ -174,15 +174,22 @@ function posMixtoDesglose() {
 }
 const posMixtoPagos = () => Object.entries(posMixtoDesglose()).filter(([, m]) => m > 0.004).map(([metodoPago, monto]) => ({ metodoPago: Number(metodoPago), monto }));
 
-/** Los renglones agrupados por forma de cobro: una venta por grupo. Primero las que llevan equipos (la promoción cuenta con ellos). */
-function posGrupos() {
-  const grupos = new Map();
+/**
+ * Lo que se cobra HOY en cada forma de pago (1 efectivo, 2 tarjeta, 3 transferencia): el enganche de cada equipo a crédito con la forma
+ * en que se cobre, y todo lo demás del carrito con la forma de pago del carrito (o con el reparto de un pago Mixto).
+ */
+function posCobroPorForma() {
+  const hoy = { 1: 0, 2: 0, 3: 0 };
+  const metodo = posMetodoCarrito();
   for (const i of posCarrito) {
-    const clave = i.formaPago === 'PayJoy' ? 'PJ' + posMetodoEnganche(i) : 'C' + posMetodoCarrito();
-    if (!grupos.has(clave)) grupos.set(clave, { clave, payjoy: i.formaPago === 'PayJoy', metodo: i.formaPago === 'PayJoy' ? posMetodoEnganche(i) : posMetodoCarrito(), mixto: i.formaPago !== 'PayJoy' && posMetodoCarrito() === 4, items: [] });
-    grupos.get(clave).items.push(i);
+    if (i.formaPago === 'PayJoy') hoy[posMetodoEnganche(i)] += Number(i.enganche || 0);
+    else if (metodo !== 4) hoy[metodo] += posImporte(i);
   }
-  return [...grupos.values()].sort((a, b) => Number(b.items.some(x => x.esEquipo)) - Number(a.items.some(x => x.esEquipo)));
+  if (metodo === 4 && posCarrito.some(i => i.formaPago !== 'PayJoy')) {
+    const d = posMixtoDesglose();
+    for (const k of [1, 2, 3]) hoy[k] += d[k];
+  }
+  return Object.entries(hoy).map(([m, monto]) => ({ metodoPago: Number(m), monto: posRedondear(monto) })).filter(f => f.monto > 0.004);
 }
 
 function posTotales() {
@@ -250,7 +257,7 @@ async function pantallaPOS() {
   const codti = s.codti;
   if (codti == null) { root.innerHTML = '<div class="tarjeta">Tu usuario no tiene una sucursal fija: usa JSystem en la tienda para vender.</div>'; return; }
   posCarrito = [];
-  const idOperacion = uuid();   // el mismo en todas las ventas en que se parte este carrito (la promoción cuenta el carrito completo)
+  const idOperacion = uuid();   // identifica este carrito (cada carrito es una sola venta)
   const puedeCerrarCaja = Sesion.tiene('CAJA_OPERAR');
 
   root.innerHTML = `
@@ -434,37 +441,31 @@ async function pantallaPOS() {
 
     e.target.disabled = true;
     e.target.innerHTML = '<span class="spinner"></span> Cobrando...';
-    const grupos = posGrupos();
-    const hechas = [];
     try {
-      for (const g of grupos) {
-        const payload = {
-          codti, idCaja,
-          idcliente: clienteSel?.idcliente ?? null,
-          tipoComprobante: 1,
-          metodoPago: g.metodo,
-          tipoVenta: g.payjoy ? 1 : 0,
-          montoAbonado: posRedondear(g.items.reduce((sum, i) => sum + posCobroHoy(i), 0)),
-          pagos: g.mixto ? posMixtoPagos() : undefined,
-          observaciones: document.getElementById('pv-obs').value.trim() || null,
-          claveOffline: uuid(),
-          idOperacion,
-          detalles: g.items.flatMap(posDetalles),
-        };
-        const venta = await api('POST', '/api/ventas', payload);
-        hechas.push(venta);
-      }
-      const ids = hechas.map(v => '#' + v.idventa).join(', ');
+      // UNA venta con todo el carrito. Si se paga de una sola forma, esa es la forma de pago; si no, es un pago Mixto con su desglose.
+      const formas = posCobroPorForma();
+      const payload = {
+        codti, idCaja,
+        idcliente: clienteSel?.idcliente ?? null,
+        tipoComprobante: 1,
+        metodoPago: formas.length <= 1 ? (formas[0]?.metodoPago ?? 1) : 4,
+        tipoVenta: posCarrito.some(i => i.formaPago === 'PayJoy') ? 1 : 0,
+        montoAbonado: posRedondear(posCarrito.reduce((sum, i) => sum + posCobroHoy(i), 0)),
+        pagos: formas.length > 1 ? formas : undefined,
+        observaciones: document.getElementById('pv-obs').value.trim() || null,
+        claveOffline: uuid(),
+        idOperacion,
+        detalles: posCarrito.flatMap(posDetalles),
+      };
+      const venta = await api('POST', '/api/ventas', payload);
       const cambio = tot.efectivo > 0 ? Math.max(0, recibido - tot.efectivo) : 0;
-      mostrarMensaje(root, `${hechas.length === 1 ? 'Venta' : 'Ventas'} ${ids} registrada${hechas.length === 1 ? '' : 's'}. Cobrado hoy ${formatoDinero(tot.total)}${tot.efectivo > 0 ? ' · Cambio ' + formatoDinero(cambio) : ''}.`, 'ok');
+      mostrarMensaje(root, `Venta #${venta.idventa} registrada. Cobrado hoy ${formatoDinero(tot.total)}${tot.efectivo > 0 ? ' · Cambio ' + formatoDinero(cambio) : ''}.`, 'ok');
       posCarrito = [];
       posCatalogoCache.productos = null;   // el stock cambió: el próximo POS pide el catálogo fresco
       setTimeout(() => pantallaPOS(), 1400);
     } catch (err) {
-      const parcial = hechas.length > 0 ? ` Ya se registraron ${hechas.length} de ${grupos.length} venta(s) de este carrito: revisa el historial antes de reintentar.` : '';
-      mostrarMensaje(root, (err.network ? 'Sin conexión con el servidor: esta venta no se guardó. Usa JSystem en la tienda mientras tanto.' : err.message) + parcial, 'error');
+      mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: esta venta no se guardó. Usa JSystem en la tienda mientras tanto.' : err.message, 'error');
       if (!err.network && /cerrada/.test(err.message || '')) revisarTurno();
-      if (hechas.length > 0) posCatalogoCache.productos = null;
       e.target.disabled = false;
       e.target.innerHTML = ic('banknote') + ' Cobrar';
     }

@@ -186,15 +186,19 @@ public class VentaService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Por ahora no se aceptan pagos con tarjeta: cobra en efectivo o por transferencia.");
         }
 
-        byte tipoVenta = dto.getTipoVenta() != null ? dto.getTipoVenta() : TIPO_VENTA_NORMAL;
-        boolean esPayjoy = tipoVenta == TIPO_VENTA_CREDITO_PAYJOY;
-        if (esPayjoy) {
-            if (dto.getMetodoPago() == null || (dto.getMetodoPago() != METODO_EFECTIVO && dto.getMetodoPago() != METODO_TRANSFERENCIA)) {
+        // PayJoy se decide por renglón: el equipo que trae enganche (y plazo) va a crédito; lo demás del mismo carrito se paga hoy completo.
+        // La venta es «a crédito PayJoy» si alguno de sus renglones lo es. Un cliente viejo que manda tipoVenta=1 sin ningún enganche sigue
+        // recibiendo el aviso de que falta el enganche.
+        boolean hayPayjoy = dto.getDetalles().stream().anyMatch(VentaService::esRenglonPayjoy);
+        if (!hayPayjoy && dto.getTipoVenta() != null && dto.getTipoVenta() == TIPO_VENTA_CREDITO_PAYJOY) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el enganche y el plazo del equipo financiado con PayJoy.");
+        }
+        byte tipoVenta = hayPayjoy ? TIPO_VENTA_CREDITO_PAYJOY : TIPO_VENTA_NORMAL;
+        if (hayPayjoy) {
+            if (dto.getMetodoPago() == null || (dto.getMetodoPago() != METODO_EFECTIVO && dto.getMetodoPago() != METODO_TRANSFERENCIA
+                    && dto.getMetodoPago() != METODO_MIXTO)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "En una venta a crédito PayJoy el enganche se cobra en Efectivo o Transferencia.");
-            }
-            if (dto.getPagos() != null && !dto.getPagos().isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una venta a crédito PayJoy no lleva desglose de pagos.");
             }
         }
 
@@ -202,7 +206,7 @@ public class VentaService {
         //    fallar rápido antes de tocar stock/IMEIs.
         List<LineaResuelta> lineas = new ArrayList<>();
         for (VentaDetalleRequestDto d : dto.getDetalles()) {
-            lineas.add(resolverLinea(d, tienda, offline, esPayjoy));
+            lineas.add(resolverLinea(d, tienda, offline, esRenglonPayjoy(d)));
         }
         // La promoción de equipo (chip, mica y protector) depende de toda la venta: se aplica con todas las líneas ya resueltas.
         // Las ventas que arman una orden de servicio o una devolución traen sus precios ya acordados y no la llevan.
@@ -219,17 +223,19 @@ public class VentaService {
         }
 
         BigDecimal montoAbonado;
-        if (esPayjoy) {
-            montoAbonado = lineas.stream().map(l -> l.enganchePayjoy).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (hayPayjoy) {
+            // Lo que se cobra hoy: el enganche de cada equipo a crédito y el importe completo de todo lo demás del carrito
+            montoAbonado = lineas.stream().map(l -> l.enganchePayjoy != null ? l.enganchePayjoy : l.subtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
             if (dto.getMontoAbonado() != null && dto.getMontoAbonado().compareTo(montoAbonado) != 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "El monto abonado ($" + dto.getMontoAbonado() + ") no coincide con la suma de los enganches ($" + montoAbonado + ").");
+                        "El monto abonado ($" + dto.getMontoAbonado() + ") no coincide con la suma de los enganches y del resto que se cobra hoy ($" + montoAbonado + ").");
             }
+            validarDesglosePayjoy(dto, montoAbonado);
         } else {
             montoAbonado = resolverMontoAbonado(dto, total, desdeOrden);
         }
 
-        if (!esPayjoy && montoAbonado.compareTo(total) < 0 && cliente == null) {
+        if (!hayPayjoy && montoAbonado.compareTo(total) < 0 && cliente == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "El monto abonado ($" + montoAbonado + ") es menor al total ($" + total +
                             "). Una venta a crédito requiere un cliente registrado.");
@@ -302,11 +308,47 @@ public class VentaService {
 
         // 5) Venta a crédito con cliente: el saldo queda como cuenta por cobrar. Una venta PayJoy NO genera CxC:
         //    el resto lo cubre PayJoy (la financiadora), se liquida fuera del sistema, no es deuda del cliente.
-        if (!esPayjoy && montoAbonado.compareTo(total) < 0) {
+        if (!hayPayjoy && montoAbonado.compareTo(total) < 0) {
             cuentaPorCobrarService.crearDesdeVenta(venta, total.subtract(montoAbonado), dto.getFechaVencimientoCredito());
         }
 
         return toResponseDto(venta, detallesGuardados);
+    }
+
+    /** ¿Este renglón es un equipo financiado con PayJoy? Lo dice su enganche o su plazo. */
+    private static boolean esRenglonPayjoy(VentaDetalleRequestDto d) {
+        return d.getEnganchePayjoy() != null || d.getPlazoMesesPayjoy() != null || d.getPlazoSemanasPayjoy() != null;
+    }
+
+    /**
+     * En una venta con PayJoy el desglose solo aplica al pago Mixto y debe sumar exactamente lo que se cobra hoy (enganches y demás
+     * artículos): así cada peso queda con su forma de pago y la caja registra solo el efectivo.
+     */
+    private void validarDesglosePayjoy(VentaRequestDto dto, BigDecimal cobradoHoy) {
+        boolean mixto = dto.getMetodoPago() != null && dto.getMetodoPago() == METODO_MIXTO;
+        List<VentaPagoDetalleRequestDto> pagos = dto.getPagos();
+        boolean hayPagos = pagos != null && !pagos.isEmpty();
+        if (!mixto) {
+            if (hayPagos) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El desglose de pagos solo aplica al método Mixto (4).");
+            }
+            return;
+        }
+        if (!hayPagos || pagos.size() < 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Un pago Mixto requiere el desglose (pagos) con al menos 2 líneas.");
+        }
+        BigDecimal suma = BigDecimal.ZERO;
+        for (VentaPagoDetalleRequestDto p : pagos) {
+            if (p.getMetodoPago() == null || !METODOS_DESGLOSE.contains(p.getMetodoPago())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Método de pago no válido en el desglose: " + p.getMetodoPago()
+                        + " (use 1 Efectivo, 2 Tarjeta, 3 Transferencia o 5 PayJoy).");
+            }
+            suma = suma.add(p.getMonto());
+        }
+        if (suma.compareTo(cobradoHoy) != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El desglose ($" + suma + ") debe sumar lo que se cobra hoy ($" + cobradoHoy + ").");
+        }
     }
 
     // ── Pago Mixto ───────────────────────────────────────────────────────────

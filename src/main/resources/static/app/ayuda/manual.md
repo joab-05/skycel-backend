@@ -82,7 +82,7 @@ El cliente es **opcional**: si no marcas **Registrar cliente**, la venta queda d
 2. En efectivo escribe el **monto recibido**; el sistema calcula el **cambio**. Si el carrito lleva un equipo a crédito, lo que se cobra hoy de ese equipo es solo su enganche.
 3. Pulsa **Cobrar**.
 
-Si el carrito mezcla formas de cobro (por ejemplo accesorios en efectivo y un equipo a crédito), el sistema lo parte en una venta por cada una, todas juntas, y la promoción cuenta el carrito completo. Los precios ya **incluyen IVA** y los **descuentos** configurados por el administrador se aplican solos.
+Todo lo que lleva el cliente en el carrito se registra como **una sola venta**, con un solo folio y un solo ticket que lista **todos** sus artículos, aunque se pague de varias formas: por ejemplo, un equipo a crédito con PayJoy junto con accesorios en efectivo. El total de la venta es el precio completo de todo; lo que se cobra hoy es el enganche del equipo a crédito más lo demás, y el ticket dice cuánto se pagó hoy y cuánto financia PayJoy. Si el carrito se paga de más de una forma (por ejemplo, el enganche por transferencia y los accesorios en efectivo), la venta queda como pago **Mixto** con su desglose, y solo el efectivo entra al cajón. Los precios ya **incluyen IVA** y los **descuentos** configurados por el administrador se aplican solos.
 
 ### Mensajes comunes
 - **«La caja está cerrada»**: abre la caja con su fondo inicial y vuelve a cobrar.
@@ -135,7 +135,7 @@ La **bodega** también lleva su propia caja: ahí llega el **efectivo de las ven
 ### Revisar un corte a detalle (encargado y administrador)
 Para confirmar que todo lo vendido y todo el efectivo quedó bien registrado, abre un corte y pulsa **Ver ventas y movimientos** (en la web, el mismo botón al final del corte). Muestra, del turno completo:
 - **Ventas:** una por una, con la hora, quién vendió, el cliente, la forma de pago, el total y **todo lo que se llevó el cliente**. Cada equipo sale con su **IMEI** y si fue **al contado** o con **PayJoy** (con su enganche y plazo). Las canceladas aparecen marcadas y no suman. Si la venta se pagó mixto, se ve cómo se pagó cada parte.
-- **Efectivo en caja de cada venta:** el sistema compara el efectivo que la venta debió dejar en el cajón con el que quedó registrado y marca con **⚠ Revisar** las que no coinciden (por ejemplo, una venta en efectivo sin su entrada en la caja). Arriba aparece cuántas ventas hay por revisar. Los equipos con PayJoy no se comparan, porque lo que entra al cajón depende del enganche.
+- **Efectivo en caja de cada venta:** el sistema compara el efectivo que la venta debió dejar en el cajón con el que quedó registrado y marca con **⚠ Revisar** las que no coinciden (por ejemplo, una venta en efectivo sin su entrada en la caja). Arriba aparece cuántas ventas hay por revisar. En una venta con un equipo a crédito se compara lo que se cobró hoy (el enganche más lo demás del carrito).
 - **Equipos vendidos:** la lista de cada equipo vendido en el turno, con su IMEI, para ver de un vistazo cuáles fueron al contado y cuáles con PayJoy.
 - **Movimientos de efectivo:** cada entrada y salida con su motivo, su nota y quién la registró; se pueden filtrar para ver solo los que registró una persona (gastos, retiros), el efectivo de ventas, los abonos o el fondo y el retiro del cierre.
 En JSystem se puede **exportar a Excel**. Un encargado solo ve los cortes de su tienda; el administrador, los de todas. Necesita conexión con el servidor.
@@ -375,7 +375,7 @@ Ejemplo: *protectores de hasta $249, 50 % de descuento, redondeado al peso hacia
 
 Las reglas se revisan **en orden** (con las flechas las subes o bajas): a cada pieza le toca la primera regla que le corresponde y todavía tiene cupo. Cada regla se puede **apagar** sin borrarla, y el interruptor **Promoción activa** apaga todas. Las tiendas con un JSystem anterior deben actualizarse antes de usar descuentos en porcentaje o con redondeo.
 
-En el punto de venta se aplica sola: al agregar el artículo junto con un equipo, el renglón muestra **🎁 Promoción de equipo** y el precio ya rebajado; el vendedor no captura nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben. Si el carrito se parte en varias ventas por la forma de pago, la promoción cuenta el carrito completo: el equipo de una venta da derecho al descuento de la otra. También funciona sin conexión con la última configuración descargada.
+En el punto de venta se aplica sola: al agregar el artículo junto con un equipo, el renglón muestra **🎁 Promoción de equipo** y el precio ya rebajado; el vendedor no captura nada. Si el cliente lleva más piezas de las que cubre la promoción, solo las primeras la reciben. El carrito es una sola venta, así que el equipo siempre da derecho al descuento de sus chips, micas y protectores. También funciona sin conexión con la última configuración descargada.
 
 ## Reportes
 

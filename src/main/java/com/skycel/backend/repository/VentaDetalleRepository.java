@@ -96,7 +96,7 @@ public interface VentaDetalleRepository extends JpaRepository<VentaDetalle, Inte
     @Query("""
             SELECT COALESCE(SUM(d.precioUnitarioFinal * d.cantidad), 0)
             FROM VentaDetalle d JOIN d.venta v
-            WHERE v.estado = 1 AND v.tipoVenta = 0 AND v.tienda.codti = :codti
+            WHERE v.estado = 1 AND d.enganchePayjoy IS NULL AND v.tienda.codti = :codti
             AND v.fechaVenta BETWEEN :desde AND :hasta
             AND d.productoMaster.tipo <> com.skycel.backend.domain.enums.TipoProducto.SERVICIO
             AND (d.esRegalo IS NULL OR d.esRegalo = false)
@@ -112,7 +112,7 @@ public interface VentaDetalleRepository extends JpaRepository<VentaDetalle, Inte
             WHERE dd.devolucion.estado = 2
             AND dd.iddetalleVenta IN (
                 SELECT d.iddetalleVenta FROM VentaDetalle d JOIN d.venta v
-                WHERE v.tipoVenta = 0 AND v.tienda.codti = :codti AND v.fechaVenta BETWEEN :desde AND :hasta
+                WHERE d.enganchePayjoy IS NULL AND v.tienda.codti = :codti AND v.fechaVenta BETWEEN :desde AND :hasta
             )
             """)
     java.math.BigDecimal devueltoComisionEncargado(@Param("codti") Integer codti,
@@ -124,7 +124,7 @@ public interface VentaDetalleRepository extends JpaRepository<VentaDetalle, Inte
             SELECT new com.skycel.backend.dto.comision.VentaPayjoyLineaRow(
                 v.usuarioVendedor.idusuario, v.usuarioVendedor.nombreCompleto, d.iddetalleVenta, d.precioUnitarioFinal)
             FROM VentaDetalle d JOIN d.venta v
-            WHERE v.estado = 1 AND v.tipoVenta = 1
+            WHERE v.estado = 1 AND d.enganchePayjoy IS NOT NULL
             AND v.fechaVenta BETWEEN :desde AND :hasta
             AND (d.esRegalo IS NULL OR d.esRegalo = false)
             AND (d.precioAutorizado IS NULL OR d.precioAutorizado = false)

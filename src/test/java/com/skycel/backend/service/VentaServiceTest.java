@@ -572,19 +572,100 @@ class VentaServiceTest {
         }
 
         @Test
-        @DisplayName("una venta PayJoy no admite desglose de pagos (Mixto): 400")
+        @DisplayName("el desglose de pagos solo aplica al método Mixto, también en una venta PayJoy: 400")
         void conDesglose_lanzaBadRequest() {
+            celularDisponible("123456789012345");
             VentaDetalleRequestDto linea = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10);
             VentaRequestDto request = ventaBase(List.of(linea));
             request.setTipoVenta((byte) 1);
-            com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto pago = new com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto();
-            pago.setMetodoPago((byte) 1);
-            pago.setMonto(new BigDecimal("50"));
-            request.setPagos(List.of(pago));
+            request.setPagos(List.of(pago(1, "50")));
 
             assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
                     .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("no lleva desglose");
+                    .hasMessageContaining("solo aplica al método Mixto");
+        }
+
+        private com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto pago(int metodo, String monto) {
+            com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto p = new com.skycel.backend.dto.venta.VentaPagoDetalleRequestDto();
+            p.setMetodoPago((byte) metodo);
+            p.setMonto(new BigDecimal(monto));
+            return p;
+        }
+
+        private void accesorioEnStock() {
+            ProductoMaster master = masterAccesorio();
+            lenient().when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            lenient().when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI))
+                    .thenReturn(List.of(productoAccesorio(master, BigDecimal.TEN)));
+        }
+
+        @Test
+        @DisplayName("un carrito con un equipo a crédito y un accesorio es UNA venta: total completo, abonado = enganche + accesorio, caja en efectivo")
+        void equipoPayjoyYAccesorio_unaSolaVenta() {
+            celularDisponible("123456789012345");
+            accesorioEnStock();
+
+            VentaRequestDto request = ventaBase(List.of(lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10), lineaAccesorio((short) 1)));
+            request.setMetodoPago((byte) 1);
+
+            VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
+
+            assertThat(response.getTipoVenta()).isEqualTo((byte) 1);
+            assertThat(response.getDetalles()).hasSize(2);
+            assertThat(response.getTotal()).isEqualByComparingTo("214");        // 199 del equipo + 15 del accesorio
+            assertThat(response.getMontoAbonado()).isEqualByComparingTo("65");  // 50 de enganche + 15 del accesorio
+            verify(cuentaPorCobrarService, never()).crearDesdeVenta(any(), any(), any());
+            verify(movimientoCajaService).registrarVentaEfectivo(any(Venta.class), eq(vendedor));
+            verify(ventaRepository, times(1)).save(any(Venta.class));
+        }
+
+        @Test
+        @DisplayName("PayJoy + accesorio con pago Mixto: el desglose suma lo que se cobra hoy y solo el efectivo entra a la caja")
+        void equipoPayjoyYAccesorio_mixto() {
+            celularDisponible("123456789012345");
+            accesorioEnStock();
+
+            VentaRequestDto request = ventaBase(List.of(lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10), lineaAccesorio((short) 1)));
+            request.setMetodoPago((byte) 4);
+            request.setPagos(List.of(pago(1, "20"), pago(3, "45")));
+
+            VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
+
+            assertThat(response.getMontoAbonado()).isEqualByComparingTo("65");
+            verify(movimientoCajaService).registrarEntradaVenta(any(Venta.class), eq(vendedor), eq(new BigDecimal("20")));
+            verify(movimientoCajaService, never()).registrarVentaEfectivo(any(), any());
+        }
+
+        @Test
+        @DisplayName("PayJoy + accesorio con Mixto: si el desglose no suma lo que se cobra hoy: 400")
+        void equipoPayjoyYAccesorio_mixtoNoSuma() {
+            celularDisponible("123456789012345");
+            accesorioEnStock();
+
+            VentaRequestDto request = ventaBase(List.of(lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10), lineaAccesorio((short) 1)));
+            request.setMetodoPago((byte) 4);
+            request.setPagos(List.of(pago(1, "20"), pago(3, "40")));
+
+            assertThatThrownBy(() -> ventaService.crear(request, ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("debe sumar lo que se cobra hoy");
+            verify(ventaRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("un equipo a crédito con accesorios por transferencia: abonado = enganche + accesorios, sin mover caja")
+        void equipoPayjoyYAccesoriosPorTransferencia() {
+            celularDisponible("123456789012345");
+            VentaDetalleRequestDto aCredito = lineaCelularPayjoy("123456789012345", new BigDecimal("50"), 10);
+            accesorioEnStock();
+            VentaRequestDto request = ventaBase(List.of(aCredito, lineaAccesorio((short) 2)));
+            request.setMetodoPago((byte) 3);
+
+            VentaResponseDto response = ventaService.crear(request, ID_VENDEDOR);
+
+            assertThat(response.getTotal()).isEqualByComparingTo("229");        // 199 + 2 × 15
+            assertThat(response.getMontoAbonado()).isEqualByComparingTo("80");  // 50 + 30
+            verify(movimientoCajaService, never()).registrarVentaEfectivo(any(), any());
         }
 
         @Test

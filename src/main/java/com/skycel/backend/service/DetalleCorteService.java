@@ -164,15 +164,15 @@ public class DetalleCorteService {
 
     /**
      * Compara el efectivo que la venta debió dejar en el cajón con el que quedó registrado. Devuelve null si cuadra o si no se puede
-     * saber (un equipo con PayJoy: lo que entra depende del enganche y de cómo se cobró).
+     * saber. Lo que se cobra hoy es el monto abonado: con un equipo a crédito PayJoy es su enganche más lo demás del carrito.
      */
     private static String alertaDeEfectivo(Venta v, List<ArticuloDto> articulos, List<PagoDto> pagos, BigDecimal enCaja) {
-        if (articulos.stream().anyMatch(ArticuloDto::isPayjoy)) return null;
         String metodo = nombreMetodo(v.getMetodoPago());
         BigDecimal total = v.getTotal() == null ? BigDecimal.ZERO : v.getTotal();
+        BigDecimal cobrado = v.getMontoAbonado() == null ? total : v.getMontoAbonado().min(total);
         BigDecimal esperado;
         switch (metodo) {
-            case "Efectivo" -> esperado = total;
+            case "Efectivo" -> esperado = cobrado;
             case "Mixto" -> esperado = pagos.stream().filter(p -> "Efectivo".equals(p.getMetodo())).map(PagoDto::getMonto)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             case "Transferencia", "Tarjeta" -> esperado = BigDecimal.ZERO;
