@@ -51,23 +51,17 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- Nómina, préstamos y comisiones
 DELETE FROM nomina_deduccion;
 DELETE FROM nomina_percepcion;
-DELETE FROM nomina_novedad;
 DELETE FROM nomina_detalle;
 DELETE FROM nomina;
 DELETE FROM nomina_periodo;
-DELETE FROM prestamo_descuento;
 DELETE FROM empleado_prestamo;
 DELETE FROM comision_periodo;
 
 -- Descuentos pedidos, devoluciones y cuentas por cobrar
-DELETE FROM venta_descuento_solicitud;
 DELETE FROM solicitud_descuento;
-DELETE FROM venta_devolucion;
-DELETE FROM venta_payjoy;
 DELETE FROM devolucion_cambio_linea;
 DELETE FROM devolucion_detalle;
 DELETE FROM devolucion;
-DELETE FROM cliente_credito_abono;
 DELETE FROM pago_cuenta;
 DELETE FROM cuenta_por_cobrar;
 
@@ -89,15 +83,12 @@ DELETE FROM venta_detalle_aud;
 DELETE FROM venta_aud;
 
 -- Caja
-DELETE FROM caja_corte_resumen;
-DELETE FROM caja_corte;
 DELETE FROM movimiento_caja;
 DELETE FROM movimiento_caja_aud;
 DELETE FROM sesion_caja;
 
 -- Compras
 DELETE FROM pago_compra;
-DELETE FROM compra_abono;
 DELETE FROM compra_detalle;
 DELETE FROM compra;
 
@@ -114,15 +105,12 @@ DELETE FROM traspaso_aud;
 -- Inventarios físicos
 DELETE FROM inventario_auditoria_unidad;
 DELETE FROM inventario_auditoria_detalle;
-DELETE FROM inventario_seccion_control;
 DELETE FROM inventario_auditoria;
 DELETE FROM inventario_auditoria_detalle_aud;
 DELETE FROM inventario_auditoria_aud;
 
 -- Movimientos de inventario (kardex), pedidos de mayoreo y avisos
 DELETE FROM movimiento_inventario;
-DELETE FROM pedido_mayoreo_detalle;
-DELETE FROM pedido_mayoreo;
 DELETE FROM notificacion;
 
 SET FOREIGN_KEY_CHECKS = 1;
