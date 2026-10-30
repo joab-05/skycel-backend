@@ -132,6 +132,14 @@ La **bodega** también lleva su propia caja: ahí llega el **efectivo de las ven
 
 **Resumen del período** (JSystem) saca el total de un rango de fechas y se puede exportar.
 
+### Revisar un corte a detalle (encargado y administrador)
+Para confirmar que todo lo vendido y todo el efectivo quedó bien registrado, abre un corte y pulsa **Ver ventas y movimientos** (en la web, el mismo botón al final del corte). Muestra, del turno completo:
+- **Ventas:** una por una, con la hora, quién vendió, el cliente, la forma de pago, el total y **todo lo que se llevó el cliente**. Cada equipo sale con su **IMEI** y si fue **al contado** o con **PayJoy** (con su enganche y plazo). Las canceladas aparecen marcadas y no suman. Si la venta se pagó mixto, se ve cómo se pagó cada parte.
+- **Efectivo en caja de cada venta:** el sistema compara el efectivo que la venta debió dejar en el cajón con el que quedó registrado y marca con **⚠ Revisar** las que no coinciden (por ejemplo, una venta en efectivo sin su entrada en la caja). Arriba aparece cuántas ventas hay por revisar. Los equipos con PayJoy no se comparan, porque lo que entra al cajón depende del enganche.
+- **Equipos vendidos:** la lista de cada equipo vendido en el turno, con su IMEI, para ver de un vistazo cuáles fueron al contado y cuáles con PayJoy.
+- **Movimientos de efectivo:** cada entrada y salida con su motivo, su nota y quién la registró; se pueden filtrar para ver solo los que registró una persona (gastos, retiros), el efectivo de ventas, los abonos o el fondo y el retiro del cierre.
+En JSystem se puede **exportar a Excel**. Un encargado solo ve los cortes de su tienda; el administrador, los de todas. Necesita conexión con el servidor.
+
 ## Devoluciones
 
 Sirven para regresar un producto vendido: se le **reembolsa** al cliente o se le da **otro producto a cambio**. Hay un plazo para devolver (por omisión 15 días; el administrador lo ajusta en Configuración).

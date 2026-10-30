@@ -2,6 +2,7 @@ package com.skycel.backend.controller;
 
 import com.skycel.backend.dto.caja.AbrirCajaRequestDto;
 import com.skycel.backend.dto.caja.CerrarCajaRequestDto;
+import com.skycel.backend.dto.caja.DetalleCorteDto;
 import com.skycel.backend.dto.caja.SesionCajaResponseDto;
 import com.skycel.backend.dto.caja.CajaRequestDto;
 import com.skycel.backend.dto.caja.CajaResponseDto;
@@ -9,6 +10,7 @@ import com.skycel.backend.dto.caja.MovimientoCajaRequestDto;
 import com.skycel.backend.dto.caja.MovimientoCajaResponseDto;
 import com.skycel.backend.dto.caja.SaldoCajaResponseDto;
 import com.skycel.backend.service.CajaService;
+import com.skycel.backend.service.DetalleCorteService;
 import com.skycel.backend.service.MovimientoCajaService;
 import com.skycel.backend.service.SesionCajaService;
 import com.skycel.backend.shared.dto.StandardApiResponse;
@@ -37,6 +39,7 @@ public class CajaController {
     private final CajaService cajaService;
     private final MovimientoCajaService movimientoCajaService;
     private final SesionCajaService sesionCajaService;
+    private final DetalleCorteService detalleCorteService;
 
     @Operation(summary = "Cajas de una tienda")
     @SecurityRequirement(name = "Bearer Authentication")
@@ -128,6 +131,15 @@ public class CajaController {
             @PathVariable Integer idCaja, @RequestParam(defaultValue = "60") int limite,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(sesionCajaService.historial(idCaja, limite, userDetails.getUsername()), "turnos de caja");
+    }
+
+    @Operation(summary = "Detalle de un turno para auditarlo: cada venta con sus artículos (equipos por IMEI, contado o PayJoy) y cada movimiento de efectivo con su nota")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/sesiones/{idsesion}/detalle")
+    @PreAuthorize("@permisos.tiene('CAJA_MOVIMIENTOS')")
+    public ResponseEntity<StandardApiResponse<DetalleCorteDto>> detalleSesion(
+            @PathVariable Integer idsesion, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(detalleCorteService.detalle(idsesion, userDetails.getUsername()), "detalle del turno");
     }
 
     @Operation(summary = "Un turno con su corte completo")

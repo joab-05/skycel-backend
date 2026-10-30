@@ -947,3 +947,11 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
   #ay-impresion h2 { break-after: avoid; page-break-before: always; border-bottom: 2px solid #2563eb; padding-bottom: 4px; }
   #ay-impresion section:first-of-type h2 { page-break-before: avoid; }
 }
+
+/* Detalle del corte: cada venta se abre para ver lo que se llevó el cliente */
+.cr-venta { border: 1px solid var(--gris-claro); border-radius: 10px; margin-bottom: 8px; padding: 0 12px; background: #fff; }
+.cr-venta summary { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 0; cursor: pointer; font-size: 13px; }
+.cr-venta[open] summary { border-bottom: 1px solid var(--gris-claro); margin-bottom: 4px; }
+.cr-alerta { border-color: #fca5a5; background: #fef2f2; }
+.cr-cancelada { opacity: .6; }
+.tarjeta-mini { border: 1px solid var(--gris-claro); border-radius: 10px; padding: 4px 12px; margin-bottom: 8px; background: #fff; }

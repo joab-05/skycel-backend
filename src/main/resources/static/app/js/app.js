@@ -766,6 +766,112 @@ async function pantallaCorte(id) {
       </div>
     </div>` : ''}`;
   document.getElementById('cr-imprimir').onclick = () => window.print();
+  // Encargados y administradores revisan qué se vendió y qué movimientos de efectivo hubo, uno por uno
+  if (c.idsesionCaja && Sesion.tiene('CAJA_MOVIMIENTOS')) {
+    root.insertAdjacentHTML('beforeend', `<div class="tarjeta" id="cr-auditoria">
+      <h2>Ventas y movimientos del turno</h2>
+      <div class="ayuda" style="margin-bottom:10px;">Cada venta con lo que se llevó el cliente (equipos con su IMEI, al contado o con PayJoy) y cada movimiento de efectivo con su nota.</div>
+      <button id="cr-ver-detalle" class="btn btn-azul">${ic('search')} Ver ventas y movimientos</button>
+    </div>`);
+    document.getElementById('cr-ver-detalle').onclick = () => cargarAuditoriaCorte(c.idsesionCaja, document.getElementById('cr-auditoria'));
+  }
+}
+
+/** El detalle de un turno para auditarlo: ventas con sus artículos, equipos vendidos y movimientos con su nota. */
+async function cargarAuditoriaCorte(idsesion, cont) {
+  cont.innerHTML = '<h2>Ventas y movimientos del turno</h2><div class="vacio">Cargando...</div>';
+  let d;
+  try { d = await api('GET', '/api/cajas/sesiones/' + idsesion + '/detalle'); }
+  catch (err) { cont.innerHTML = `<h2>Ventas y movimientos del turno</h2><div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`; return; }
+  const ventas = d.ventas || [], movs = d.movimientos || [], eq = d.equipos || {};
+  const completadas = ventas.filter(v => v.completada);
+  const entradas = movs.filter(m => m.tipo === 1 && m.origen !== 'TURNO').reduce((t, m) => t + m.monto, 0);
+  const salidas = movs.filter(m => m.tipo === 2 && m.origen !== 'TURNO').reduce((t, m) => t + m.monto, 0);
+  cont.innerHTML = `
+    <h2>Ventas y movimientos del turno</h2>
+    <div class="kp-h">
+      ${kpiH('c1', 'receipt', completadas.length + ' · ' + formatoDinero(completadas.reduce((t, v) => t + v.total, 0)), 'Ventas' + (ventas.length > completadas.length ? ' (' + (ventas.length - completadas.length) + ' cancelada(s))' : ''))}
+      ${kpiH('c3', 'smartphone', (eq.contado || 0) + ' al contado · ' + (eq.payjoy || 0) + ' PayJoy', 'Equipos vendidos')}
+      ${kpiH(d.ventasConAlerta ? 'c6' : 'c3', d.ventasConAlerta ? 'triangle-alert' : 'circle-check', String(d.ventasConAlerta || 0), 'Ventas por revisar')}
+    </div>
+    <div class="grupo-botones" style="margin:10px 0;">
+      <button class="btn btn-chico btn-azul" data-vista="ventas">Ventas (${ventas.length})</button>
+      <button class="btn btn-chico btn-gris" data-vista="equipos">Equipos (${(eq.contado || 0) + (eq.payjoy || 0)})</button>
+      <button class="btn btn-chico btn-gris" data-vista="movs">Movimientos (${movs.length})</button>
+    </div>
+    <div id="cr-vista"></div>`;
+
+  const vista = document.getElementById('cr-vista');
+  const filtros = { soloEquipos: false, porRevisar: false, conCanceladas: true, mov: 'todos' };
+
+  const lineaArt = a => `<div class="detalle-fila"><span class="k">${a.cantidad > 1 ? a.cantidad + ' × ' : ''}${escapar(a.nombre)}${a.imei ? ' · IMEI ' + escapar(a.imei) : ''}
+      ${a.equipo ? (a.payjoy ? ' <strong>[PayJoy · enganche ' + formatoDinero(a.enganche || 0) + (a.plazoMeses ? ' · ' + a.plazoMeses + ' meses' : '') + ']</strong>' : ' <strong>[al contado]</strong>') : ''}
+      ${a.regalo ? ' · regalo' : ''}${a.promocion ? ' · promoción de equipo' : ''}${a.precioAutorizado ? ' · descuento autorizado' : ''}</span><span class="v">${formatoDinero(a.importe)}</span></div>`;
+
+  function dibujarVentas() {
+    const lista = ventas.filter(v => (filtros.conCanceladas || v.completada) && (!filtros.porRevisar || v.alerta) && (!filtros.soloEquipos || (v.articulos || []).some(a => a.equipo)));
+    vista.innerHTML = `
+      <div class="grupo-botones" style="margin-bottom:8px;">
+        <label class="chk"><input type="checkbox" id="cf-eq" ${filtros.soloEquipos ? 'checked' : ''}> Solo con equipos</label>
+        <label class="chk"><input type="checkbox" id="cf-rev" ${filtros.porRevisar ? 'checked' : ''}> Solo por revisar</label>
+        <label class="chk"><input type="checkbox" id="cf-can" ${filtros.conCanceladas ? 'checked' : ''}> Mostrar canceladas</label>
+      </div>
+      ${lista.length === 0 ? '<div class="vacio">No hay ventas con ese filtro.</div>' : lista.map(v => `
+        <details class="cr-venta${v.alerta ? ' cr-alerta' : ''}${v.completada ? '' : ' cr-cancelada'}">
+          <summary><span><strong>#${v.idventa}</strong> · ${formatoFecha(v.fecha)} · ${escapar(v.vendedor || '')}</span>
+            <span>${escapar(v.metodo)} · <strong>${formatoDinero(v.total)}</strong>${v.alerta ? ' ⚠' : ''}${v.completada ? '' : ' · cancelada'}</span></summary>
+          ${v.alerta ? `<div class="mensaje error">${escapar(v.alerta)}.</div>` : ''}
+          <div class="detalle-fila"><span class="k">Cliente</span><span class="v">${escapar(v.cliente || 'Mostrador')}</span></div>
+          ${(v.articulos || []).map(lineaArt).join('')}
+          ${(v.pagos || []).length ? `<div class="detalle-fila"><span class="k">Cómo se pagó</span><span class="v">${v.pagos.map(p => escapar(p.metodo) + ' ' + formatoDinero(p.monto)).join(' · ')}</span></div>` : ''}
+          ${v.completada ? `<div class="detalle-fila"><span class="k">Efectivo registrado en la caja</span><span class="v">${formatoDinero(v.efectivoEnCaja)}</span></div>` : ''}
+          ${v.sinConexion ? '<div class="ayuda">Se hizo sin conexión y llegó después.</div>' : ''}
+          ${v.observaciones ? `<div class="ayuda">Nota: ${escapar(v.observaciones)}</div>` : ''}
+        </details>`).join('')}`;
+    document.getElementById('cf-eq').onchange = e => { filtros.soloEquipos = e.target.checked; dibujarVentas(); };
+    document.getElementById('cf-rev').onchange = e => { filtros.porRevisar = e.target.checked; dibujarVentas(); };
+    document.getElementById('cf-can').onchange = e => { filtros.conCanceladas = e.target.checked; dibujarVentas(); };
+  }
+
+  function dibujarEquipos() {
+    const filas = [];
+    for (const v of completadas) for (const a of (v.articulos || [])) if (a.equipo) filas.push({ v, a });
+    vista.innerHTML = filas.length === 0 ? '<div class="vacio">En este turno no se vendió ningún equipo.</div>' : `
+      <div class="ayuda" style="margin-bottom:8px;">Los que no son PayJoy deben tener su pago en la caja: compáralos con los movimientos de efectivo.</div>
+      ${filas.map(({ v, a }) => `<div class="tarjeta-mini">
+        <div class="detalle-fila"><span class="k">${formatoFecha(v.fecha)} · venta #${v.idventa} · ${escapar(v.vendedor || '')}</span><span class="v">${formatoDinero(a.precioUnitario)}</span></div>
+        <div class="detalle-fila"><span class="k">${escapar(a.nombre)} · IMEI ${escapar(a.imei || '')}</span>
+          <span class="v">${a.payjoy ? 'PayJoy · enganche ' + formatoDinero(a.enganche || 0) + (a.plazoMeses ? ' · ' + a.plazoMeses + ' meses' : '') : 'Al contado (' + escapar(v.metodo) + ')'}</span></div>
+      </div>`).join('')}`;
+  }
+
+  function dibujarMovs() {
+    const pasa = m => filtros.mov === 'todos' || (filtros.mov === 'mano' && m.origen === 'OTRO') || (filtros.mov === 'ventas' && m.origen === 'VENTA')
+      || (filtros.mov === 'abonos' && m.origen === 'ABONO') || (filtros.mov === 'turno' && m.origen === 'TURNO');
+    const lista = movs.filter(pasa);
+    const e = lista.filter(m => m.tipo === 1).reduce((t, m) => t + m.monto, 0), sa = lista.filter(m => m.tipo === 2).reduce((t, m) => t + m.monto, 0);
+    vista.innerHTML = `
+      <div class="grupo-botones" style="margin-bottom:8px;align-items:center;">
+        <select id="cf-mov">
+          <option value="todos">Todos</option><option value="mano">Los que registró una persona</option><option value="ventas">Efectivo de ventas</option>
+          <option value="abonos">Abonos de clientes</option><option value="turno">Fondo y retiro del turno</option>
+        </select>
+        <span class="ayuda">${lista.length} movimientos · entradas ${formatoDinero(e)} · salidas ${formatoDinero(sa)} (${(entradas - salidas) >= 0 ? '' : '−'}${formatoDinero(Math.abs(entradas - salidas))} de neto del turno)</span>
+      </div>
+      ${lista.length === 0 ? '<div class="vacio">No hay movimientos de este tipo.</div>' : lista.map(m => `<div class="detalle-fila">
+        <span class="k">${formatoFecha(m.fecha)} · ${escapar(m.motivo)}${m.usuario ? ' · ' + escapar(m.usuario) : ''}${m.observaciones ? ' · ' + escapar(m.observaciones) : ''}</span>
+        <span class="v ${m.tipo === 1 ? 'monto-ok' : 'monto-rojo'}">${m.tipo === 1 ? '+' : '−'}${formatoDinero(m.monto)}</span></div>`).join('')}`;
+    const sel = document.getElementById('cf-mov');
+    sel.value = filtros.mov;
+    sel.onchange = () => { filtros.mov = sel.value; dibujarMovs(); };
+  }
+
+  const vistas = { ventas: dibujarVentas, equipos: dibujarEquipos, movs: dibujarMovs };
+  cont.querySelectorAll('[data-vista]').forEach(b => b.onclick = () => {
+    cont.querySelectorAll('[data-vista]').forEach(x => { x.classList.toggle('btn-azul', x === b); x.classList.toggle('btn-gris', x !== b); });
+    vistas[b.dataset.vista]();
+  });
+  dibujarVentas();
 }
 
 /** Fila de lista con círculo de color e inicial (Inicio: últimas ventas, productos con bajo stock). */
