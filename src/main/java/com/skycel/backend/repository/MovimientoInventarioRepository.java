@@ -20,4 +20,11 @@ public interface MovimientoInventarioRepository extends JpaRepository<Movimiento
                                       @Param("desde") LocalDateTime desde,
                                       @Param("hasta") LocalDateTime hasta,
                                       @Param("codpro") String codpro);
+
+    /** Salidas y ajustes (no ventas, devoluciones ni traspasos) de una tienda, o de todas si {@code codti} es null. */
+    @Query("SELECT m FROM MovimientoInventario m LEFT JOIN FETCH m.producto p LEFT JOIN FETCH m.productoMaster pm LEFT JOIN FETCH m.usuario " +
+            "WHERE (:codti IS NULL OR m.codti = :codti) AND m.tipo IN :tipos AND m.fecha BETWEEN :desde AND :hasta " +
+            "ORDER BY m.fecha DESC, m.idmov DESC")
+    List<MovimientoInventario> mermas(@Param("codti") Integer codti, @Param("tipos") List<String> tipos,
+                                      @Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta);
 }

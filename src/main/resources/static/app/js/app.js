@@ -184,6 +184,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (vendeOInventaria || s.rol === 'TECNICO') items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Inventario' });
   if (vendeOInventaria) items.push({ h: '#/equipos', i: ic('smartphone'), t: 'Equipos', grupo: 'Inventario' });
   if (tiene('INVENTARIO_FISICO', 'INVENTARIO_CONFIRMAR')) items.push({ h: '#/inventario-fisico', i: ic('scan-barcode'), t: 'Inventario físico', grupo: 'Inventario' });
+  if (tiene('INVENTARIO_AJUSTAR')) items.push({ h: '#/mermas', i: ic('triangle-alert'), t: 'Control de mermas', grupo: 'Inventario' });
   if (tiene('TRASPASOS')) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
   if (tiene('CATALOGOS_EDITAR')) items.push({ h: '#/catalogos', i: ic('list'), t: 'Catálogos', grupo: 'Inventario' });
   if (tiene('DESCUENTOS')) items.push({ h: '#/descuentos', i: ic('tags'), t: 'Descuentos', grupo: 'Finanzas' });
@@ -297,6 +298,7 @@ async function render() {
     if (ruta === 'pos') return pantallaPOS();
     if (ruta === 'traspasos') return pantallaTraspasos();
     if (ruta === 'inventario-fisico') return pantallaInventarioFisico(param);
+    if (ruta === 'mermas') return pantallaMermas();
     if (ruta === 'nomina') return pantallaNomina();
     if (ruta === 'nomina-detalle' && param) return pantallaNominaDetalle(param);
     if (ruta === 'nomina-historial') return pantallaNominaHistorial();
@@ -2883,7 +2885,7 @@ function temaDeRuta(ruta) {
   const mapa = {
     pos: 'Punto de Venta', equipos: 'Equipos', servicios: 'Corte de Servicios', permisos: 'Roles y permisos', caja: 'Caja', corte: 'Caja', devoluciones: 'Devoluciones', devolucion: 'Devoluciones',
     inventario: 'Inventario', producto: 'Inventario', 'producto-editar': 'Inventario', catalogos: 'Inventario', auditoria: 'Inventario',
-    'inventario-fisico': 'Inventario físico', traspasos: 'Traspasos', traspaso: 'Traspasos', 'traspaso-nuevo': 'Traspasos', faltantes: 'Traspasos',
+    'inventario-fisico': 'Inventario físico', mermas: 'Control de mermas', traspasos: 'Traspasos', traspaso: 'Traspasos', 'traspaso-nuevo': 'Traspasos', faltantes: 'Traspasos',
     clientes: 'Clientes', cliente: 'Clientes', cxc: 'Cuentas por Cobrar', cuenta: 'Cuentas por Cobrar',
     garantias: 'Garantías', garantia: 'Garantías',
     recepcion: 'Órdenes de Servicio', taller: 'Órdenes de Servicio', consultar: 'Órdenes de Servicio', orden: 'Órdenes de Servicio',

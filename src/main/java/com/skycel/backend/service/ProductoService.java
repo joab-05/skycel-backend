@@ -496,6 +496,11 @@ public class ProductoService {
 
     @Transactional
     public ProductoResponseDTO ajustarStock(String codpro, Integer codti, StockAjusteDTO dto) {
+        // Todo cambio manual de existencias lleva su motivo: así se sabe después por qué se movió
+        if (dto.getComentario() == null || dto.getComentario().trim().length() < 3) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo del movimiento (por ejemplo: robo, daño, error de captura).");
+        }
+
         Producto p = porCodigo(codpro, codti);
 
         com.skycel.backend.domain.enums.TipoProducto tipoProd = p.getProductoMaster().getTipo();

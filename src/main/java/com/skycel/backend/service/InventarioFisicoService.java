@@ -646,8 +646,11 @@ public class InventarioFisicoService {
         m.put("idseccion", d.getSeccion() != null ? d.getSeccion().getIdseccion() : null);
         m.put("nombreSeccion", d.getSeccion() != null ? d.getSeccion().getNombre() : null);
         m.put("conteo", d.getConteo());
-        m.put("stockSistema", d.getStockSistema());
-        m.put("diferencia", diferenciaDe(d));
+        // Conteo ciego: mientras se cuenta, quien cuenta no recibe lo que dice el sistema ni la diferencia (no puede cuadrar el conteo)
+        boolean contando = d.getInventarioAuditoria() != null && d.getInventarioAuditoria().getEstado() != null
+                && d.getInventarioAuditoria().getEstado() == ESTADO_ABIERTO;
+        m.put("stockSistema", contando ? null : d.getStockSistema());
+        m.put("diferencia", contando ? null : diferenciaDe(d));
         m.put("estado", d.getEstado());
         return m;
     }

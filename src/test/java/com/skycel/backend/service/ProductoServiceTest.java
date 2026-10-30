@@ -122,6 +122,15 @@ class ProductoServiceTest {
                 .build();
     }
 
+    @org.junit.jupiter.api.Test
+    @DisplayName("un ajuste de existencias sin motivo: 400 (todo cambio manual lleva su motivo)")
+    void ajusteSinMotivo_lanzaBadRequest() {
+        assertThatThrownBy(() -> productoService.ajustarStock("ACC-0001", dto("SALIDA", BigDecimal.ONE, null, "  ")))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("motivo");
+        assertThatThrownBy(() -> productoService.ajustarStock("ACC-0001", dto("AJUSTE", BigDecimal.ONE, null, null)))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("motivo");
+    }
+
     private StockAjusteDTO dto(String tipo, BigDecimal cantidad, List<String> imeis, String comentario) {
         StockAjusteDTO d = new StockAjusteDTO();
         d.setTipo(tipo);
@@ -147,7 +156,7 @@ class ProductoServiceTest {
         when(productoRepository.findAllByCodpro(base.getCodpro()))
                 .thenReturn(List.of(enSucursal(base, 1, 20), enSucursal(base, 2, 21)));
 
-        assertThatThrownBy(() -> productoService.ajustarStock(base.getCodpro(), dto("ENTRADA", BigDecimal.ONE, null, "x")))
+        assertThatThrownBy(() -> productoService.ajustarStock(base.getCodpro(), dto("ENTRADA", BigDecimal.ONE, null, "motivo de prueba")))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
@@ -266,7 +275,7 @@ class ProductoServiceTest {
     void ajustarStock_productoNoEncontrado_lanza404() {
         when(productoRepository.findAllByCodpro("NO-EXISTE")).thenReturn(List.of());
 
-        StockAjusteDTO request = dto("ENTRADA", BigDecimal.ONE, List.of("123456789012345"), null);
+        StockAjusteDTO request = dto("ENTRADA", BigDecimal.ONE, List.of("123456789012345"), "motivo de prueba");
 
         assertThatThrownBy(() -> productoService.ajustarStock("NO-EXISTE", request))
                 .isInstanceOf(ResponseStatusException.class)
@@ -310,7 +319,7 @@ class ProductoServiceTest {
         Producto p = servicio();
         when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
-        StockAjusteDTO request = dto("ENTRADA", BigDecimal.ONE, null, null);
+        StockAjusteDTO request = dto("ENTRADA", BigDecimal.ONE, null, "motivo de prueba");
 
         assertThatThrownBy(() -> productoService.ajustarStock(p.getCodpro(), request))
                 .isInstanceOf(ResponseStatusException.class)
@@ -332,7 +341,7 @@ class ProductoServiceTest {
             when(productoRepository.findAllByCodpro(CODPRO)).thenReturn(List.of(p));
 
             for (String tipo : List.of("ENTRADA", "SALIDA")) {
-                assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, dto(tipo, BigDecimal.ONE, null, null)))
+                assertThatThrownBy(() -> productoService.ajustarStock(CODPRO, dto(tipo, BigDecimal.ONE, null, "motivo de prueba")))
                         .isInstanceOf(ResponseStatusException.class)
                         .hasMessageContaining("IMEI");
             }
@@ -352,7 +361,7 @@ class ProductoServiceTest {
             Producto p = accesorio(BigDecimal.valueOf(5));
             when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
-            productoService.ajustarStock(p.getCodpro(), dto("ENTRADA", BigDecimal.TEN, null, null));
+            productoService.ajustarStock(p.getCodpro(), dto("ENTRADA", BigDecimal.TEN, null, "motivo de prueba"));
 
             assertThat(p.getStock()).isEqualByComparingTo("15");
             verifyNoInteractions(productoImeiRepository);
@@ -365,7 +374,7 @@ class ProductoServiceTest {
             when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
             assertThatThrownBy(() ->
-                    productoService.ajustarStock(p.getCodpro(), dto("SALIDA", BigDecimal.TEN, null, null)))
+                    productoService.ajustarStock(p.getCodpro(), dto("SALIDA", BigDecimal.TEN, null, "motivo de prueba")))
                     .isInstanceOf(ResponseStatusException.class)
                     .hasMessageContaining("Stock insuficiente");
 
@@ -378,7 +387,7 @@ class ProductoServiceTest {
             Producto p = accesorio(BigDecimal.valueOf(3));
             when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
-            productoService.ajustarStock(p.getCodpro(), dto("AJUSTE", BigDecimal.valueOf(100), null, null));
+            productoService.ajustarStock(p.getCodpro(), dto("AJUSTE", BigDecimal.valueOf(100), null, "motivo de prueba"));
 
             assertThat(p.getStock()).isEqualByComparingTo("100");
         }
@@ -390,7 +399,7 @@ class ProductoServiceTest {
             when(productoRepository.findAllByCodpro(p.getCodpro())).thenReturn(List.of(p));
 
             assertThatThrownBy(() ->
-                    productoService.ajustarStock(p.getCodpro(), dto("TRASPASO", BigDecimal.ONE, null, null)))
+                    productoService.ajustarStock(p.getCodpro(), dto("TRASPASO", BigDecimal.ONE, null, "motivo de prueba")))
                     .isInstanceOf(ResponseStatusException.class)
                     .hasMessageContaining("inválido");
         }

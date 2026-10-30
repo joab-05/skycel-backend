@@ -32,6 +32,7 @@ public class ReporteController {
 
     private final ReporteService reporteService;
     private final ReporteResultadosService resultadosService;
+    private final com.skycel.backend.service.MermaService mermaService;
 
     @GetMapping("/gerencial")
     @PreAuthorize("@permisos.tiene('REPORTES')")
@@ -42,6 +43,18 @@ public class ReporteController {
             @RequestParam(required = false) Integer codti,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(reporteService.gerencial(desde, hasta, codti, userDetails.getUsername()), "reporte");
+    }
+
+    @GetMapping("/mermas")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_AJUSTAR')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<com.skycel.backend.dto.producto.MermaReporteDto>> mermas(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(required = false) Integer codti,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(mermaService.reporte(codti, desde, hasta, userDetails.getUsername()),
+                "control de mermas");
     }
 
     @GetMapping("/equipos-rezagados")

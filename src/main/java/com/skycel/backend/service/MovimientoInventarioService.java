@@ -28,6 +28,7 @@ public class MovimientoInventarioService {
     private final MovimientoInventarioRepository repository;
     private final com.skycel.backend.repository.ProductoImeiRepository productoImeiRepository;
     private final UsuarioRepository usuarioRepository;
+    private final NotificacionService notificacionService;
 
     /**
      * Deja constancia de un cambio de stock. {@code stockAntes} es el stock previo; el actual se toma del producto
@@ -53,6 +54,7 @@ public class MovimientoInventarioService {
                 .fecha(fecha)
                 .usuario(usuarioActual())
                 .build());
+        avisarAdministradores(tipo, delta, nombreDe(p), p.getTienda() != null ? p.getTienda().getNombre() : null, motivo);
     }
 
     /**
@@ -79,6 +81,26 @@ public class MovimientoInventarioService {
                 .fecha(fecha)
                 .usuario(usuarioActual())
                 .build());
+        avisarAdministradores(tipo, BigDecimal.valueOf(delta), u.getProductoMaster().getNombreBase() + " (" + u.getImei() + ")",
+                u.getTienda().getNombre(), motivo);
+    }
+
+    /**
+     * Un ajuste o una salida manual hecha por alguien que no es administrador avisa a los administradores (quién, qué, cuánto y por qué), y
+     * queda en el Control de mermas. Ventas, devoluciones, traspasos y altas tienen su propio control y no avisan.
+     */
+    private void avisarAdministradores(String tipo, BigDecimal delta, String articulo, String tienda, String motivo) {
+        if (!MermaService.TIPOS.contains(tipo)) return;
+        Usuario quien = usuarioActual();
+        if (quien == null || quien.getRol() == Rol.ROOT || quien.getRol() == Rol.ADMIN) return;
+        String que = delta.signum() < 0 ? "sacó " + delta.abs().stripTrailingZeros().toPlainString() : "agregó " + delta.stripTrailingZeros().toPlainString();
+        String titulo = quien.getNombreCompleto() + (tienda != null ? " (" + tienda + ")" : "") + " " + que + " × " + articulo
+                + (motivo != null && !motivo.isBlank() ? " — " + motivo.trim() : "");
+        notificacionService.notificarRol(Rol.ADMIN, "AJUSTE_INVENTARIO", recortar(titulo, 250), "#/mermas");
+    }
+
+    private String nombreDe(Producto p) {
+        return p.getProductoMaster() != null ? p.getProductoMaster().getNombreBase() : p.getCodpro();
     }
 
     /** Historial de una tienda. ROOT/ADMIN cualquiera; un encargado, solo la suya. Por defecto, los últimos 30 días. */

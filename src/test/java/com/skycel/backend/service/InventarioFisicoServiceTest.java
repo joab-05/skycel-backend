@@ -228,8 +228,9 @@ class InventarioFisicoServiceTest {
         Map<String, Object> r = service.escanear(10, "ACC-001", null, "admin");
 
         assertThat(r.get("conteo")).isEqualTo((short) 1);
-        assertThat(r.get("stockSistema")).isEqualTo((short) 5);
-        assertThat(r.get("diferencia")).isEqualTo(-4);
+        // conteo ciego: mientras se cuenta no se entrega lo que dice el sistema ni la diferencia
+        assertThat(r.get("stockSistema")).isNull();
+        assertThat(r.get("diferencia")).isNull();
     }
 
     @Test
@@ -245,7 +246,7 @@ class InventarioFisicoServiceTest {
         Map<String, Object> r = service.escanear(10, "350000000000011", null, "enc2");
 
         assertThat(r.get("conteo")).isEqualTo((short) 1);
-        assertThat(r.get("stockSistema")).isEqualTo((short) 3);
+        assertThat(r.get("stockSistema")).isNull();
         assertThat(r.get("enSistema")).isEqualTo(true);
         verify(unidadRepository).save(any(InventarioAuditoriaUnidad.class));
 
@@ -278,7 +279,7 @@ class InventarioFisicoServiceTest {
         Map<String, Object> r = service.escanear(10, "ACC-001", 2, "admin");
 
         assertThat(r.get("conteo")).isEqualTo((short) 5);
-        assertThat(r.get("diferencia")).isEqualTo(0);
+        assertThat(r.get("diferencia")).isNull();
     }
 
     @Test

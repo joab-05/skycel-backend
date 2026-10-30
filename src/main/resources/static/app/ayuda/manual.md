@@ -222,6 +222,16 @@ Es el conteo de lo que hay en el local para compararlo con el sistema. Lo hacen 
 
 Un inventario sin terminar se puede **cancelar**: no cambia nada. El resumen se puede **exportar** a Excel (CSV).
 
+## Control de mermas
+
+Junta, en un solo lugar, todo lo que **cambió las existencias fuera de una venta, una devolución o un traspaso**: las salidas y los ajustes manuales de accesorios, las bajas de equipos y los ajustes que se aplican al cerrar un inventario físico. Para cada uno muestra **quién** lo hizo, **cuándo**, **qué** (con su código o IMEI), **cuántas piezas**, **por qué** y **cuánto vale a costo**. Está en **Inventario › Control de mermas**.
+
+- **Período y tienda:** el administrador elige la tienda (o todas) y el período (últimos 7 o 30 días, este mes o el mes pasado); un encargado ve solo la suya.
+- **Vistas:** **Por motivo** (robo, daño, error de captura, muestra o regalo, ajuste de inventario físico...), **Por persona**, **Por tienda** y **Detalle** movimiento por movimiento. Arriba aparecen la **pérdida a costo**, los **ajustes al alza** y la **principal causa**. En JSystem se puede **exportar a Excel**.
+- **Todo cambio manual lleva su motivo:** al sacar, ajustar o dar de baja existencias hay que elegir un motivo (y puedes agregar una nota). Sin motivo el sistema no lo registra.
+- **Aviso al administrador:** cuando un encargado saca o ajusta existencias, o da de baja un equipo, a los administradores les llega un aviso con quién, qué, cuánto y por qué (el aviso abre esta pantalla).
+- **Conteo ciego:** mientras se cuenta un inventario físico, el sistema no le dice a quien cuenta cuántas piezas «debería haber»; las diferencias se ven hasta que se envía a revisión.
+
 ## Traspasos
 
 Mueven mercancía entre sucursales (y la bodega). Quienes los manejan son encargados y administradores.
