@@ -188,6 +188,84 @@ public class OrdenServicioController {
         return ResponseEntityBuilder.ok(ordenService.avisoWhatsapp(id, tipo, user.getUsername()), "aviso");
     }
 
+    @Operation(summary = "Detener la reparación mientras llega una refacción", description = "El comentario dice qué se espera. El cliente lo ve como «esperando una refacción».")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/espera")
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
+    public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> esperarRefaccion(
+            @PathVariable Integer id, @Valid @RequestBody ComentarioRequestDto request, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(ordenService.esperarRefaccion(id, request, user.getUsername()), "orden de servicio");
+    }
+
+    @Operation(summary = "Llegó la refacción: la reparación continúa")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/espera/terminar")
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
+    public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> reanudarEspera(
+            @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(ordenService.reanudarEspera(id, user.getUsername()), "orden de servicio");
+    }
+
+    @Operation(summary = "Equipos listos que siguen en la tienda", description = "Los que llevan más días sin recoger primero. Sin codti: todas las sucursales (administrador).")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/por-recoger")
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
+    public ResponseEntity<StandardApiResponse<List<OrdenServicioResponseDto>>> porRecoger(
+            @RequestParam(required = false) Integer codti, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(ordenService.porRecoger(codti, user.getUsername()), "órdenes por recoger");
+    }
+
+    @Operation(summary = "Reporte de tiempos del taller", description = "Del ingreso a lista y a entrega, cumplimiento de la fecha prometida, retrasadas y por técnico. " +
+            "Por defecto los últimos 30 días.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/reporte")
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
+    public ResponseEntity<StandardApiResponse<java.util.Map<String, Object>>> reporte(
+            @RequestParam(required = false) Integer codti,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate desde,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate hasta,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(ordenService.reporte(codti, desde, hasta, user.getUsername()), "reporte de tiempos");
+    }
+
+    @Operation(summary = "Fotos de la orden (sin la imagen)")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/{id}/fotos")
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
+    public ResponseEntity<StandardApiResponse<List<java.util.Map<String, Object>>>> fotos(
+            @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(ordenService.fotos(id, user.getUsername()), "fotos");
+    }
+
+    @Operation(summary = "Agregar una foto del equipo", description = "El cuerpo es la imagen JPEG o PNG (máximo 1.5 MB, hasta 8 por orden); la descripción va en ?descripcion=.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping(value = "/{id}/fotos", consumes = {"image/jpeg", "image/png", "application/octet-stream"})
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
+    public ResponseEntity<StandardApiResponse<List<java.util.Map<String, Object>>>> agregarFoto(
+            @PathVariable Integer id, @RequestParam(required = false) String descripcion, @RequestBody byte[] imagen,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.created(ordenService.agregarFoto(id, imagen, descripcion, user.getUsername()), "foto");
+    }
+
+    @Operation(summary = "La imagen de una foto")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/{id}/fotos/{idfoto}")
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
+    public ResponseEntity<byte[]> foto(@PathVariable Integer id, @PathVariable Integer idfoto, @AuthenticationPrincipal UserDetails user) {
+        var f = ordenService.foto(id, idfoto, user.getUsername());
+        return ResponseEntity.ok().contentType(org.springframework.http.MediaType.parseMediaType(f.getTipo()))
+                .header("Cache-Control", "private, max-age=3600").body(f.getContenido());
+    }
+
+    @Operation(summary = "Borrar una foto de la orden")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/{id}/fotos/{idfoto}")
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
+    public ResponseEntity<StandardApiResponse<List<java.util.Map<String, Object>>>> eliminarFoto(
+            @PathVariable Integer id, @PathVariable Integer idfoto, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(ordenService.eliminarFoto(id, idfoto, user.getUsername()), "fotos");
+    }
+
     @Operation(summary = "Reabrir una orden lista (vuelve a reparación)")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/reabrir")

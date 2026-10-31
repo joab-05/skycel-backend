@@ -30,6 +30,13 @@ public class OrdenActualizarDto {
 
     private LocalDate fechaPromesa;
 
+    /** Revisión del equipo (punto → OK, FALLA o SIN_PROBAR); si viene, reemplaza la anterior. */
+    private java.util.Map<String, String> checklist;
+
+    /** Si viene, reemplaza el código de desbloqueo; vacío lo borra. */
+    @Size(max = 80, message = "El código de desbloqueo no puede exceder los 80 caracteres")
+    private String codigoDesbloqueo;
+
     /** Nuevo tiempo estimado de entrega en horas (1 a 720), contado desde ahora. */
     private Integer horasEstimadas;
 }

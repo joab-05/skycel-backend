@@ -308,10 +308,13 @@ Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en e
 1. Entra a **Recibir equipo** y pulsa **Nueva orden**.
 2. Busca o captura al **cliente** (nombre y teléfono).
 3. Captura marca, modelo, IMEI, **accesorios que deja**, **estado físico** y la **falla reportada**.
+   - **Revisión rápida:** marca en cada punto (enciende, pantalla y táctil, botones, cámaras, bocina y micrófono, carga, señal y Wi-Fi, humedad) si está **Bien**, **Falla** o **No se pudo probar**. Es tu constancia de cómo llegó el equipo y sale impresa en el comprobante.
+   - **Código de desbloqueo:** si el cliente te da su PIN, contraseña o patrón para poder probarlo, anótalo aquí. **Solo lo ve el taller**: no se imprime, no se manda por WhatsApp y se **borra solo** al entregar o cancelar la orden.
 4. Escribe el **tiempo estimado**, en horas o días (por omisión, 3 horas; máximo 30 días). El sistema dice «Se le promete para el…» con día y hora.
 5. Si el cliente deja un **anticipo**, regístralo con su forma de pago. En efectivo entra a la caja del turno.
 6. Pulsa **Recibir equipo**. Se genera el folio **OS-…** que se le entrega al cliente.
 7. **Imprime el comprobante** y entrégaselo al cliente (el programa te lo ofrece al terminar; también está en el botón **Comprobante** o **Imprimir comprobante** de la orden). Lleva el folio, el equipo, la falla, el anticipo, la fecha prometida, un **código QR** para seguir la reparación desde su celular y las condiciones del servicio. Que el cliente lo **firme**.
+8. **Toma fotos del equipo** en la misma orden (sección **Fotos del equipo**): golpes, rayones o la pantalla, antes de trabajarlo. Puedes subir hasta 8; en el celular el botón abre la cámara. Se borran solas 90 días después de que la orden se entrega o cancela.
 
 La recepción también funciona **sin conexión** en JSystem: el comprobante sale con un folio provisional y sin QR; el definitivo (OS-…) se le da cuando se envíe al servidor.
 
@@ -321,6 +324,7 @@ En cualquier orden pulsa **Avisar por WhatsApp**. El sistema escribe el mensaje 
 - **Cotización para autorizar:** el diagnóstico y el costo, pidiéndole que responda SÍ o NO.
 - **Cambio de precio:** de cuánto a cuánto cambió, pidiendo su autorización.
 - **Equipo listo:** cuánto queda por pagar y dónde recogerlo.
+- **Esperando una refacción:** le explica que la reparación espera una pieza y que le avisarás cuando llegue.
 - **Recordatorio de recoger** y **Gracias y garantía** al entregar.
 
 Cada aviso queda anotado en la **bitácora** de la orden (qué se avisó y quién lo hizo). El teléfono del cliente debe tener 10 dígitos; si no, corrígelo en **Clientes**. El cliente también puede seguir su reparación solo, con el QR del comprobante o en la página de seguimiento, con su folio y los últimos 4 dígitos de su teléfono.
@@ -339,6 +343,20 @@ Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las 
 3. Agrega **renglones** (refacciones y servicios con su precio) y **observaciones**, que quedan en el historial.
 4. **Pedir autorización** al cliente cuando el costo esté listo (ver arriba).
 5. **Marcar lista** avisa que el equipo ya puede recogerse. Si hace falta corregir algo, **Reabrir**.
+
+### Cuando falta una refacción
+Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Esperar refacción** y escribe cuál es (por ejemplo, «pantalla original, llega el jueves»).
+- La orden se ve como **Esperando refacción** en el taller y en las listas, y al cliente le aparece en su seguimiento que se espera una pieza. Desde **Avisar por WhatsApp** puedes mandarle el aviso ya escrito.
+- Mientras espera, no se puede iniciar ni marcar lista.
+- Cuando llega la pieza, pulsa **Llegó la refacción**: la reparación continúa. El sistema anota cuánto esperó para **no contarlo como tardanza del taller** en el reporte.
+
+### Equipos listos que nadie recoge
+Entra a **Equipos por recoger**: muestra las reparaciones **listas que siguen en la tienda**, las más viejas primero, con los **días sin recoger**, cuándo fue el último recordatorio y cuánto queda por pagar. Con **Avisar / recordar por WhatsApp** mandas el mensaje ya escrito.
+- A los **7 días** conviene recordárselo al cliente; a los **30 días** vence el plazo que dice su comprobante.
+- Cada mañana el sistema avisa a cada sucursal (en sus avisos) cuántos equipos llevan una semana o más sin recogerse y a quién todavía no se le ha recordado. **No manda nada al cliente por sí solo**: el aviso siempre lo envía una persona.
+
+### Reporte de tiempos del taller
+**Reporte del taller** (para administradores, encargados y el técnico encargado) muestra, del periodo que elijas (por omisión los últimos 30 días): equipos recibidos y entregados, el **tiempo promedio de taller**, cuántos quedaron **listos a tiempo** según la fecha prometida, las reparaciones **retrasadas** (con cuántas horas), el desempeño **por técnico** y los equipos que esperan en la tienda. El tiempo de taller no cuenta las horas que estuvo detenida esperando una refacción.
 
 ### Entregar al cliente
 1. En la tienda, abre la orden **Lista** y pulsa **Entregar y cobrar**.

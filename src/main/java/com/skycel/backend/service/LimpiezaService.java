@@ -18,7 +18,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Limpieza automática de lo que no hace falta guardar para siempre. Cada noche (después del respaldo) borra:
- * las sesiones de entrada viejas, los avisos ya leídos y el historial de cambios del catálogo (auditoría) más antiguo que el plazo.
+ * las sesiones de entrada viejas, los avisos ya leídos, el historial de cambios del catálogo (auditoría) más antiguo que el plazo y las
+ * fotos de las reparaciones ya entregadas o canceladas.
  * Las ventas, la caja, las compras, la nómina y todo lo contable NUNCA se tocan. Si el respaldo de la noche no se pudo hacer, la limpieza
  * no corre.
  */
@@ -34,6 +35,7 @@ public class LimpiezaService {
     private final int diasSesiones;
     private final int diasAvisos;
     private final int mesesHistorial;
+    private final int diasFotos;
 
     private final ReentrantLock candado = new ReentrantLock();
     private volatile Map<String, Object> ultimo;
@@ -43,7 +45,8 @@ public class LimpiezaService {
                            @Value("${skycel.limpieza.activo:true}") boolean activo,
                            @Value("${skycel.limpieza.dias-sesiones:30}") int diasSesiones,
                            @Value("${skycel.limpieza.dias-avisos:90}") int diasAvisos,
-                           @Value("${skycel.limpieza.meses-historial:24}") int mesesHistorial) {
+                           @Value("${skycel.limpieza.meses-historial:24}") int mesesHistorial,
+                           @Value("${skycel.limpieza.dias-fotos:90}") int diasFotos) {
         this.jdbc = jdbc;
         this.transaccion = transaccion;
         this.respaldoService = respaldoService;
@@ -52,6 +55,7 @@ public class LimpiezaService {
         this.diasSesiones = Math.max(7, diasSesiones);
         this.diasAvisos = Math.max(30, diasAvisos);
         this.mesesHistorial = Math.max(1, mesesHistorial);
+        this.diasFotos = Math.max(30, diasFotos);
     }
 
     @Scheduled(cron = "${skycel.limpieza.cron:0 30 3 * * *}")
@@ -91,6 +95,8 @@ public class LimpiezaService {
                 m.put("sesiones", jdbc.update("DELETE FROM usuario_sesion WHERE fecha_ingreso < ?", ahora.minusDays(diasSesiones)));
                 m.put("avisosLeidos", jdbc.update("DELETE FROM notificacion WHERE leida = 1 AND fecha_creacion < ?", ahora.minusDays(diasAvisos)));
                 m.put("historialCambios", borrarHistorial(corteHistorial));
+                m.put("fotosDeReparaciones", jdbc.update("DELETE f FROM orden_servicio_foto f JOIN orden_servicio o ON o.idorden = f.idorden "
+                        + "WHERE o.estado IN (4, 5) AND o.fecha_actualizacion < ?", ahora.minusDays(diasFotos)));
                 return m;
             });
             r.put("borrado", borrado);
@@ -129,6 +135,7 @@ public class LimpiezaService {
         m.put("conservaSesionesDias", diasSesiones);
         m.put("conservaAvisosLeidosDias", diasAvisos);
         m.put("conservaHistorialMeses", mesesHistorial);
+        m.put("conservaFotosDeReparacionesCerradasDias", diasFotos);
         m.put("ultimaLimpieza", ultimo);
         return m;
     }

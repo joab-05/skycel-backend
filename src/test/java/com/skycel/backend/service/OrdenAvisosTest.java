@@ -16,7 +16,7 @@ class OrdenAvisosTest {
         return new OrdenAvisos.Datos("Skycel", "Zócalo", "7571234567", "Calle Hidalgo 12", "SOFIA RAMIREZ", "Samsung A54", "OS-000123",
                 "pantalla rota y batería hinchada", new BigDecimal("1450"), new BigDecimal("1200"), new BigDecimal("300"), new BigDecimal("1150"),
                 LocalDateTime.of(2026, 11, 3, 17, 30), null, LocalDateTime.of(2026, 11, 2, 12, 0), 30, LocalDate.of(2026, 12, 2),
-                "https://skycelsys.ddns.net/seguimiento/?f=OS-000123");
+                "https://skycelsys.ddns.net/seguimiento/?f=OS-000123", "pantalla original del proveedor");
     }
 
     @Test
@@ -41,6 +41,8 @@ class OrdenAvisosTest {
         assertThat(OrdenAvisos.texto(OrdenAvisos.Tipo.LISTA, d)).contains("listo").contains("Queda por pagar $1,150")
                 .contains("Calle Hidalgo 12").contains("tel. 7571234567");
         assertThat(OrdenAvisos.texto(OrdenAvisos.Tipo.RECORDATORIO, d)).contains("sigue listo");
+        assertThat(OrdenAvisos.texto(OrdenAvisos.Tipo.ESPERA_REFACCION, d)).contains("esperando una refacción: pantalla original del proveedor")
+                .contains("nueva en cuanto la tengamos").doesNotContain("$");
         assertThat(OrdenAvisos.texto(OrdenAvisos.Tipo.ENTREGADA, d)).contains("garantía de 30 días").contains("2 de diciembre de 2026");
     }
 

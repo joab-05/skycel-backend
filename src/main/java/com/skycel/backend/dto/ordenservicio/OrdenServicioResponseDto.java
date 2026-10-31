@@ -71,6 +71,25 @@ public class OrdenServicioResponseDto {
     private String     autorizacionPor;
     private LocalDateTime autorizacionFecha;
 
+    // ── Espera de refacción ───────────────────────────────────────────────────
+    /** Qué se espera; null = la reparación no está detenida. */
+    private String        esperaMotivo;
+    private LocalDateTime esperaDesde;
+    /** Minutos que la orden ya estuvo detenida en esperas anteriores ya terminadas. */
+    private Integer       esperaMinutos;
+
+    // ── Equipo listo sin recoger ──────────────────────────────────────────────
+    /** Días que lleva lista sin que la recojan (solo estado Lista). */
+    private Integer       diasListaSinRecoger;
+    private LocalDateTime ultimoRecordatorio;
+
+    // ── Revisión y fotos al recibir ───────────────────────────────────────────
+    /** Punto de la revisión → OK, FALLA o SIN_PROBAR. Vacío si no se hizo. */
+    private java.util.Map<String, String> checklist;
+    /** Solo en el detalle: en listados va null para no exponerlo. */
+    private String        codigoDesbloqueo;
+    private Integer       totalFotos;
+
     private List<OrdenLineaResponseDto> lineas;
     private List<AnticipoResponseDto>   anticipos;
     private List<HistorialResponseDto>  historial;

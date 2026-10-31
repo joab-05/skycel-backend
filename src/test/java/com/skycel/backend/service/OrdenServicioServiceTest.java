@@ -55,6 +55,7 @@ class OrdenServicioServiceTest {
     @Mock private ClienteService                   clienteService;
     @Mock private NotificacionService              notificacionService;
     @Mock private ConfiguracionNegocioRepository   negocioRepository;
+    @Mock private OrdenServicioFotoRepository      fotoRepository;
 
     @InjectMocks
     private OrdenServicioService service;
@@ -64,6 +65,7 @@ class OrdenServicioServiceTest {
     private final List<OrdenServicioDetalle> detalles = new ArrayList<>();
     private final List<OrdenServicioAnticipo> anticipos = new ArrayList<>();
     private final List<OrdenServicioHistorial> historial = new ArrayList<>();
+    private final List<OrdenServicioFoto> fotos = new ArrayList<>();
     private final List<Producto> productos = new ArrayList<>();
     private int id = 100;
     private long folio = 0;
@@ -141,6 +143,29 @@ class OrdenServicioServiceTest {
         });
         lenient().when(historialRepository.findByOrden_IdordenOrderByIdhistorial(anyInt())).thenAnswer(inv ->
                 historial.stream().filter(h -> h.getOrden().getIdorden().equals(inv.getArgument(0))).collect(Collectors.toList()));
+
+        lenient().when(ordenRepository.listasSinRecoger(any())).thenAnswer(inv -> ordenes.values().stream()
+                .filter(o -> o.getEstado() == OrdenServicioService.LISTA && (inv.getArgument(0) == null || o.getTienda().getCodti().equals(inv.getArgument(0))))
+                .collect(Collectors.toList()));
+        lenient().when(fotoRepository.save(any(OrdenServicioFoto.class))).thenAnswer(inv -> {
+            OrdenServicioFoto f = inv.getArgument(0);
+            f.setIdfoto(id++);
+            fotos.add(f);
+            return f;
+        });
+        lenient().when(fotoRepository.countByOrden_Idorden(anyInt())).thenAnswer(inv ->
+                fotos.stream().filter(f -> f.getOrden().getIdorden().equals(inv.getArgument(0))).count());
+        lenient().when(fotoRepository.findById(anyInt())).thenAnswer(inv ->
+                fotos.stream().filter(f -> f.getIdfoto().equals(inv.getArgument(0))).findFirst());
+        lenient().doAnswer(inv -> { fotos.remove((OrdenServicioFoto) inv.getArgument(0)); return null; })
+                .when(fotoRepository).delete(any(OrdenServicioFoto.class));
+        lenient().when(fotoRepository.findByOrden_IdordenOrderByIdfoto(anyInt())).thenAnswer(inv ->
+                fotos.stream().filter(f -> f.getOrden().getIdorden().equals(inv.getArgument(0))).map(f -> new OrdenServicioFotoRepository.Resumen() {
+                    public Integer getIdfoto() { return f.getIdfoto(); }
+                    public String getDescripcion() { return f.getDescripcion(); }
+                    public String getTipo() { return f.getTipo(); }
+                    public LocalDateTime getFecha() { return f.getFecha(); }
+                }).collect(Collectors.toList()));
 
         lenient().when(productoRepository.findByCodproAndTienda_Codti(any(), anyInt())).thenAnswer(inv ->
                 productos.stream().filter(p -> p.getCodpro().equals(inv.getArgument(0)) && p.getTienda().getCodti().equals(inv.getArgument(1))).findFirst());
@@ -1069,6 +1094,225 @@ class OrdenServicioServiceTest {
             c.setMotivo("Ya no lo quiso");
             service.cancelar(o, c, "abigail");
             assertEstado(HttpStatus.BAD_REQUEST, () -> service.avisoWhatsapp(o, null, "abigail"));
+        }
+    }
+
+    // ── Espera de refacción, equipos sin recoger, revisión y fotos, reporte ─────
+
+    @Nested
+    @DisplayName("espera de refacción")
+    class Espera {
+
+        private ComentarioRequestDto motivo(String t) {
+            ComentarioRequestDto c = new ComentarioRequestDto();
+            c.setComentario(t);
+            return c;
+        }
+
+        @Test
+        @DisplayName("detiene la reparación: no se puede terminar hasta que llegue; al reanudar queda anotado cuánto esperó")
+        void ciclo() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.iniciar(o, "juan.perez");
+            OrdenServicioResponseDto e = service.esperarRefaccion(o, motivo("Pantalla original del proveedor"), "juan.perez");
+            assertThat(e.getEsperaMotivo()).isEqualTo("Pantalla original del proveedor");
+            assertThat(e.getEsperaDesde()).isNotNull();
+            assertEstado(HttpStatus.CONFLICT, () -> service.marcarLista(o, "juan.perez"));
+            assertEstado(HttpStatus.CONFLICT, () -> service.esperarRefaccion(o, motivo("otra"), "juan.perez"));
+            assertThat(service.avisoWhatsapp(o, null, "abigail").get("tipo")).isEqualTo("ESPERA_REFACCION");
+            assertThat(service.consultaPublica(viva(o).getFolio(), "0001").getMensaje()).containsIgnoringCase("esperando una refacción");
+
+            viva(o).setEsperaDesde(LocalDateTime.now().minusMinutes(150));
+            OrdenServicioResponseDto r = service.reanudarEspera(o, "juan.perez");
+            assertThat(r.getEsperaMotivo()).isNull();
+            assertThat(r.getEsperaMinutos()).isBetween(149, 152);
+            assertThat(service.marcarLista(o, "juan.perez").getEstado()).isEqualTo(OrdenServicioService.LISTA);
+            assertThat(historial.stream().map(OrdenServicioHistorial::getComentario))
+                    .anyMatch(c -> c.startsWith("Esperando una refacción")).anyMatch(c -> c.startsWith("Llegó la refacción"));
+        }
+
+        @Test
+        @DisplayName("solo el taller la registra; reanudar sin espera y esperar una orden ya lista no proceden")
+        void permisosYEstados() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.esperarRefaccion(o, motivo("x"), "yamilet"));
+            service.iniciar(o, "juan.perez");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.reanudarEspera(o, "juan.perez"));
+            service.marcarLista(o, "juan.perez");
+            assertEstado(HttpStatus.CONFLICT, () -> service.esperarRefaccion(o, motivo("x"), "juan.perez"));
+        }
+
+        @Test
+        @DisplayName("una orden en espera no se puede iniciar; al cancelar se cierra la espera")
+        void iniciarYCancelar() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.esperarRefaccion(o, motivo("Batería"), "juan.perez");
+            assertEstado(HttpStatus.CONFLICT, () -> service.iniciar(o, "juan.perez"));
+            CancelarOrdenRequestDto c = new CancelarOrdenRequestDto();
+            c.setMotivo("No quiso esperar");
+            service.cancelar(o, c, "abigail");
+            assertThat(viva(o).getEsperaDesde()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("equipos listos sin recoger")
+    class SinRecoger {
+
+        @Test
+        @DisplayName("la lista trae los días sin recoger; pasada una semana el aviso sugerido es el recordatorio y queda registrado")
+        void recordatorio() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            hastaLista(o);
+            assertThat(service.porRecoger(2, "abigail").get(0).getDiasListaSinRecoger()).isZero();
+            assertThat(service.avisoWhatsapp(o, null, "abigail").get("tipo")).isEqualTo("LISTA");
+
+            viva(o).setFechaLista(LocalDateTime.now().minusDays(10));
+            assertThat(service.porRecoger(2, "abigail")).singleElement().satisfies(d -> {
+                assertThat(d.getDiasListaSinRecoger()).isEqualTo(10);
+                assertThat(d.getUltimoRecordatorio()).isNull();
+            });
+            assertThat(service.avisoWhatsapp(o, null, "abigail").get("tipo")).isEqualTo("RECORDATORIO");
+            assertThat(viva(o).getUltimoRecordatorio()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("el encargado de otra tienda no ve las de esta; sin tienda solo el administrador")
+        void permisos() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            hastaLista(o);
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.porRecoger(2, "guillermo"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.porRecoger(null, "abigail"));
+            assertThat(service.porRecoger(null, "root")).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("el aviso diario cuenta por sucursal solo lo que ya pasó la semana y no se había recordado")
+        void avisoDiario() {
+            int a = orden(linea("SRV-000001", 1, "1200", false));
+            int b = orden(linea("SRV-000001", 1, "1200", false));
+            int c = orden(linea("SRV-000001", 1, "1200", false));
+            hastaLista(a);
+            hastaLista(b);
+            hastaLista(c);
+            viva(a).setFechaLista(LocalDateTime.now().minusDays(9));
+            viva(b).setFechaLista(LocalDateTime.now().minusDays(40));
+            viva(c).setFechaLista(LocalDateTime.now().minusDays(12));
+            viva(c).setUltimoRecordatorio(LocalDateTime.now().minusDays(2));   // ya se le recordó hace poco
+            OrdenRecordatoriosService avisos = new OrdenRecordatoriosService(ordenRepository, notificacionService);
+
+            assertThat(avisos.avisar(LocalDate.now())).isEqualTo(1);
+            verify(notificacionService).notificarTienda(eq(2), eq("ORDEN_SIN_RECOGER"), argThat(t -> t.startsWith("2 equipos listos") && t.contains("1 ya pasó")), eq("#/por-recoger"));
+        }
+    }
+
+    @Nested
+    @DisplayName("revisión del equipo y código de desbloqueo")
+    class Revision {
+
+        @Test
+        @DisplayName("la revisión se normaliza y el código solo sale en el detalle, no en los listados; al entregar se borra")
+        void guardaYOculta() {
+            OrdenServicioRequestDto dto = recepcion();
+            dto.setChecklist(new LinkedHashMap<>(Map.of("pantalla", "falla", "enciende", "ok", "humedad", "sin_probar")));
+            dto.setCodigoDesbloqueo("  1234 ");
+            dto.setLineas(List.of(linea("SRV-000001", 1, "1200", false)));
+            int o = service.crear(dto, "abigail").getIdorden();
+            ordenes.get(o).setTecnico(tecnico);
+            when(ordenRepository.buscar(any(), any(), any())).thenAnswer(inv -> new ArrayList<>(ordenes.values()));
+            when(ordenRepository.abiertasDeTodas()).thenAnswer(inv -> new ArrayList<>(ordenes.values()));
+
+            OrdenServicioResponseDto d = service.obtener(o, "abigail");
+            assertThat(d.getChecklist()).containsEntry("pantalla", "FALLA").containsEntry("enciende", "OK").containsEntry("humedad", "SIN_PROBAR");
+            assertThat(d.getCodigoDesbloqueo()).isEqualTo("1234");
+            assertThat(service.listar(2, null, null, "abigail")).hasSize(1).allSatisfy(x -> assertThat(x.getCodigoDesbloqueo()).isNull());
+            assertThat(service.taller("root")).hasSize(1).allSatisfy(x -> assertThat(x.getCodigoDesbloqueo()).isNull());
+
+            hastaLista(o);
+            service.entregar(o, entrega(1), "abigail");
+            assertThat(viva(o).getCodigoDesbloqueo()).isNull();
+        }
+
+        @Test
+        @DisplayName("un punto o un valor desconocido se rechaza")
+        void invalidos() {
+            OrdenServicioRequestDto dto = recepcion();
+            dto.setChecklist(Map.of("teclado", "OK"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(dto, "abigail"));
+            OrdenServicioRequestDto dto2 = recepcion();
+            dto2.setChecklist(Map.of("enciende", "tal vez"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(dto2, "abigail"));
+        }
+
+        @Test
+        @DisplayName("se puede corregir después y el código se borra con vacío")
+        void corregir() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            OrdenActualizarDto a = new OrdenActualizarDto();
+            a.setChecklist(Map.of("audio", "FALLA"));
+            a.setCodigoDesbloqueo("patrón L");
+            OrdenServicioResponseDto r = service.actualizar(o, a, "abigail");
+            assertThat(r.getChecklist()).containsOnlyKeys("audio");
+            assertThat(r.getCodigoDesbloqueo()).isEqualTo("patrón L");
+            OrdenActualizarDto b = new OrdenActualizarDto();
+            b.setCodigoDesbloqueo("  ");
+            assertThat(service.actualizar(o, b, "abigail").getCodigoDesbloqueo()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("fotos del equipo")
+    class Fotos {
+
+        private final byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 16, 'J', 'F', 'I', 'F'};
+
+        @Test
+        @DisplayName("acepta JPEG y PNG, las lista sin la imagen y se pueden borrar")
+        void agregarListarBorrar() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            List<Map<String, Object>> l = service.agregarFoto(o, jpeg, "Pantalla estrellada", "abigail");
+            assertThat(l).hasSize(1);
+            assertThat(l.get(0)).containsEntry("tipo", "image/jpeg").containsEntry("descripcion", "Pantalla estrellada").doesNotContainKey("contenido");
+            assertThat(service.obtener(o, "abigail").getTotalFotos()).isEqualTo(1);
+            byte[] png = {(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10, 0, 0};
+            assertThat(service.agregarFoto(o, png, null, "abigail")).hasSize(2);
+            Integer idfoto = (Integer) l.get(0).get("idfoto");
+            assertThat(service.foto(o, idfoto, "abigail").getContenido()).isEqualTo(jpeg);
+            assertThat(service.eliminarFoto(o, idfoto, "abigail")).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("rechaza lo que no es imagen, lo muy pesado y más de 8 por orden; una foto de otra orden no se ve")
+        void limites() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            int otra = orden(linea("SRV-000001", 1, "1200", false));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.agregarFoto(o, "no soy una imagen".getBytes(), null, "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.agregarFoto(o, new byte[0], null, "abigail"));
+            byte[] grande = new byte[OrdenServicioService.MAX_BYTES_FOTO + 1];
+            System.arraycopy(jpeg, 0, grande, 0, jpeg.length);
+            assertEstado(HttpStatus.PAYLOAD_TOO_LARGE, () -> service.agregarFoto(o, grande, null, "abigail"));
+            for (int i = 0; i < OrdenServicioService.MAX_FOTOS; i++) service.agregarFoto(o, jpeg, null, "abigail");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.agregarFoto(o, jpeg, null, "abigail"));
+            Integer idfoto = fotos.get(0).getIdfoto();
+            assertEstado(HttpStatus.NOT_FOUND, () -> service.foto(otra, idfoto, "abigail"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.fotos(o, "guillermo"));
+        }
+    }
+
+    @Nested
+    @DisplayName("reporte de tiempos")
+    class Reporte {
+
+        @Test
+        @DisplayName("la tienda ve el suyo; todas las sucursales solo el administrador; el periodo no puede ser mayor a un año")
+        void permisos() {
+            when(ordenRepository.recibidasEntre(any(), any(), any())).thenReturn(List.of());
+            assertThat(service.reporte(2, null, null, "abigail")).containsKeys("recibidas", "porTecnico", "retrasadas", "listasSinRecoger");
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.reporte(null, null, null, "abigail"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.reporte(2, null, null, "guillermo"));
+            assertThat(service.reporte(null, null, null, "root")).containsKey("promedioHorasTaller");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.reporte(2, LocalDate.now().minusDays(400), LocalDate.now(), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.reporte(2, LocalDate.now(), LocalDate.now().minusDays(1), "abigail"));
         }
     }
 

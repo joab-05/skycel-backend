@@ -165,6 +165,37 @@ public class OrdenServicio {
     @Column(name = "autorizacion_fecha")
     private LocalDateTime autorizacionFecha;
 
+    // ── Espera de refacción ───────────────────────────────────────────────────
+
+    /** Qué se espera (p. ej. «pantalla del proveedor»); null = la reparación no está detenida. */
+    @Column(name = "espera_motivo", length = 255)
+    private String esperaMotivo;
+
+    /** Desde cuándo está detenida. */
+    @Column(name = "espera_desde")
+    private LocalDateTime esperaDesde;
+
+    /** Minutos acumulados en espera de refacciones en esperas ya terminadas (para medir el tiempo real de reparación). */
+    @Column(name = "espera_minutos")
+    private Integer esperaMinutos;
+
+    // ── Recordatorio de recoger ───────────────────────────────────────────────
+
+    /** Último recordatorio de «tu equipo sigue listo» que se le avisó al cliente. */
+    @Column(name = "ultimo_recordatorio")
+    private LocalDateTime ultimoRecordatorio;
+
+    // ── Revisión al recibir ───────────────────────────────────────────────────
+
+    /** Resultado de la revisión del equipo al recibirlo, en JSON: {"enciende":"SI","pantalla":"NO",...}. */
+    @Column(name = "checklist_recepcion", columnDefinition = "TEXT")
+    private String checklistRecepcion;
+
+    /** PIN, contraseña o patrón para probar el equipo. No va a la auditoría y se borra al entregar o cancelar. */
+    @org.hibernate.envers.NotAudited
+    @Column(name = "codigo_desbloqueo", length = 80)
+    private String codigoDesbloqueo;
+
     @UpdateTimestamp
     @Column(name = "fecha_actualizacion")
     private LocalDateTime fechaActualizacion;

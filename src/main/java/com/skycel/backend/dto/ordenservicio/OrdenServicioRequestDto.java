@@ -66,6 +66,13 @@ public class OrdenServicioRequestDto {
     /** Técnico asignado (usuario con rol TECNICO). Opcional: se puede asignar después. */
     private Integer idTecnico;
 
+    /** Revisión del equipo al recibirlo: punto → OK, FALLA o SIN_PROBAR (ver OrdenChecklist). Opcional. */
+    private java.util.Map<String, String> checklist;
+
+    /** PIN, contraseña o patrón para poder probar el equipo. Opcional; no se imprime ni se manda al cliente. */
+    @Size(max = 80, message = "El código de desbloqueo no puede exceder los 80 caracteres")
+    private String codigoDesbloqueo;
+
     /** Servicios y refacciones ya conocidos al recibir (presupuesto inicial). Opcional. */
     @Valid
     private List<OrdenLineaRequestDto> lineas;

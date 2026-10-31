@@ -197,6 +197,8 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (tiene('ORDEN_RECIBIR')) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir equipo', grupo: 'Taller' });
   if (tiene('TALLER_TRABAJAR')) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', grupo: 'Taller' });
   if (tiene('ORDEN_CONSULTAR', 'ORDEN_RECIBIR', 'TALLER_TRABAJAR')) items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
+  if (tiene('ORDEN_CONSULTAR', 'ORDEN_RECIBIR')) items.push({ h: '#/por-recoger', i: ic('package-check'), t: 'Equipos por recoger', grupo: 'Taller' });
+  if (tiene('ORDEN_CONSULTAR', 'TALLER_TRABAJAR') && (SUPERIOR.includes(s.rol) || s.rol === 'ENCARGADO_TIENDA' || s.tecnicoEncargado)) items.push({ h: '#/reporte-taller', i: ic('chart-column'), t: 'Reporte del taller', grupo: 'Taller' });
   if (tiene('EMPLEADOS_ADMIN')) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
   if (Sesion.tiene('PERMISOS_ADMIN')) items.push({ h: '#/permisos', i: ic('lock'), t: 'Permisos', grupo: 'Administración' });
   if (tiene('NOMINA')) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
@@ -274,6 +276,8 @@ async function render() {
     if (ruta === 'recepcion') return pantallaRecepcion();
     if (ruta === 'taller') return pantallaTaller();
     if (ruta === 'consultar') return pantallaConsultar();
+    if (ruta === 'por-recoger') return pantallaPorRecoger();
+    if (ruta === 'reporte-taller') return pantallaReporteTaller();
     if (ruta === 'pendientes') return pantallaPendientes();
     if (ruta === 'orden' && param) return pantallaOrdenDetalle(param);
     if (ruta === 'clientes') return pantallaClientes();
@@ -938,6 +942,11 @@ async function pantallaRecepcion() {
       <input id="rc-accesorios" placeholder="Chip, funda, cargador... (opcional)">
       <label>Estado físico</label>
       <textarea id="rc-estado-fisico" placeholder="Golpes, rayones, daños visibles (opcional)"></textarea>
+      <label>Revisión rápida del equipo</label>
+      ${selectoresRevision('rc-rev')}
+      <p class="ayuda">Marca lo que funciona y lo que no al recibirlo: queda constancia para cuando se entregue.</p>
+      <label>Código de desbloqueo</label>
+      <input id="rc-codigo" maxlength="80" autocomplete="off" placeholder="PIN, contraseña o patrón (opcional)">
       <label class="obligatorio">Falla reportada</label>
       <textarea id="rc-falla" placeholder="Lo que dice el cliente que tiene"></textarea>
       <label class="obligatorio">Tiempo estimado</label>
@@ -1082,6 +1091,8 @@ async function pantallaRecepcion() {
       accesoriosDejados: document.getElementById('rc-accesorios').value.trim() || null,
       estadoFisico: document.getElementById('rc-estado-fisico').value.trim() || null,
       fallaReportada: falla,
+      checklist: leerRevision('rc-rev'),
+      codigoDesbloqueo: document.getElementById('rc-codigo').value.trim() || null,
       horasEstimadas: horasEstimadas,
       idTecnico: idTecnicoSel ? Number(idTecnicoSel) : null,
       claveOffline: uuid(),
@@ -1130,6 +1141,54 @@ async function pantallaRecepcion() {
   };
 }
 
+// ── Revisión del equipo al recibirlo ──────────────────────────────────────
+
+/** Los puntos de la revisión (iguales a los del servidor: OrdenChecklist). */
+const REVISION_PUNTOS = [['enciende', 'Enciende'], ['pantalla', 'Pantalla y táctil'], ['botones', 'Botones'], ['camaras', 'Cámaras'],
+  ['audio', 'Bocina y micrófono'], ['carga', 'Carga'], ['senal', 'Señal y Wi-Fi'], ['humedad', 'Sin rastros de humedad']];
+const REVISION_VALORES = { OK: 'Bien', FALLA: 'Falla', SIN_PROBAR: 'No se pudo probar' };
+
+/** Un selector por punto (en blanco = no se revisó). {@code prefijo} da los id: prefijo-enciende, prefijo-pantalla... */
+function selectoresRevision(prefijo, valores) {
+  const v = valores || {};
+  return `<div class="revision-grid">${REVISION_PUNTOS.map(([k, t]) => `
+    <label class="revision-punto"><span>${escapar(t)}</span>
+      <select id="${prefijo}-${k}"><option value="">—</option>${Object.entries(REVISION_VALORES).map(([val, txt]) => `<option value="${val}"${v[k] === val ? ' selected' : ''}>${txt}</option>`).join('')}</select>
+    </label>`).join('')}</div>`;
+}
+
+/** Lo marcado en esos selectores: {punto: valor}; {} si no se marcó nada. */
+function leerRevision(prefijo) {
+  const r = {};
+  for (const [k] of REVISION_PUNTOS) {
+    const v = document.getElementById(`${prefijo}-${k}`)?.value;
+    if (v) r[k] = v;
+  }
+  return r;
+}
+
+/** La revisión como etiquetas de colores; vacío si no se hizo. */
+function etiquetasRevision(checklist) {
+  const c = checklist || {};
+  const puntos = REVISION_PUNTOS.filter(([k]) => c[k]);
+  if (!puntos.length) return '';
+  const texto = (k, t) => k === 'humedad' && c[k] === 'FALLA' ? 'Con rastros de humedad' : `${t}: ${REVISION_VALORES[c[k]] || c[k]}`;
+  return `<div class="revision-etiquetas">${puntos.map(([k, t]) => `<span class="rev-${c[k].toLowerCase().replace('_', '-')}">${escapar(texto(k, t))}</span>`).join('')}</div>`;
+}
+
+/** Lo mismo en texto plano, para el comprobante impreso. */
+function textoRevision(checklist) {
+  const c = checklist || {};
+  return REVISION_PUNTOS.filter(([k]) => c[k]).map(([k, t]) => k === 'humedad' && c[k] === 'FALLA' ? 'Con rastros de humedad' : `${t}: ${REVISION_VALORES[c[k]] || c[k]}`).join(' · ');
+}
+
+/** La pastilla de estado de una orden: una reparación detenida por una pieza se ve distinta. */
+function pastillaOrden(o) {
+  if (o.estado === 1 && !o.idTecnico) return '<span class="pastilla por-tomar">' + ic('hourglass') + ' Por tomar</span>';
+  if (o.esperaMotivo) return '<span class="pastilla espera" title="' + escapar(o.esperaMotivo) + '">' + ic('hourglass') + ' Esperando refacción</span>';
+  return pastillaEstado(o.estadoDisplay);
+}
+
 // ── Taller ────────────────────────────────────────────────────────────────
 
 async function pantallaTaller() {
@@ -1140,6 +1199,7 @@ async function pantallaTaller() {
     <div class="kp-h">
       ${kpiH('c5', 'hourglass', '…', 'Por tomar', 'ta-k-tomar')}
       ${kpiH('c4', 'wrench', '…', 'En reparación', 'ta-k-rep')}
+      ${kpiH('c6', 'hourglass', '…', 'Esperando refacción', 'ta-k-espera')}
       ${kpiH('c3', 'circle-check', '…', 'Listas para entrega', 'ta-k-lista')}
     </div>
     <div class="tarjeta iv-filtros"><div id="ta-lista"><div class="vacio">Cargando...</div></div></div>`;
@@ -1148,7 +1208,8 @@ async function pantallaTaller() {
     const ordenes = await api('GET', '/api/ordenes-servicio/taller');
     const poner = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
     poner('ta-k-tomar', ordenes.filter(o => o.estado === 1 && !o.idTecnico).length);
-    poner('ta-k-rep', ordenes.filter(o => o.estadoDisplay === 'En reparación').length);
+    poner('ta-k-rep', ordenes.filter(o => o.estadoDisplay === 'En reparación' && !o.esperaMotivo).length);
+    poner('ta-k-espera', ordenes.filter(o => o.esperaMotivo).length);
     poner('ta-k-lista', ordenes.filter(o => o.estadoDisplay === 'Lista para entrega').length);
     if (ordenes.length === 0) { cont.innerHTML = '<div class="vacio">No hay órdenes abiertas.</div>'; return; }
     cont.innerHTML = tablaOrdenes(ordenes, s);
@@ -1160,7 +1221,7 @@ async function pantallaTaller() {
 
 /** Órdenes de servicio: tabla en escritorio y tarjetas en celular; un clic abre la orden. */
 function tablaOrdenes(ordenes, s) {
-  const estado = (o) => (o.estado === 1 && !o.idTecnico) ? '<span class="pastilla por-tomar">' + ic('hourglass') + ' Por tomar</span>' : pastillaEstado(o.estadoDisplay);
+  const estado = pastillaOrden;
   return `
     <div class="tabla-cont"><table class="tabla">
       <thead><tr><th>Folio</th><th>Ingreso</th><th>Cliente</th><th>Equipo</th><th>Falla reportada</th><th>Técnico</th><th>Promesa</th><th>Estado</th></tr></thead>
@@ -1179,12 +1240,11 @@ function tablaOrdenes(ordenes, s) {
 }
 
 function itemOrden(o, s) {
-  const porTomar = o.estado === 1 && !o.idTecnico;
   return `
     <div class="orden-item" data-id="${o.idorden}">
       <div class="orden-cab">
         <span class="orden-folio">${escapar(o.folio)}</span>
-        ${porTomar ? '<span class="pastilla por-tomar">' + ic('hourglass') + ' Por tomar</span>' : pastillaEstado(o.estadoDisplay)}
+        ${pastillaOrden(o)}
       </div>
       <div class="orden-equipo">${escapar(o.marca)} ${escapar(o.modelo)}</div>
       <div class="orden-cliente">${escapar(o.nombreCliente)} · ${escapar(o.nombreTienda)}</div>
@@ -1241,6 +1301,123 @@ async function pantallaConsultar() {
   }
 }
 
+// ── Equipos listos que nadie recoge ───────────────────────────────────────
+
+async function pantallaPorRecoger() {
+  const s = Sesion.obtener();
+  root.innerHTML = `
+    ${cabeceraPantalla(ic('package-check') + ' Equipos por recoger', 'Reparaciones listas que siguen en la tienda: recuérdaselo al cliente por WhatsApp')}
+    <div class="tarjeta"><div id="pr-lista"><div class="vacio">Cargando...</div></div></div>`;
+  const cont = document.getElementById('pr-lista');
+  const todas = SUPERIOR.includes(s.rol) || s.tecnicoEncargado;
+  const cargar = async () => {
+    try {
+      const ordenes = await api('GET', '/api/ordenes-servicio/por-recoger' + (todas ? '' : '?codti=' + s.codti));
+      if (!ordenes.length) { cont.innerHTML = '<div class="vacio">No hay equipos listos esperando al cliente.</div>'; return; }
+      const nivel = (d) => d >= 30 ? 'rojo' : d >= 7 ? 'ambar' : 'ok';
+      cont.innerHTML = `<div class="tabla-cont"><table class="tabla">
+        <thead><tr><th>Folio</th><th>Cliente</th><th>Equipo</th>${todas ? '<th>Sucursal</th>' : ''}<th>Días sin recoger</th><th>Último recordatorio</th><th>Por pagar</th><th></th></tr></thead>
+        <tbody>${ordenes.map(o => `<tr>
+          <td><button class="enlace pr-abrir" data-id="${o.idorden}">${escapar(o.folio)}</button></td>
+          <td class="tabla-nombre">${escapar(o.nombreCliente)}<div class="ayuda">${escapar(o.telefonoCliente || 'Sin teléfono')}</div></td>
+          <td>${escapar(o.marca)} ${escapar(o.modelo)}</td>${todas ? `<td>${escapar(o.nombreTienda)}</td>` : ''}
+          <td><span class="dias-${nivel(o.diasListaSinRecoger)}">${o.diasListaSinRecoger} día${o.diasListaSinRecoger === 1 ? '' : 's'}${o.diasListaSinRecoger >= 30 ? ' · pasó el plazo' : ''}</span></td>
+          <td>${o.ultimoRecordatorio ? formatoFecha(o.ultimoRecordatorio) : '<span class="ayuda">Ninguno</span>'}</td>
+          <td>${formatoDinero(o.saldo)}</td>
+          <td><button class="btn btn-verde btn-chico pr-avisar" data-id="${o.idorden}">${ic('message-circle')} ${o.diasListaSinRecoger >= 7 || o.ultimoRecordatorio ? 'Recordar' : 'Avisar'}</button></td>
+        </tr>`).join('')}</tbody></table></div>`;
+      cont.querySelectorAll('.pr-abrir').forEach(b => b.onclick = () => navegar('#/orden/' + b.dataset.id));
+      cont.querySelectorAll('.pr-avisar').forEach(b => b.onclick = async () => {
+        const o = ordenes.find(x => String(x.idorden) === b.dataset.id);
+        const ventana = window.open('', '_blank');   // se abre ya, por el clic, para que el navegador no lo bloquee
+        try {
+          const r = await api('POST', `/api/ordenes-servicio/${o.idorden}/aviso-whatsapp?tipo=${o.diasListaSinRecoger >= 7 || o.ultimoRecordatorio ? 'RECORDATORIO' : 'LISTA'}`);
+          if (ventana) ventana.location.href = r.url; else window.location.href = r.url;
+          mostrarMensaje(root, `Mensaje «${r.tipoDisplay}» listo en WhatsApp. Pulsa enviar allá.`, 'ok');
+          cargar();
+        } catch (err) { if (ventana) ventana.close(); mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+      });
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  };
+  cargar();
+}
+
+// ── Reporte de tiempos del taller ─────────────────────────────────────────
+
+/** Horas como «6 h» o, si pasan de dos días, «3.5 días». */
+function textoHoras(h) {
+  if (h == null) return '—';
+  return h >= 48 ? (Math.round(h / 24 * 10) / 10) + ' días' : (Math.round(h * 10) / 10) + ' h';
+}
+
+async function pantallaReporteTaller() {
+  const s = Sesion.obtener();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const hoy = new Date(), hace30 = new Date(Date.now() - 29 * 86400000);
+  const todas = SUPERIOR.includes(s.rol) || s.tecnicoEncargado;
+  root.innerHTML = `
+    ${cabeceraPantalla(ic('chart-column') + ' Reporte del taller', 'Cuánto tarda cada reparación y qué va retrasado')}
+    <div class="tarjeta iv-filtros">
+      <div class="fila">
+        <div><label>Desde</label><input type="date" id="rp-desde" value="${iso(hace30)}"></div>
+        <div><label>Hasta</label><input type="date" id="rp-hasta" value="${iso(hoy)}"></div>
+        ${todas ? `<div><label>Sucursal</label><select id="rp-tienda"><option value="">Todas</option></select></div>` : ''}
+      </div>
+      <div class="grupo-botones" style="margin-top:8px;"><button id="rp-ver" class="btn btn-azul">Ver reporte</button></div>
+    </div>
+    <div id="rp-resultado"><div class="vacio">Cargando...</div></div>`;
+  if (todas) {
+    try {
+      const tiendas = await api('GET', '/api/tiendas');
+      document.getElementById('rp-tienda').insertAdjacentHTML('beforeend', tiendas.map(t => `<option value="${t.codti}">${escapar(t.nombre)}</option>`).join(''));
+    } catch { /* sin lista de sucursales: queda «Todas» */ }
+  }
+  const cont = document.getElementById('rp-resultado');
+  const ver = async () => {
+    const q = new URLSearchParams({ desde: document.getElementById('rp-desde').value, hasta: document.getElementById('rp-hasta').value });
+    const codti = todas ? document.getElementById('rp-tienda').value : s.codti;
+    if (codti) q.set('codti', codti);
+    cont.innerHTML = '<div class="vacio">Calculando...</div>';
+    try {
+      const r = await api('GET', '/api/ordenes-servicio/reporte?' + q);
+      const pct = r.porcentajeATiempo == null ? '—' : r.porcentajeATiempo + '%';
+      cont.innerHTML = `
+        <div class="kp-h">
+          ${kpiH('c1', 'inbox', r.recibidas, 'Equipos recibidos')}
+          ${kpiH('c3', 'circle-check', r.entregadas, 'Entregados')}
+          ${kpiH('c4', 'clock', textoHoras(r.promedioHorasTaller), 'Tiempo promedio de taller')}
+          ${kpiH('c5', 'check-check', pct, 'Listos a tiempo')}
+        </div>
+        <div class="tarjeta"><h2>Resumen</h2>
+          <div class="detalle-fila"><span class="k">Terminadas (llegaron a «lista»)</span><span class="v">${r.terminadas}</span></div>
+          <div class="detalle-fila"><span class="k">Del ingreso a la entrega</span><span class="v">${textoHoras(r.promedioHorasHastaEntrega)}</span></div>
+          <div class="detalle-fila"><span class="k">Cumplieron la fecha prometida</span><span class="v">${r.aTiempo} de ${r.conFechaPrometida}</span></div>
+          <div class="detalle-fila"><span class="k">Canceladas</span><span class="v">${r.canceladas}</span></div>
+          <div class="detalle-fila"><span class="k">Abiertas del periodo</span><span class="v">${r.abiertas}</span></div>
+          <div class="detalle-fila"><span class="k">Esperaron una refacción</span><span class="v">${r.conEsperaDeRefaccion} (promedio ${textoHoras(r.promedioHorasEsperandoRefaccion)})</span></div>
+          <div class="detalle-fila"><span class="k">Esperando refacción ahora</span><span class="v">${r.esperandoRefaccionAhora}</span></div>
+          <div class="detalle-fila"><span class="k">Listas sin recoger hoy</span><span class="v">${r.listasSinRecoger}${r.listasMasDe30Dias ? ` (${r.listasMasDe30Dias} con más de 30 días)` : ''}</span></div>
+          <p class="ayuda">El tiempo de taller no cuenta las horas que la reparación estuvo detenida esperando una pieza.</p>
+        </div>
+        <div class="tarjeta"><h2>Retrasadas</h2>${r.retrasadas.length ? `<div class="tabla-cont"><table class="tabla">
+          <thead><tr><th>Folio</th><th>Equipo</th><th>Cliente</th><th>Técnico</th><th>Retraso</th></tr></thead>
+          <tbody>${r.retrasadas.map(x => `<tr><td>${escapar(x.folio)}</td><td>${escapar(x.equipo)}</td><td>${escapar(x.cliente || '')}</td><td>${escapar(x.tecnico || 'Sin técnico')}</td>
+            <td>${textoHoras(x.horasDeRetraso)}${x.esperandoRefaccion ? ' · espera refacción' : ''}</td></tr>`).join('')}</tbody></table></div>`
+          : '<div class="vacio">Ninguna reparación abierta pasó su fecha prometida.</div>'}</div>
+        <div class="tarjeta"><h2>Por técnico</h2>${r.porTecnico.length ? `<div class="tabla-cont"><table class="tabla">
+          <thead><tr><th>Técnico</th><th>Terminadas</th><th>Tiempo promedio</th><th>A tiempo</th></tr></thead>
+          <tbody>${r.porTecnico.map(x => `<tr><td>${escapar(x.tecnico)}</td><td>${x.terminadas}</td><td>${textoHoras(x.promedioHorasTaller)}</td><td>${x.aTiempo} de ${x.conFechaPrometida}</td></tr>`).join('')}</tbody></table></div>`
+          : '<div class="vacio">Sin reparaciones terminadas en el periodo.</div>'}</div>`;
+    } catch (err) {
+      cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;
+    }
+  };
+  document.getElementById('rp-ver').onclick = ver;
+  ver();
+}
+
 // ── Detalle de orden ──────────────────────────────────────────────────────
 
 async function pantallaOrdenDetalle(id) {
@@ -1292,15 +1469,50 @@ async function pantallaOrdenDetalle(id) {
           <p>No se puede terminar ni entregar así: cancela la orden o cambia los servicios y vuelve a pedir su autorización.</p><p class="ayuda">${quien}${o.autorizacionNota ? '<br>' + escapar(o.autorizacionNota) : ''}</p></div>`;
   };
 
+  /** Quien atiende al cliente o trabaja el taller puede corregir la revisión, el código y las fotos mientras la orden siga abierta. */
+  const puedeEditar = o.estado <= 3 && (puedeTrabajar || puedeResponder);
+
+  /** La reparación detenida porque falta una pieza. */
+  const cuadroEspera = () => !o.esperaMotivo ? '' : `<div class="tarjeta" style="border-left:5px solid #c2410c;">
+    <h2>${ic('hourglass')} Esperando una refacción</h2>
+    <p><strong>${escapar(o.esperaMotivo)}</strong><br><span class="ayuda">Desde ${formatoFecha(o.esperaDesde)} — el cliente ve en su seguimiento que se espera una pieza.</span></p>
+    ${puedeTrabajar ? `<div class="grupo-botones"><button id="es-llego" class="btn btn-verde">${ic('package-check')} Llegó la refacción</button></div>` : ''}</div>`;
+
+  /** Revisión del equipo al recibirlo y su código de desbloqueo. */
+  const tarjetaRevision = () => {
+    const etiquetas = etiquetasRevision(o.checklist);
+    return `<div class="tarjeta"><h2>Revisión al recibir</h2>
+      <div id="rv-ver">${etiquetas || '<p class="ayuda">No se hizo la revisión rápida al recibir este equipo.</p>'}
+        <div class="detalle-fila"><span class="k">Código de desbloqueo</span><span class="v">${o.codigoDesbloqueo
+          ? `<span id="rv-codigo" data-codigo="${escapar(o.codigoDesbloqueo)}">******</span> <button class="enlace" id="rv-mostrar" type="button">Mostrar</button>` : '—'}</span></div>
+        ${puedeEditar ? `<div class="grupo-botones" style="margin-top:8px;"><button id="rv-editar" class="btn btn-gris btn-chico">${ic('clipboard-pen')} Editar revisión y código</button></div>` : ''}
+      </div>
+      ${puedeEditar ? `<div id="rv-form" class="oculto">${selectoresRevision('rv', o.checklist)}
+        <label>Código de desbloqueo</label><input id="rv-codigo-nuevo" maxlength="80" autocomplete="off" value="${escapar(o.codigoDesbloqueo || '')}">
+        <div class="grupo-botones" style="margin-top:8px;"><button id="rv-guardar" class="btn btn-azul">Guardar</button><button id="rv-cancelar" class="btn btn-gris">Cancelar</button></div></div>` : ''}
+    </div>`;
+  };
+
+  const tarjetaFotos = () => `<div class="tarjeta"><h2>${ic('camera')} Fotos del equipo <span id="fo-cuenta" class="ayuda"></span></h2>
+    <div id="fo-galeria" class="galeria"><span class="ayuda">Cargando...</span></div>
+    ${puedeEditar ? `<label class="btn btn-azul btn-chico" style="margin-top:10px;display:inline-flex;gap:6px;cursor:pointer;">${ic('camera')} Agregar foto
+      <input type="file" id="fo-archivo" accept="image/*" capture="environment" hidden></label>
+      <p class="ayuda">Toma fotos de golpes, rayones o pantalla antes de trabajar el equipo (hasta 8). Se borran solas 90 días después de entregarlo.</p>` : ''}</div>`;
+
   root.innerHTML = `
     <button class="enlace" onclick="history.length > 1 ? history.back() : navegar('#/taller')" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
-    ${cabeceraPantalla(escapar(o.folio) + (o.folioLocal ? ` <span class="ayuda">(${escapar(o.folioLocal)})</span>` : ''), `${escapar(o.marca)} ${escapar(o.modelo)} · ingresó ${formatoFecha(o.fechaIngreso)}`, pastillaEstado(o.estadoDisplay))}
+    ${cabeceraPantalla(escapar(o.folio) + (o.folioLocal ? ` <span class="ayuda">(${escapar(o.folioLocal)})</span>` : ''), `${escapar(o.marca)} ${escapar(o.modelo)} · ingresó ${formatoFecha(o.fechaIngreso)}`, pastillaOrden(o))}
     <div class="kp-h">
       ${kpiH('c1', 'banknote', formatoDinero(o.total), 'Total')}
       ${kpiH('c3', 'circle-check', formatoDinero(o.totalAnticipos), 'Anticipos')}
       ${kpiH('c4', 'clock', formatoDinero(o.saldo), 'Saldo por cobrar')}
     </div>
     ${cuadroAutorizacion()}
+    ${cuadroEspera()}
+    ${o.estado === 3 && o.diasListaSinRecoger >= 7 ? `<div class="tarjeta" style="border-left:5px solid ${o.diasListaSinRecoger >= 30 ? '#dc2626' : '#d97706'};">
+      <h2>${ic('package-check')} Lleva ${o.diasListaSinRecoger} días lista sin que la recojan</h2>
+      <p class="ayuda">${o.ultimoRecordatorio ? 'Último recordatorio: ' + formatoFecha(o.ultimoRecordatorio) + ' —' : 'Aún no se le ha mandado un recordatorio —'}${o.diasListaSinRecoger >= 30 ? ' ya pasó el plazo de 30 días del comprobante;' : ''}
+      elige «Recordatorio de recoger» abajo para avisarle.</p></div>` : ''}
     <div class="tarjeta">
       <h2>Avisar al cliente</h2>
       <div class="grupo-botones" style="flex-wrap:wrap;align-items:center;">
@@ -1310,6 +1522,7 @@ async function pantallaOrdenDetalle(id) {
           <option value="COTIZACION">Cotización para autorizar</option>
           <option value="PRECIO_CAMBIO">Cambio de precio</option>
           <option value="LISTA">Equipo listo</option>
+          <option value="ESPERA_REFACCION">Esperando una refacción</option>
           <option value="RECORDATORIO">Recordatorio de recoger</option>
           <option value="ENTREGADA">Gracias y garantía</option>
         </select>
@@ -1335,11 +1548,19 @@ async function pantallaOrdenDetalle(id) {
       <div class="detalle-fila"><span class="k">Técnico</span><span class="v">${escapar(o.nombreTecnico || 'Sin asignar')}</span></div>
       <div class="detalle-fila"><span class="k">Recibió</span><span class="v">${escapar(o.nombreRecibe)}</span></div>
       <div class="detalle-fila"><span class="k">Fecha prometida</span><span class="v">${o.fechaPromesaHora ? formatoFecha(o.fechaPromesaHora) + (o.horasEstimadas != null ? ' (' + o.horasEstimadas + ' h)' : '') : (o.fechaPromesa || '—')}</span></div>
+      ${o.esperaMinutos > 0 ? `<div class="detalle-fila"><span class="k">Esperó refacciones</span><span class="v">${o.esperaMinutos >= 120 ? Math.round(o.esperaMinutos / 60) + ' h' : o.esperaMinutos + ' min'}</span></div>` : ''}
     </div>
+    ${tarjetaRevision()}
+    ${tarjetaFotos()}
 
     <div id="dt-acciones" class="tarjeta oculto">
       <h2>Acciones</h2>
       <div class="grupo-botones" id="dt-botones"></div>
+      <div id="dt-espera-cont" class="oculto" style="margin-top:10px;">
+        <label>¿Qué refacción se espera?</label>
+        <input id="dt-espera-texto" maxlength="200" placeholder="Pantalla original del proveedor, llega el jueves">
+        <button id="dt-espera-enviar" class="btn btn-azul">Dejar en espera</button>
+      </div>
       <div id="dt-nota-cont" class="oculto" style="margin-top:10px;">
         <label>Observación</label>
         <textarea id="dt-nota-texto"></textarea>
@@ -1386,7 +1607,77 @@ async function pantallaOrdenDetalle(id) {
     };
   }
 
+  // Revisión al recibir y código de desbloqueo
+  const rvMostrar = document.getElementById('rv-mostrar');
+  if (rvMostrar) rvMostrar.onclick = () => {
+    const el = document.getElementById('rv-codigo');
+    const oculto = el.textContent === '******';
+    el.textContent = oculto ? el.dataset.codigo : '******';
+    rvMostrar.textContent = oculto ? 'Ocultar' : 'Mostrar';
+  };
+  if (document.getElementById('rv-editar')) {
+    const alternar = (editando) => {
+      document.getElementById('rv-ver').classList.toggle('oculto', editando);
+      document.getElementById('rv-form').classList.toggle('oculto', !editando);
+    };
+    document.getElementById('rv-editar').onclick = () => alternar(true);
+    document.getElementById('rv-cancelar').onclick = () => alternar(false);
+    document.getElementById('rv-guardar').onclick = async () => {
+      try {
+        await api('PATCH', `/api/ordenes-servicio/${id}`, { checklist: leerRevision('rv'), codigoDesbloqueo: document.getElementById('rv-codigo-nuevo').value.trim() });
+        pantallaOrdenDetalle(id);
+      } catch (err) { fallo(err); }
+    };
+  }
+
+  // Fotos del equipo
+  const galeria = document.getElementById('fo-galeria');
+  const verFoto = (src, f) => {
+    const visor = document.createElement('div');
+    visor.className = 'visor-foto';
+    visor.innerHTML = `<img src="${src}" alt="Foto del equipo"><div class="visor-barra"><span>${escapar(f.descripcion || '')}</span>
+      ${puedeEditar ? '<button class="btn btn-rojo btn-chico" id="vf-borrar">Borrar</button>' : ''}<button class="btn btn-gris btn-chico" id="vf-cerrar">Cerrar</button></div>`;
+    document.body.appendChild(visor);
+    visor.onclick = (e) => { if (e.target === visor) visor.remove(); };
+    visor.querySelector('#vf-cerrar').onclick = () => visor.remove();
+    const borrar = visor.querySelector('#vf-borrar');
+    if (borrar) borrar.onclick = async () => {
+      if (!confirm('¿Borrar esta foto?')) return;
+      try { await api('DELETE', `/api/ordenes-servicio/${id}/fotos/${f.idfoto}`); visor.remove(); pintarFotos(); } catch (err) { fallo(err); }
+    };
+  };
+  const pintarFotos = async () => {
+    try {
+      const lista = await api('GET', `/api/ordenes-servicio/${id}/fotos`);
+      document.getElementById('fo-cuenta').textContent = lista.length ? `(${lista.length})` : '';
+      if (!lista.length) { galeria.innerHTML = '<span class="ayuda">Sin fotos.</span>'; return; }
+      galeria.innerHTML = lista.map(f => `<img class="foto" data-f="${f.idfoto}" alt="${escapar(f.descripcion || 'Foto del equipo')}" title="${escapar(f.descripcion || '')}">`).join('');
+      galeria.querySelectorAll('img').forEach(img => {
+        const f = lista.find(x => String(x.idfoto) === img.dataset.f);
+        apiImagenUrl(`/api/ordenes-servicio/${id}/fotos/${img.dataset.f}`).then(u => { img.src = u; }).catch(() => { img.alt = 'No se pudo cargar'; });
+        img.onclick = () => { if (img.src) verFoto(img.src, f); };
+      });
+    } catch (err) { galeria.innerHTML = `<span class="ayuda">${escapar(err.network ? 'Sin conexión: las fotos solo se ven en línea.' : err.message)}</span>`; }
+  };
+  const archivo = document.getElementById('fo-archivo');
+  if (archivo) archivo.onchange = async () => {
+    const f = archivo.files[0];
+    if (!f) return;
+    const desc = (prompt('¿Qué muestra la foto? (opcional)', '') || '').trim();
+    galeria.insertAdjacentHTML('beforeend', '<span class="ayuda">Subiendo...</span>');
+    try {
+      const blob = await reducirFoto(f);
+      await apiSubirImagen(`/api/ordenes-servicio/${id}/fotos${desc ? '?descripcion=' + encodeURIComponent(desc) : ''}`, blob);
+    } catch (err) { fallo(err); }
+    archivo.value = '';
+    pintarFotos();
+  };
+  pintarFotos();
+
   if (!puedeTrabajar && !esTecnicoLibre) return;
+
+  const llego = document.getElementById('es-llego');
+  if (llego) llego.onclick = () => accionSimple(id, 'espera/terminar', 'POST');
 
   const contAcc = document.getElementById('dt-acciones');
   const botones = document.getElementById('dt-botones');
@@ -1394,13 +1685,23 @@ async function pantallaOrdenDetalle(id) {
   const acciones = [];
 
   if (esTecnicoLibre) acciones.push({ t: ic('hand') + ' Tomar', color: 'btn-azul', fn: () => accionSimple(id, 'tomar', 'POST') });
-  if (puedeTrabajar && o.estado === 1 && o.idTecnico) acciones.push({ t: '▶️ Iniciar reparación', color: 'btn-verde', fn: () => accionSimple(id, 'iniciar', 'POST') });
-  if (puedeTrabajar && o.estado === 2) acciones.push({ t: ic('circle-check') + ' Marcar lista', color: 'btn-verde', fn: () => accionSimple(id, 'lista', 'POST') });
+  if (puedeTrabajar && o.estado === 1 && o.idTecnico && !o.esperaMotivo) acciones.push({ t: '▶️ Iniciar reparación', color: 'btn-verde', fn: () => accionSimple(id, 'iniciar', 'POST') });
+  if (puedeTrabajar && o.estado === 2 && !o.esperaMotivo) acciones.push({ t: ic('circle-check') + ' Marcar lista', color: 'btn-verde', fn: () => accionSimple(id, 'lista', 'POST') });
+  if (puedeTrabajar && viva && !o.esperaMotivo) acciones.push({ t: ic('hourglass') + ' Esperar refacción', color: 'btn-gris', fn: () => document.getElementById('dt-espera-cont').classList.toggle('oculto') });
   if (puedeTrabajar) acciones.push({ t: ic('clipboard-pen') + ' Agregar observación', color: 'btn-gris', fn: () => document.getElementById('dt-nota-cont').classList.toggle('oculto') });
 
   if (acciones.length === 0) { contAcc.classList.add('oculto'); return; }
   botones.innerHTML = acciones.map((a, i) => `<button class="btn ${a.color}" data-i="${i}">${a.t}</button>`).join('');
   botones.querySelectorAll('button').forEach((b, i) => b.onclick = acciones[i].fn);
+
+  document.getElementById('dt-espera-enviar').onclick = async () => {
+    const texto = document.getElementById('dt-espera-texto').value.trim();
+    if (!texto) { mostrarMensaje(root, 'Escribe qué refacción se espera.', 'error'); return; }
+    try {
+      await api('POST', `/api/ordenes-servicio/${id}/espera`, { comentario: texto });
+      pantallaOrdenDetalle(id);
+    } catch (err) { fallo(err); }
+  };
 
   document.getElementById('dt-nota-enviar').onclick = async () => {
     const texto = document.getElementById('dt-nota-texto').value.trim();
@@ -1457,6 +1758,7 @@ async function imprimirComprobanteOrden(o) {
     ${fila('Cliente', o.nombreCliente)}${fila('Teléfono', o.telefonoCliente)}
     ${fila('Equipo', `${o.marca} ${o.modelo}`)}${fila('IMEI / serie', o.imei)}
     ${fila('Accesorios', o.accesoriosDejados)}${fila('Estado físico', o.estadoFisico)}
+    ${textoRevision(o.checklist) ? `<div class="caja" style="font-size:10.5px;"><b>Revisión al recibir:</b> ${escapar(textoRevision(o.checklist))}</div>` : ''}
     <div class="caja"><b>Falla reportada:</b> ${escapar(o.fallaReportada)}</div>
     ${o.autorizacionEstado === 2 || (o.lineas || []).length ? fila('Costo estimado', formatoDinero(o.total)) : ''}
     ${Number(o.totalAnticipos) > 0 ? fila('Anticipo', formatoDinero(o.totalAnticipos)) : ''}

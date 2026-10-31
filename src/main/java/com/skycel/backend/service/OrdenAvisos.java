@@ -19,7 +19,8 @@ public final class OrdenAvisos {
 
     public enum Tipo {
         RECIBIDA("Equipo recibido"), COTIZACION("Cotización para autorizar"), PRECIO_CAMBIO("Cambio de precio"),
-        LISTA("Equipo listo"), RECORDATORIO("Recordatorio de recoger"), ENTREGADA("Gracias y garantía");
+        LISTA("Equipo listo"), RECORDATORIO("Recordatorio de recoger"), ENTREGADA("Gracias y garantía"),
+        ESPERA_REFACCION("Esperando una refacción");
 
         private final String etiqueta;
         Tipo(String etiqueta) { this.etiqueta = etiqueta; }
@@ -31,7 +32,7 @@ public final class OrdenAvisos {
                         String nombreCliente, String equipo, String folio, String diagnostico,
                         BigDecimal total, BigDecimal totalAnterior, BigDecimal anticipos, BigDecimal saldo,
                         LocalDateTime fechaPromesaHora, LocalDate fechaPromesa, LocalDateTime fechaLista,
-                        Integer diasGarantia, LocalDate garantiaHasta, String enlace) {}
+                        Integer diasGarantia, LocalDate garantiaHasta, String enlace, String esperaMotivo) {}
 
     private static final Locale MX = Locale.forLanguageTag("es-MX");
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", MX);
@@ -79,6 +80,14 @@ public final class OrdenAvisos {
                 t.append(". ");
                 if (positivo(d.saldo())) t.append("Queda por pagar ").append(dinero(d.saldo())).append(". ");
                 t.append("Te esperamos en ").append(lugar(d)).append(". Si no puedes pasar pronto, avísanos para apartártelo.");
+            }
+            case ESPERA_REFACCION -> {
+                t.append("Para terminar la reparación de tu ").append(d.equipo()).append(" (folio ").append(d.folio()).append(") estamos esperando una refacción");
+                if (d.esperaMotivo() != null && !d.esperaMotivo().isBlank()) t.append(": ").append(d.esperaMotivo().trim());
+                t.append(". En cuanto llegue seguimos con tu equipo");
+                String promesa = promesa(d);
+                if (promesa != null) t.append(" (la fecha que te dimos era ").append(promesa).append(", te confirmamos la nueva en cuanto la tengamos)");
+                t.append(" y te avisamos. Gracias por tu paciencia.");
             }
             case ENTREGADA -> {
                 t.append("Gracias por confiar en nosotros: ya entregamos tu ").append(d.equipo()).append(" (folio ").append(d.folio()).append(").");

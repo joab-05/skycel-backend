@@ -27,6 +27,16 @@ public interface OrdenServicioRepository extends JpaRepository<OrdenServicio, In
            "ORDER BY o.fechaIngreso DESC, o.idorden DESC")
     List<OrdenServicio> buscar(Integer codti, Byte estado, Integer idTecnico);
 
+    /** Equipos listos que siguen en la tienda, los más antiguos primero. {@code codti} null = todas las sucursales. */
+    @Query("SELECT o FROM OrdenServicio o WHERE o.estado = 3 AND (:codti IS NULL OR o.tienda.codti = :codti) " +
+           "ORDER BY o.fechaLista ASC, o.idorden ASC")
+    List<OrdenServicio> listasSinRecoger(Integer codti);
+
+    /** Órdenes recibidas en un periodo (para el reporte de tiempos). {@code codti} null = todas las sucursales. */
+    @Query("SELECT o FROM OrdenServicio o WHERE o.fechaIngreso >= :desde AND o.fechaIngreso < :hasta " +
+           "AND (:codti IS NULL OR o.tienda.codti = :codti) ORDER BY o.fechaIngreso ASC")
+    List<OrdenServicio> recibidasEntre(java.time.LocalDateTime desde, java.time.LocalDateTime hasta, Integer codti);
+
     /** Todas las órdenes abiertas de todas las sucursales (el taller atiende a todas las tiendas). */
     @Query("SELECT o FROM OrdenServicio o WHERE o.estado IN (1, 2, 3) ORDER BY o.fechaIngreso ASC, o.idorden ASC")
     List<OrdenServicio> abiertasDeTodas();

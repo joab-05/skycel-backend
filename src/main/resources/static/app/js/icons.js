@@ -2,6 +2,7 @@
    emojis de cada sistema (que se ven distintos en Windows, Android y iPhone). Uso: ic('house') → <svg> que hereda el color del texto. */
 (function () {
   const ICONOS = {
+ "camera": "<path d=\"M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z\" /> <circle cx=\"12\" cy=\"13\" r=\"3\" />",
  "message-circle": "<path d=\"M7.9 20A9 9 0 1 0 4 16.1L2 22Z\" />",
  "clipboard-check": "<rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\" ry=\"1\" /> <path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\" /> <path d=\"m9 14 2 2 4-4\" />",
  "list": "<path d=\"M8 6h13\" /> <path d=\"M8 12h13\" /> <path d=\"M8 18h13\" /> <path d=\"M3 6h.01\" /> <path d=\"M3 12h.01\" /> <path d=\"M3 18h.01\" />",

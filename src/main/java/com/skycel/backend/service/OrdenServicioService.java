@@ -64,6 +64,7 @@ public class OrdenServicioService {
     private final ClienteService                   clienteService;
     private final NotificacionService              notificacionService;
     private final ConfiguracionNegocioRepository   negocioRepository;
+    private final OrdenServicioFotoRepository      fotoRepository;
 
     /** Dirección pública del servidor: va en el enlace de seguimiento que se manda al cliente. */
     @org.springframework.beans.factory.annotation.Value("${skycel.publico.url:https://skycelsys.ddns.net}")
@@ -138,6 +139,8 @@ public class OrdenServicioService {
                 .marca(dto.getMarca().trim()).modelo(dto.getModelo().trim()).imei(imei)
                 .accesoriosDejados(trimOrNull(dto.getAccesoriosDejados()))
                 .estadoFisico(trimOrNull(dto.getEstadoFisico()))
+                .checklistRecepcion(OrdenChecklist.aJson(OrdenChecklist.validar(dto.getChecklist())))
+                .codigoDesbloqueo(trimOrNull(dto.getCodigoDesbloqueo()))
                 .fallaReportada(dto.getFallaReportada().trim())
                 .fechaPromesa(promesaHora != null ? promesaHora.toLocalDate() : dto.getFechaPromesa())
                 .horasEstimadas(horas)
@@ -178,6 +181,8 @@ public class OrdenServicioService {
         if (dto.getEstadoFisico() != null) orden.setEstadoFisico(trimOrNull(dto.getEstadoFisico()));
         if (dto.getFallaReportada() != null && !dto.getFallaReportada().isBlank()) orden.setFallaReportada(dto.getFallaReportada().trim());
         if (dto.getDiagnostico() != null) orden.setDiagnostico(trimOrNull(dto.getDiagnostico()));
+        if (dto.getChecklist() != null) orden.setChecklistRecepcion(OrdenChecklist.aJson(OrdenChecklist.validar(dto.getChecklist())));
+        if (dto.getCodigoDesbloqueo() != null) orden.setCodigoDesbloqueo(trimOrNull(dto.getCodigoDesbloqueo()));
         Integer horas = validarHoras(dto.getHorasEstimadas());
         if (horas != null) {
             // Un nuevo estimado se cuenta desde ahora (por ejemplo, tras el diagnóstico)
@@ -231,7 +236,7 @@ public class OrdenServicioService {
         if (esSuperior(usuario) || esTecnicoEncargado(usuario)) lista = ordenRepository.abiertasDeTodas();
         else if (usuario.getRol() == Rol.TECNICO) lista = ordenRepository.abiertasPorTomarODelTecnico(usuario.getIdusuario());
         else throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador o un técnico consulta el taller.");
-        return lista.stream().map(this::toDto).collect(Collectors.toList());
+        return lista.stream().map(this::resumen).collect(Collectors.toList());
     }
 
     /** Agrega una observación a la bitácora de la orden (sin cambiar su estado). */
@@ -433,9 +438,13 @@ public class OrdenServicioService {
                 orden.getTienda().getUbicacion(), orden.getCliente().getNombreCompleto(), orden.getMarca() + " " + orden.getModelo(),
                 orden.getFolio(), orden.getDiagnostico(), total, orden.getAutorizacionTotalPrevio(), pagado, saldo,
                 orden.getFechaPromesaHora(), orden.getFechaPromesa(), orden.getFechaLista(), orden.getDiasGarantia(), orden.getFechaGarantiaHasta(),
-                base + "/seguimiento/?f=" + orden.getFolio());
+                base + "/seguimiento/?f=" + orden.getFolio(), orden.getEsperaMotivo());
         String texto = OrdenAvisos.texto(tipo, datos);
         registrar(orden, usuario, "Aviso por WhatsApp al cliente: " + tipo.etiqueta());
+        if (tipo == OrdenAvisos.Tipo.RECORDATORIO) {
+            orden.setUltimoRecordatorio(LocalDateTime.now());
+            ordenRepository.save(orden);
+        }
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("tipo", tipo.name());
         r.put("tipoDisplay", tipo.etiqueta());
@@ -447,11 +456,39 @@ public class OrdenServicioService {
 
     private OrdenAvisos.Tipo tipoSugerido(OrdenServicio o) {
         if (o.getEstado() == ENTREGADA) return OrdenAvisos.Tipo.ENTREGADA;
-        if (o.getEstado() == LISTA) return OrdenAvisos.Tipo.LISTA;
+        if (o.getEstado() == LISTA) {
+            return o.getUltimoRecordatorio() == null && diasSinRecoger(o) < DIAS_PARA_RECORDAR ? OrdenAvisos.Tipo.LISTA : OrdenAvisos.Tipo.RECORDATORIO;
+        }
         if (o.getAutorizacionEstado() != null && o.getAutorizacionEstado() == AUT_PENDIENTE) {
             return o.getAutorizacionTotalPrevio() != null ? OrdenAvisos.Tipo.PRECIO_CAMBIO : OrdenAvisos.Tipo.COTIZACION;
         }
+        if (o.getEsperaDesde() != null) return OrdenAvisos.Tipo.ESPERA_REFACCION;
         return OrdenAvisos.Tipo.RECIBIDA;
+    }
+
+    /** A partir de cuántos días sin recoger conviene recordárselo al cliente (el comprobante le da 30 antes de deslindar a la tienda). */
+    public static final int DIAS_PARA_RECORDAR = 7;
+    public static final int DIAS_PLAZO_RECOGER = 30;
+
+    static int diasSinRecoger(OrdenServicio o) {
+        if (o.getEstado() == null || o.getEstado() != LISTA || o.getFechaLista() == null) return 0;
+        return (int) Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(o.getFechaLista().toLocalDate(), LocalDate.now()));
+    }
+
+    // ── Equipos listos que nadie recoge ──────────────────────────────────────
+
+    /** Los equipos listos de una tienda, los que llevan más días sin recoger primero. {@code codti} null = todas (solo administradores). */
+    @Transactional(readOnly = true)
+    public List<OrdenServicioResponseDto> porRecoger(Integer codti, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        if (codti == null) {
+            if (!(esSuperior(usuario) || esTecnicoEncargado(usuario))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique la tienda (codti).");
+            }
+        } else if (!esTecnicoEncargado(usuario)) {
+            validarGestionaTienda(usuario, codti);
+        }
+        return ordenRepository.listasSinRecoger(codti).stream().map(this::resumen).collect(Collectors.toList());
     }
 
     /** El técnico (o el personal) empieza la reparación. Requiere un técnico asignado. */
@@ -461,6 +498,7 @@ public class OrdenServicioService {
         OrdenServicio orden = orden(id);
         exigirTaller(usuario, orden);
         exigirEstado(orden, "iniciar la reparación", RECIBIDA);
+        exigirSinEspera(orden, "iniciar la reparación");
         if (orden.getTecnico() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Asigne un técnico antes de iniciar la reparación.");
         }
@@ -478,6 +516,7 @@ public class OrdenServicioService {
         OrdenServicio orden = orden(id);
         exigirTaller(usuario, orden);
         exigirEstado(orden, "marcar como lista", EN_REPARACION);
+        exigirSinEspera(orden, "marcarla como lista");
         exigirAutorizacionVigente(orden);
 
         List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(id);
@@ -515,6 +554,60 @@ public class OrdenServicioService {
         OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
         notificarCambioOrden(orden, "Se reabrió la reparación: " + dto.getComentario().trim());
         return resultado;
+    }
+
+    // ── Espera de refacción ──────────────────────────────────────────────────
+
+    /** Deja la reparación detenida mientras llega una refacción: el cliente la ve como «esperando una refacción». */
+    @Transactional
+    public OrdenServicioResponseDto esperarRefaccion(Integer id, ComentarioRequestDto dto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirTaller(usuario, orden);
+        exigirEstado(orden, "detener por una refacción", RECIBIDA, EN_REPARACION);
+        if (orden.getEsperaDesde() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La orden " + orden.getFolio() + " ya está esperando una refacción: " + orden.getEsperaMotivo() + ".");
+        }
+        String motivo = dto.getComentario().trim();
+        if (motivo.length() > 255) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Describe la refacción en menos de 255 caracteres.");
+        orden.setEsperaMotivo(motivo);
+        orden.setEsperaDesde(LocalDateTime.now());
+        registrar(orden, usuario, "Esperando una refacción: " + motivo);
+        ordenRepository.save(orden);
+        notificarCambioOrden(orden, "Esperando una refacción: " + motivo);
+        return toDto(orden);
+    }
+
+    /** Llegó la refacción: la reparación sigue. El tiempo detenido queda anotado para no contarlo como tardanza del taller. */
+    @Transactional
+    public OrdenServicioResponseDto reanudarEspera(Integer id, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirTaller(usuario, orden);
+        if (orden.getEsperaDesde() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La orden " + orden.getFolio() + " no está esperando ninguna refacción.");
+        }
+        cerrarEspera(orden);
+        registrar(orden, usuario, "Llegó la refacción: la reparación continúa");
+        ordenRepository.save(orden);
+        notificarCambioOrden(orden, "Llegó la refacción: la reparación continúa");
+        return toDto(orden);
+    }
+
+    /** Suma lo que duró la espera al acumulado y deja la orden sin espera. */
+    private void cerrarEspera(OrdenServicio orden) {
+        if (orden.getEsperaDesde() == null) return;
+        long minutos = Math.max(0, java.time.Duration.between(orden.getEsperaDesde(), LocalDateTime.now()).toMinutes());
+        orden.setEsperaMinutos((int) Math.min(Integer.MAX_VALUE, (orden.getEsperaMinutos() == null ? 0 : orden.getEsperaMinutos()) + minutos));
+        orden.setEsperaDesde(null);
+        orden.setEsperaMotivo(null);
+    }
+
+    private void exigirSinEspera(OrdenServicio orden, String accion) {
+        if (orden.getEsperaDesde() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La orden " + orden.getFolio() + " está esperando una refacción (" + orden.getEsperaMotivo()
+                    + "). Cuando llegue, registra «Llegó la refacción» antes de " + accion + ".");
+        }
     }
 
     // ── Dinero ───────────────────────────────────────────────────────────────
@@ -576,6 +669,7 @@ public class OrdenServicioService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No se encontró la venta generada.")));
         orden.setEstado(ENTREGADA);
         orden.setFechaEntrega(LocalDateTime.now());
+        orden.setCodigoDesbloqueo(null);   // ya no hace falta y no se debe quedar guardado
 
         int dias = lineas.stream().map(l -> l.getProductoMaster().getDiasGarantia()).filter(Objects::nonNull)
                 .max(Integer::compare).orElse(0);
@@ -607,6 +701,8 @@ public class OrdenServicioService {
             }
         }
         orden.setEstado(CANCELADA);
+        cerrarEspera(orden);
+        orden.setCodigoDesbloqueo(null);
         orden.setMotivoCancelacion(dto.getMotivo().trim());
         registrar(orden, usuario, "Cancelada: " + dto.getMotivo().trim()
                 + (devuelto.signum() > 0 ? ". Anticipo devuelto en efectivo: $" + devuelto : ""));
@@ -645,7 +741,7 @@ public class OrdenServicioService {
     public List<OrdenServicioResponseDto> listar(Integer codti, Byte estado, Integer idTecnico, String username) {
         Usuario usuario = usuarioPorUsername(username);
         if (!esTecnicoEncargado(usuario)) validarGestionaTienda(usuario, codti);
-        return ordenRepository.buscar(codti, estado, idTecnico).stream().map(this::toDto).collect(Collectors.toList());
+        return ordenRepository.buscar(codti, estado, idTecnico).stream().map(this::resumen).collect(Collectors.toList());
     }
 
     /**
@@ -674,7 +770,9 @@ public class OrdenServicioService {
         return OrdenServicioPublicaResponseDto.builder()
                 .folio(o.getFolio()).equipo(o.getMarca() + " " + o.getModelo()).imei(imei)
                 .sucursal(o.getTienda().getNombre())
-                .estado(estadoDisplay(o.getEstado())).mensaje(mensajeParaElCliente(o.getEstado()))
+                .estado(estadoDisplay(o.getEstado())).mensaje(o.getEsperaDesde() != null && o.getEstado() != LISTA && o.getEstado() != ENTREGADA && o.getEstado() != CANCELADA
+                        ? "Estamos esperando una refacción para terminar la reparación de tu equipo. En cuanto llegue seguimos y te avisamos."
+                        : mensajeParaElCliente(o.getEstado()))
                 .fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).fechaPromesaHora(o.getFechaPromesaHora())
                 .fechaLista(o.getFechaLista()).fechaEntrega(o.getFechaEntrega())
                 .diasGarantia(entregada ? o.getDiasGarantia() : null).garantiaHasta(entregada ? o.getFechaGarantiaHasta() : null)
@@ -689,7 +787,117 @@ public class OrdenServicioService {
         if (usuario.getRol() != Rol.TECNICO) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un técnico tiene órdenes asignadas.");
         }
-        return ordenRepository.abiertasDelTecnico(usuario.getIdusuario()).stream().map(this::toDto).collect(Collectors.toList());
+        return ordenRepository.abiertasDelTecnico(usuario.getIdusuario()).stream().map(this::resumen).collect(Collectors.toList());
+    }
+
+    // ── Fotos del equipo ─────────────────────────────────────────────────────
+
+    public static final int MAX_FOTOS = 8;
+    public static final int MAX_BYTES_FOTO = 1_500_000;
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> fotos(Integer id, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirPuedeTrabajar(usuario, orden);
+        return listaDeFotos(id);
+    }
+
+    /** Guarda una foto (JPEG o PNG ya reducida por la pantalla). Devuelve las fotos de la orden. */
+    @Transactional
+    public List<Map<String, Object>> agregarFoto(Integer id, byte[] contenido, String descripcion, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirPuedeTrabajar(usuario, orden);
+        exigirEstado(orden, "agregar fotos", RECIBIDA, EN_REPARACION, LISTA);
+        if (contenido == null || contenido.length == 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto viene vacía.");
+        if (contenido.length > MAX_BYTES_FOTO) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "La foto pesa demasiado (máximo " + MAX_BYTES_FOTO / 1_000_000.0 + " MB). Reduzca su tamaño.");
+        }
+        String tipo = tipoDeImagen(contenido);
+        if (tipo == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se aceptan fotos JPEG o PNG.");
+        if (fotoRepository.countByOrden_Idorden(id) >= MAX_FOTOS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una orden admite hasta " + MAX_FOTOS + " fotos. Borre alguna antes de agregar otra.");
+        }
+        String desc = trimOrNull(descripcion);
+        if (desc != null && desc.length() > 120) desc = desc.substring(0, 120);
+        fotoRepository.save(OrdenServicioFoto.builder().orden(orden).usuario(usuario).descripcion(desc).tipo(tipo).contenido(contenido).build());
+        registrar(orden, usuario, "Foto agregada" + (desc != null ? ": " + desc : ""));
+        return listaDeFotos(id);
+    }
+
+    @Transactional(readOnly = true)
+    public OrdenServicioFoto foto(Integer id, Integer idfoto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirPuedeTrabajar(usuario, orden);
+        return fotoDeLaOrden(id, idfoto);
+    }
+
+    @Transactional
+    public List<Map<String, Object>> eliminarFoto(Integer id, Integer idfoto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirPuedeTrabajar(usuario, orden);
+        exigirEstado(orden, "borrar fotos", RECIBIDA, EN_REPARACION, LISTA);
+        OrdenServicioFoto f = fotoDeLaOrden(id, idfoto);
+        fotoRepository.delete(f);
+        registrar(orden, usuario, "Foto eliminada" + (f.getDescripcion() != null ? ": " + f.getDescripcion() : ""));
+        return listaDeFotos(id);
+    }
+
+    private OrdenServicioFoto fotoDeLaOrden(Integer id, Integer idfoto) {
+        return fotoRepository.findById(idfoto).filter(f -> f.getOrden().getIdorden().equals(id))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "La foto no existe en esta orden."));
+    }
+
+    private List<Map<String, Object>> listaDeFotos(Integer id) {
+        return fotoRepository.findByOrden_IdordenOrderByIdfoto(id).stream().map(f -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("idfoto", f.getIdfoto());
+            m.put("descripcion", f.getDescripcion());
+            m.put("tipo", f.getTipo());
+            m.put("fecha", f.getFecha());
+            return m;
+        }).collect(Collectors.toList());
+    }
+
+    /** image/jpeg o image/png según los primeros bytes (no se confía en lo que diga el cliente); null si no es ninguna. */
+    static String tipoDeImagen(byte[] b) {
+        if (b.length > 3 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF) return "image/jpeg";
+        if (b.length > 8 && (b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') return "image/png";
+        return null;
+    }
+
+    // ── Reporte de tiempos ───────────────────────────────────────────────────
+
+    /** Cuánto tarda el taller en un periodo (por defecto, los últimos 30 días). {@code codti} null = todas las sucursales. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> reporte(Integer codti, LocalDate desde, LocalDate hasta, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        if (codti == null) {
+            if (!(esSuperior(usuario) || esTecnicoEncargado(usuario))) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El reporte de todas las sucursales es del administrador o del técnico encargado.");
+            }
+        } else if (!esTecnicoEncargado(usuario)) {
+            validarGestionaTienda(usuario, codti);
+        }
+        LocalDate fin = hasta != null ? hasta : LocalDate.now();
+        LocalDate ini = desde != null ? desde : fin.minusDays(29);
+        if (ini.isAfter(fin)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha inicial no puede ser posterior a la final.");
+        if (java.time.temporal.ChronoUnit.DAYS.between(ini, fin) > 366) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El periodo del reporte no puede pasar de un año.");
+        }
+        List<OrdenServicio> ordenes = ordenRepository.recibidasEntre(ini.atStartOfDay(), fin.plusDays(1).atStartOfDay(), codti);
+        Map<String, Object> r = OrdenReporte.calcular(ordenes, LocalDateTime.now());
+        // Los equipos que esperan hoy en la tienda, sin importar cuándo se recibieron
+        List<OrdenServicio> listas = ordenRepository.listasSinRecoger(codti);
+        r.put("listasSinRecoger", listas.size());
+        r.put("listasMasDe30Dias", listas.stream().filter(o -> diasSinRecoger(o) >= DIAS_PLAZO_RECOGER).count());
+        r.put("desde", ini);
+        r.put("hasta", fin);
+        r.put("codti", codti);
+        return r;
     }
 
     // ── Piezas internas ──────────────────────────────────────────────────────
@@ -920,6 +1128,13 @@ public class OrdenServicioService {
 
     // ── Mapeo ────────────────────────────────────────────────────────────────
 
+    /** Para los listados: igual que el detalle, pero sin el código de desbloqueo (solo se ve al abrir la orden). */
+    private OrdenServicioResponseDto resumen(OrdenServicio o) {
+        OrdenServicioResponseDto d = toDto(o);
+        d.setCodigoDesbloqueo(null);
+        return d;
+    }
+
     private OrdenServicioResponseDto toDto(OrdenServicio o) {
         List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(o.getIdorden());
         List<OrdenServicioAnticipo> anticipos = anticipoRepository.findByOrden_IdordenOrderByIdanticipo(o.getIdorden());
@@ -950,6 +1165,10 @@ public class OrdenServicioService {
                 .autorizacionTotal(o.getAutorizacionTotal()).autorizacionTotalPrevio(o.getAutorizacionTotalPrevio())
                 .autorizacionMedio(o.getAutorizacionMedio()).autorizacionNota(o.getAutorizacionNota())
                 .autorizacionPor(o.getAutorizacionPor()).autorizacionFecha(o.getAutorizacionFecha())
+                .esperaMotivo(o.getEsperaMotivo()).esperaDesde(o.getEsperaDesde()).esperaMinutos(o.getEsperaMinutos())
+                .diasListaSinRecoger(o.getEstado() == LISTA ? diasSinRecoger(o) : null).ultimoRecordatorio(o.getUltimoRecordatorio())
+                .checklist(OrdenChecklist.deJson(o.getChecklistRecepcion())).codigoDesbloqueo(o.getCodigoDesbloqueo())
+                .totalFotos((int) fotoRepository.countByOrden_Idorden(o.getIdorden()))
                 .lineas(lineas.stream().map(l -> OrdenServicioResponseDto.OrdenLineaResponseDto.builder()
                         .iddetalle(l.getIddetalle()).codpro(l.getCodpro())
                         .nombre(l.getProductoMaster().getNombreBase()).tipoProducto(l.getProductoMaster().getTipo().name())

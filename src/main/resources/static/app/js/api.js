@@ -97,3 +97,37 @@ async function api(method, ruta, cuerpo) {
   }
   return desenvolver(json);
 }
+
+/** Una imagen protegida (necesita el token): se baja como archivo y se devuelve una dirección local para un <img>. */
+async function apiImagenUrl(ruta) {
+  const s = Sesion.obtener();
+  const res = await fetch(ruta, { headers: s && s.token ? { 'Authorization': 'Bearer ' + s.token } : {} });
+  if (!res.ok) throw new ApiError('No se pudo cargar la imagen (' + res.status + ')', { status: res.status });
+  return URL.createObjectURL(await res.blob());
+}
+
+/** Sube una imagen tal cual (cuerpo JPEG/PNG) y devuelve la respuesta de la API. */
+async function apiSubirImagen(ruta, blob) {
+  const s = Sesion.obtener();
+  const headers = { 'Content-Type': blob.type || 'image/jpeg' };
+  if (s && s.token) headers['Authorization'] = 'Bearer ' + s.token;
+  let res;
+  try { res = await fetch(ruta, { method: 'POST', headers, body: blob }); }
+  catch { throw new ApiError('Sin conexión con el servidor', { network: true }); }
+  if (res.status === 401) { Sesion.limpiar(); throw new ApiError('La sesión expiró: inicia sesión de nuevo', { auth: true, status: 401 }); }
+  let json = null;
+  try { json = await res.json(); } catch { /* sin cuerpo */ }
+  if (!res.ok) throw new ApiError((json && (json.description || json.title || json.message)) || ('Error del servidor (' + res.status + ')'), { status: res.status });
+  return desenvolver(json);
+}
+
+/** Reduce una foto del celular (varios MB) a un JPEG de hasta 1280 px por lado, que pesa unos 150 KB. */
+async function reducirFoto(archivo, lado = 1280, calidad = 0.72) {
+  const bmp = await createImageBitmap(archivo);
+  const f = Math.min(1, lado / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * f);
+  c.height = Math.round(bmp.height * f);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return await new Promise((ok, mal) => c.toBlob(b => b ? ok(b) : mal(new Error('No se pudo preparar la foto')), 'image/jpeg', calidad));
+}
