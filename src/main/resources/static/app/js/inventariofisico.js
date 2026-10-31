@@ -318,7 +318,7 @@ function dibujarInventarioResumen(cont, inv, enRevision) {
     c.innerHTML = lista.map(i => `
       <div class="orden-item">
         <div class="orden-cab"><span class="orden-folio">${escapar(i.nombreArticulo || i.codpro)}${i.esEquipo ? ' (equipos)' : ''}</span>${decision(i)}</div>
-        <div class="orden-equipo">${escapar(i.nombreSeccion || '')} Sistema ${i.stockSistema} · Contado ${i.conteo} ·
+        <div class="orden-equipo">${i.codpro ? `<strong>${escapar(i.codpro)}</strong> · ` : ''}${i.nombreSeccion ? escapar(i.nombreSeccion) + ' · ' : ''}Sistema ${i.stockSistema} · Contado ${i.conteo} ·
           <strong style="color:${i.diferencia < 0 ? '#dc2626' : i.diferencia > 0 ? '#059669' : '#64748b'};">${i.diferencia > 0 ? '+' : ''}${i.diferencia}</strong>${i.valorDiferencia != null && i.diferencia !== 0 ? ' · ' + formatoDinero(Math.abs(i.valorDiferencia)) : ''}</div>
         <div class="grupo-botones" style="margin-top:6px;">
           ${i.esEquipo ? `<button class="btn btn-gris btn-chico if-equipos" data-id="${i.iddetalleInv}">${ic('smartphone')} Ver equipos</button>` : ''}
