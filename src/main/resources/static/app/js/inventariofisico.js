@@ -118,7 +118,10 @@ async function ifDialogoAlcance(cont, alElegir) {
   cont.innerHTML = `
     <div class="tarjeta">
       <h2 style="margin-top:0;">¿Qué se va a inventariar?</h2>
-      <label class="casilla"><input type="radio" name="if-alcance" id="if-todo" checked> Todo lo que se cuente (se revisan las secciones contadas)</label>
+      <label class="casilla"><input type="radio" name="if-alcance" id="if-tienda" checked> Toda la tienda (recomendado: conteo completo o entrega de la tienda)</label>
+      <div class="ayuda" style="margin:0 0 8px 24px;">Todo lo que hay en el sistema y no se cuente queda como faltante: así se ve cuánto falta de toda la tienda.</div>
+      <label class="casilla"><input type="radio" name="if-alcance" id="if-todo"> Solo las secciones que cuente (conteo parcial)</label>
+      <div class="ayuda" style="margin:0 0 8px 24px;">Solo se revisa lo que está en las secciones donde cuentes algo; el resto de la tienda no se toca.</div>
       <label class="casilla"><input type="radio" name="if-alcance" id="if-solo"> Solo estas categorías:</label>
       <div id="if-lista-cat" class="oculto" style="max-height:260px; overflow:auto; border:1px solid var(--borde); border-radius:10px; padding:8px; margin:6px 0;">${ifCasillasDeCategorias(categorias)}</div>
       <div class="ayuda">Los equipos que estén en las categorías elegidas se cuentan por IMEI; lo que está en esas categorías y no se cuente queda como faltante. Lo demás de la tienda no se toca.</div>
@@ -126,13 +129,17 @@ async function ifDialogoAlcance(cont, alElegir) {
     </div>`;
   ifEnlazarCasillas(cont);
   const lista = document.getElementById('if-lista-cat');
+  document.getElementById('if-tienda').onchange = () => lista.classList.add('oculto');
   document.getElementById('if-todo').onchange = () => lista.classList.add('oculto');
   document.getElementById('if-solo').onchange = () => lista.classList.remove('oculto');
   document.getElementById('if-no').onclick = () => cargarInventarioFisico();
   document.getElementById('if-iniciar').onclick = () => {
+    if (document.getElementById('if-tienda').checked) {   // toda la tienda = todas las categorías principales (las subcategorías van incluidas)
+      return alElegir(categorias.filter(c => c.idCategoriaSuperior == null && c.tipo !== 'SERVICIO').map(c => Number(c.idcat)));
+    }
     if (document.getElementById('if-todo').checked) return alElegir(null);
     const elegidas = [...cont.querySelectorAll('.if-cat:checked')].map(c => Number(c.value));
-    if (elegidas.length === 0) { mostrarMensaje(root, 'Marca al menos una categoría, o elige «Todo lo que se cuente».', 'error'); return; }
+    if (elegidas.length === 0) { mostrarMensaje(root, 'Marca al menos una categoría, o elige «Toda la tienda».', 'error'); return; }
     alElegir(elegidas);
   };
 }
@@ -173,7 +180,7 @@ function dibujarInventarioSinCurso(cont, historial) {
 
 function ifBanda(inv, texto) {
   return `<div class="tarjeta">
-    <div style="font-weight:700;">Inventario #${inv.idinventario} · ${escapar(inv.nombreTienda || '')} · ${escapar(inv.estadoDisplay || '')}${inv.alcance ? ' · Solo: ' + escapar(inv.alcance) : ''}</div>
+    <div style="font-weight:700;">Inventario #${inv.idinventario} · ${escapar(inv.nombreTienda || '')} · ${escapar(inv.estadoDisplay || '')}${inv.alcance ? ' · Cubre: ' + escapar(inv.alcance) : ''}</div>
     <div class="ayuda">${texto}</div>
     <div class="ayuda">Inició ${ifFecha(inv.fechaInicio)} · ${escapar(inv.nombreEncargado || '')}</div>
   </div>`;
@@ -262,7 +269,7 @@ function dibujarInventarioContando(cont, inv) {
   document.getElementById('if-contar').onclick = contar;
   codigo.addEventListener('keydown', (e) => { if (e.key === 'Enter') contar(); });
   document.getElementById('if-enviar').onclick = () => {
-    if (!confirm('¿Terminaste de contar?\n\nSe genera el resumen y ya no podrás contar más. Lo que no escaneaste en las secciones que contaste quedará como faltante. Las existencias no cambian hasta que el administrador lo confirme.')) return;
+    if (!confirm('¿Terminaste de contar?\n\nSe genera el resumen y ya no podrás contar más. Lo que no escaneaste dentro de lo que cubre este inventario quedará como faltante. Las existencias no cambian hasta que el administrador lo confirme.')) return;
     ifEjecutar(api('POST', `/api/inventario-fisico/${inv.idinventario}/cerrar-conteo`));
   };
   document.getElementById('if-cancelar').onclick = () => ifCancelar(inv);
