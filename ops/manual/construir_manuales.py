@@ -669,7 +669,11 @@ Los datos de **esta computadora** (servidor, sucursal, impresoras) y del negocio
 - **Etiquetas:** la impresora y el tamaño de las etiquetas con código de barras (ver abajo).
 - **Negocio** (administrador): logo, datos del negocio, pie del ticket, plazo de **devoluciones** y **formas de pago** (por ejemplo, habilitar la tarjeta).
 - **Sucursales:** nombre, domicilio y teléfono que salen en el ticket de cada sucursal. Solo un administrador los cambia.
-- **Sistema:** versión del programa y datos para soporte.
+- **Sistema:** versión del programa y datos para soporte. Aquí también está **Actualizaciones**: el programa se actualiza solo (revisa al abrirse y cada 4 horas, baja la versión nueva y la instala **al cerrar** el programa). Si quieres instalarla de inmediato, pulsa **Buscar actualizaciones** y luego **Cerrar e instalar la actualización**; el programa se vuelve a abrir solo.
+
+### Respaldo y limpieza automáticos (los hace el servidor)
+- **Respaldo diario:** cada noche a las 2:30 el servidor guarda una copia completa de la base de datos en dos discos. Se conservan las últimas 14 copias y una por mes. Si falla, llega un aviso a los administradores.
+- **Limpieza:** cada noche, después del respaldo, se borran las sesiones de entrada de más de 30 días, los avisos ya leídos de más de 90 días y el historial de cambios del catálogo de más de 24 meses. Las ventas, la caja, las compras y la nómina nunca se borran. Si la noche anterior no hubo respaldo, la limpieza no corre.
 
 ### Configurar y probar la impresora de etiquetas
 1. En **Etiquetas** elige la **impresora** y el **tipo de papel**: **rollo continuo** (como el ticket) o **etiqueta de tamaño fijo** con su ancho y alto en milímetros (por ejemplo, 30 × 14).

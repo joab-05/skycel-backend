@@ -194,6 +194,18 @@ public class RespaldoService {
 
     // ── Cuáles copias se quedan ──────────────────────────────────────────────
 
+    /** ¿Hay una copia de las últimas 26 horas? Sin respaldo automático activo no se puede exigir, y se da por cumplido. */
+    public boolean hayRespaldoReciente() {
+        if (!activo) return true;
+        if (carpetas.isEmpty() || !Files.isDirectory(carpetas.get(0))) return false;
+        try (Stream<Path> s = Files.list(carpetas.get(0))) {
+            long limite = System.currentTimeMillis() - 26L * 3600 * 1000;
+            return s.filter(f -> ARCHIVO.matcher(f.getFileName().toString()).matches()).anyMatch(f -> f.toFile().lastModified() >= limite);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     /** Borra las copias viejas de una carpeta: se queda con las últimas {@code dias} y con la más nueva de cada uno de los últimos {@code meses} meses. */
     static void rotar(Path carpeta, LocalDate hoy, int dias, int meses) throws IOException {
         if (!Files.isDirectory(carpeta)) return;
