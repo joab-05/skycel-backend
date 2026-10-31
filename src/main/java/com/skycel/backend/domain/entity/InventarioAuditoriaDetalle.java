@@ -39,6 +39,17 @@ public class InventarioAuditoriaDetalle {
     @Column(name = "motivo", length = 255)
     private String motivo;
 
+    /** Lo que contó el encargado, si el administrador lo corrigió al revisar (queda en blanco si nadie lo tocó). */
+    @Column(name = "conteo_original")
+    private Short conteoOriginal;
+
+    /** Por qué y quién corrigió el conteo en la revisión. */
+    @Column(name = "correccion_motivo", length = 255)
+    private String correccionMotivo;
+
+    @Column(name = "correccion_por", length = 60)
+    private String correccionPor;
+
     @Column(name = "codpro", nullable = false, length = 25)
     private String codpro;
 

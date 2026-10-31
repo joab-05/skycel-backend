@@ -63,6 +63,19 @@ class PermisoServiceTest {
     }
 
     @Test
+    @DisplayName("administrar los permisos: solo se suma a quien root se lo dio; los demás administradores no lo tienen")
+    void administrarPermisos_soloQuienRootAutorizo() {
+        service.sembrar();
+        var tienda = com.skycel.backend.domain.entity.Tienda.builder().codti(1).nombre("T").build();
+        var joab = com.skycel.backend.domain.entity.Usuario.builder().username("joab").rol(Rol.ADMIN).tienda(tienda).administraPermisos(true).build();
+        var otro = com.skycel.backend.domain.entity.Usuario.builder().username("otro").rol(Rol.ADMIN).tienda(tienda).build();
+
+        assertThat(service.deUsuario(joab)).contains(PermisoService.PERMISOS_ADMIN);
+        assertThat(service.deUsuario(otro)).doesNotContain(PermisoService.PERMISOS_ADMIN);
+        assertThat(service.deRol(Rol.ADMIN)).doesNotContain(PermisoService.PERMISOS_ADMIN);
+    }
+
+    @Test
     @DisplayName("al sembrar, cada rol queda con lo que podía hacer antes; ROOT puede todo")
     void valoresIniciales() {
         service.sembrar();

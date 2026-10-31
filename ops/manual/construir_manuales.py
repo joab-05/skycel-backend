@@ -74,7 +74,7 @@ Cada persona tiene un rol, y el sistema solo le muestra lo que le corresponde.
 | Empleados | No | No | Sí | No |
 
 > Un **encargado** solo ve la información de su tienda. Un **administrador** puede cambiar de sucursal o ver todas. Un **técnico** solo ve las órdenes del taller.
-> El usuario **root** puede cambiar lo que puede hacer cada rol en **Permisos** (sección Administración). La tabla de arriba es lo que trae el sistema de fábrica.
+> El usuario **root** (y quien root autorice) puede cambiar lo que puede hacer cada rol en **Permisos** (sección Administración). La tabla de arriba es lo que trae el sistema de fábrica.
 """
 
 # ───────────────────────────── Punto de Venta ─────────────────────────────
@@ -354,8 +354,9 @@ Al aperturar, el sistema pregunta qué cubre el inventario:
 ### El administrador confirma
 1. Abre el inventario (arriba aparece qué sucursales tienen uno **por revisar**). El resumen muestra, por artículo, su **código**, lo que dice el sistema, lo contado, la diferencia y su valor a costo. En los equipos, **Ver equipos** lista los IMEI que no se encontraron.
 2. Para cada diferencia elige **Ajustar** (las existencias se corrigen al cerrar) o **Justificar** (no se ajusta y queda escrito el motivo). **Ajustar todo lo pendiente** decide las que falten. Un equipo que **sobra** no se da de alta solo: se justifica o se registra en **Equipos**.
-3. Si algo no cuadra, **Devolver para recontar**: el conteo regresa al encargado y las decisiones se borran.
-4. Pulsa **Confirmar y cerrar inventario**. Se aplican los ajustes (a un accesorio se le suma o resta la diferencia; los equipos no encontrados se dan de baja) y queda en el **historial**.
+3. Si el encargado se equivocó en pocas piezas, pulsa **Corregir lo contado** (en un equipo, **Ver y corregir equipos** y marca **Sí estaba** o **No estaba**). Escribe la cantidad correcta y el **motivo**: queda registrado quién lo corrigió y cuánto había contado el encargado.
+4. Si hay muchos errores, **Devolver para recontar**: el conteo regresa al encargado y las decisiones se borran.
+5. Pulsa **Confirmar y cerrar inventario**. Se aplican los ajustes (a un accesorio se le suma o resta la diferencia; los equipos no encontrados se dan de baja) y queda en el **historial**.
 
 El resumen se puede **imprimir** (con renglones de firma) y **exportar** a Excel. Un inventario sin terminar se puede **cancelar**: no cambia nada.
 """

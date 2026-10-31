@@ -1,6 +1,7 @@
 package com.skycel.backend.controller;
 
 import com.skycel.backend.domain.enums.Rol;
+import com.skycel.backend.repository.UsuarioRepository;
 import com.skycel.backend.service.PermisoService;
 import com.skycel.backend.shared.dto.StandardApiResponse;
 import com.skycel.backend.shared.response.ResponseEntityBuilder;
@@ -19,7 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Qué puede hacer cada rol: cualquiera consulta los suyos; solo root los cambia. */
+/** Qué puede hacer cada rol: cualquiera consulta los suyos; solo root los cambia (o quien root autorice). */
 @RestController
 @RequestMapping("/api/permisos")
 @RequiredArgsConstructor
@@ -27,6 +28,7 @@ import java.util.Map;
 public class PermisoController {
 
     private final PermisoService permisoService;
+    private final UsuarioRepository usuarioRepository;
 
     @Data
     public static class AsignacionDto {
@@ -45,22 +47,23 @@ public class PermisoController {
                 .filter(r -> r != null).findFirst().orElse(null);
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("rol", rol != null ? rol.name() : null);
-        r.put("permisos", rol != null ? permisoService.deRol(rol) : List.of());
+        r.put("permisos", usuarioRepository.findByUsername(user.getUsername())
+                .map(permisoService::deUsuario).orElseGet(() -> rol != null ? permisoService.deRol(rol) : List.of()));
         return ResponseEntityBuilder.ok(r, "permisos");
     }
 
-    @Operation(summary = "Todos los permisos con los roles que los tienen (solo root)")
+    @Operation(summary = "Todos los permisos con los roles que los tienen (root o quien root autorice)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/catalogo")
-    @PreAuthorize("hasRole('ROOT')")
+    @PreAuthorize("hasRole('ROOT') or @adminPermisos.puede()")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> catalogo() {
         return ResponseEntityBuilder.ok(permisoService.catalogo(), "permisos");
     }
 
-    @Operation(summary = "Cambia qué roles tienen un permiso (solo root)")
+    @Operation(summary = "Cambia qué roles tienen un permiso (root o quien root autorice)")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/{codigo}")
-    @PreAuthorize("hasRole('ROOT')")
+    @PreAuthorize("hasRole('ROOT') or @adminPermisos.puede()")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> asignar(@PathVariable String codigo, @RequestBody AsignacionDto dto) {
         return ResponseEntityBuilder.updated(permisoService.asignar(codigo, dto.getRoles()), "permiso");
     }

@@ -281,6 +281,93 @@ public class InventarioFisicoService {
         return toMapDetalle(detalleRepository.save(d), null);
     }
 
+    /**
+     * El administrador corrige la cantidad contada de un accesorio al revisar, sin regresar el conteo: pide el motivo y queda
+     * guardado lo que había contado el encargado, quién lo corrigió y por qué. Su decisión anterior sobre ese artículo se borra.
+     */
+    @Transactional
+    public Map<String, Object> corregirConteoRevision(Integer idinventario, Integer iddetalleInv, Integer conteo, String motivo, String username) {
+        InventarioAuditoria a = enRevisionParaCorregir(idinventario, username);
+        InventarioAuditoriaDetalle d = detalleDe(idinventario, iddetalleInv);
+        if (d.getProductoMaster() != null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los equipos se corrigen por IMEI: marca cuál sí estaba o cuál no.");
+        if (conteo == null || conteo < 0 || conteo > Short.MAX_VALUE)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El conteo debe ser un número entre 0 y " + Short.MAX_VALUE + ".");
+        if (conteo.shortValue() == d.getConteo())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esa ya es la cantidad contada.");
+        anotarCorreccion(d, motivo, username);
+        d.setConteo(conteo.shortValue());
+        d = detalleRepository.save(d);
+        recalcularTotales(a);
+        return toMapDetalle(d, null);
+    }
+
+    /** Lo mismo para un equipo: marca que un IMEI sí estaba (de los que no se encontraron) o que no estaba (de los contados). */
+    @Transactional
+    public Map<String, Object> corregirEquipoRevision(Integer idinventario, String imei, boolean encontrado, String motivo, String username) {
+        InventarioAuditoria a = enRevisionParaCorregir(idinventario, username);
+        String id = imei == null ? "" : imei.replaceAll("[\\s-]", "").toUpperCase();
+        InventarioAuditoriaDetalle d;
+        if (encontrado) {
+            ProductoImei u = imeiRepository.findByImei(id)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "El IMEI '" + imei + "' no existe."));
+            if (unidadRepository.findByInventarioAuditoria_IdinventarioAndImei(idinventario, u.getImei()).isPresent())
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Ese equipo ya está contado.");
+            boolean enSistema = ProductoImei.DISPONIBLE.equals(u.getEstado()) && u.getTienda() != null
+                    && u.getTienda().getCodti().equals(a.getTienda().getCodti());
+            if (!enSistema)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Solo se marca como encontrado un equipo que el sistema tiene disponible en esta sucursal.");
+            d = detalleRepository.findByInventarioAuditoria_IdinventarioAndCodpro(idinventario, claveEquipo(u.getProductoMaster()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Ese equipo no forma parte de lo que cubre este inventario."));
+            anotarCorreccion(d, motivo, username);
+            unidadRepository.save(InventarioAuditoriaUnidad.builder()
+                    .inventarioAuditoria(a).productoMaster(u.getProductoMaster()).imei(u.getImei()).enSistema(true).build());
+            d.setConteo((short) (d.getConteo() + 1));
+        } else {
+            InventarioAuditoriaUnidad u = unidadRepository.findByInventarioAuditoria_IdinventarioAndImei(idinventario, id)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "El equipo '" + imei + "' no está en este conteo."));
+            d = detalleRepository.findByInventarioAuditoria_IdinventarioAndCodpro(idinventario, claveEquipo(u.getProductoMaster()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No se encontró el artículo de ese equipo en el conteo."));
+            anotarCorreccion(d, motivo, username);
+            unidadRepository.delete(u);
+            d.setConteo((short) Math.max(0, d.getConteo() - 1));
+        }
+        d = detalleRepository.save(d);
+        recalcularTotales(a);
+        return toMapDetalle(d, d.getProductoMaster().getNombreBase());
+    }
+
+    /** Los totales de faltantes y sobrantes que ve quien revisa se vuelven a contar después de corregir. */
+    private void recalcularTotales(InventarioAuditoria a) {
+        List<InventarioAuditoriaDetalle> filas = detalleRepository.findByInventarioAuditoria_IdinventarioOrderByIddetalleInvAsc(a.getIdinventario());
+        a.setTotalFaltantes((int) filas.stream().filter(x -> diferenciaDe(x) < 0).count());
+        a.setTotalSobrantes((int) filas.stream().filter(x -> diferenciaDe(x) > 0).count());
+        auditoriaRepository.save(a);
+    }
+
+    private InventarioAuditoria enRevisionParaCorregir(Integer idinventario, String username) {
+        InventarioAuditoria a = auditoriaDe(idinventario);
+        exigirConfirmar(usuarioPorUsername(username));
+        if (a.getEstado() != ESTADO_EN_REVISION)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se corrige el conteo de un inventario que está en revisión.");
+        return a;
+    }
+
+    /** Guarda lo que había contado el encargado (solo la primera vez), el motivo y quién corrigió; la decisión previa se borra. */
+    private void anotarCorreccion(InventarioAuditoriaDetalle d, String motivo, String username) {
+        if (motivo == null || motivo.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo de la corrección.");
+        if (d.getConteoOriginal() == null) d.setConteoOriginal(d.getConteo());
+        String m = motivo.trim();
+        String previo = d.getCorreccionMotivo();
+        String junto = previo == null || previo.isBlank() ? m : previo + " | " + m;
+        d.setCorreccionMotivo(junto.length() > 255 ? junto.substring(junto.length() - 255) : junto);
+        d.setCorreccionPor(username);
+        d.setEstado(DETALLE_PENDIENTE);
+        d.setMotivo(null);
+    }
+
     /** Decide «ajustar» en todas las diferencias que siguen pendientes (menos los equipos que sobran, que no se pueden dar de alta solos). */
     @Transactional
     public Map<String, Object> ajustarTodo(Integer idinventario, String username) {
@@ -652,6 +739,11 @@ public class InventarioFisicoService {
         m.put("stockSistema", contando ? null : d.getStockSistema());
         m.put("diferencia", contando ? null : diferenciaDe(d));
         m.put("estado", d.getEstado());
+        if (d.getConteoOriginal() != null && !contando) {
+            m.put("conteoOriginal", d.getConteoOriginal());
+            m.put("correccionMotivo", d.getCorreccionMotivo());
+            m.put("correccionPor", d.getCorreccionPor());
+        }
         return m;
     }
 }

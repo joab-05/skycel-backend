@@ -1,5 +1,5 @@
 /**
- * Permisos (solo root): qué puede hacer cada tipo de usuario. Cada casilla marca si ese rol puede hacer esa acción; el cambio se guarda
+ * Permisos (root, o quien root autorice): qué puede hacer cada tipo de usuario. Cada casilla marca si ese rol puede hacer esa acción; el cambio se guarda
  * al instante y vale para JSystem y para la web. Root siempre puede todo y no se configura. Igual que «Permisos» de JSystem.
  */
 
@@ -7,7 +7,7 @@ const PERMISOS_ROL_NOMBRE = { ADMIN: 'Administrador', ENCARGADO_TIENDA: 'Encarga
 
 async function pantallaPermisos() {
   const s = Sesion.obtener();
-  if (s.rol !== 'ROOT') { root.innerHTML = '<div class="tarjeta">Solo root puede cambiar los permisos.</div>'; return; }
+  if (!Sesion.tiene('PERMISOS_ADMIN')) { root.innerHTML = '<div class="tarjeta">Solo root, o quien root autorice, puede cambiar los permisos.</div>'; return; }
   root.innerHTML = `
     ${cabeceraPantalla(ic('lock') + ' Permisos', 'Qué puede hacer cada tipo de usuario')}
     <div class="mensaje info">Marca lo que puede hacer cada rol. El cambio se guarda al instante; la persona lo ve la próxima vez que abra o recargue la pantalla.</div>

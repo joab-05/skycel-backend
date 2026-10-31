@@ -392,6 +392,72 @@ class InventarioFisicoServiceTest {
     }
 
     @Test
+    @DisplayName("corregirConteoRevision: guarda lo que contó el encargado, quién corrigió y por qué, y borra la decisión previa")
+    void corregirConteoRevision_dejaHuella() {
+        InventarioAuditoria a = auditoriaCatalogando();
+        InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder()
+                .iddetalleInv(500).inventarioAuditoria(a).codpro("ACC-001").conteo((short) 8).stockSistema((short) 10)
+                .estado(InventarioFisicoService.DETALLE_JUSTIFICADO).motivo("x").build();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findById(500)).thenReturn(Optional.of(d));
+
+        Map<String, Object> r = service.corregirConteoRevision(10, 500, 9, "Faltó contar un cable", "admin");
+
+        assertThat(d.getConteo()).isEqualTo((short) 9);
+        assertThat(d.getConteoOriginal()).isEqualTo((short) 8);
+        assertThat(d.getCorreccionPor()).isEqualTo("admin");
+        assertThat(d.getEstado()).isEqualTo(InventarioFisicoService.DETALLE_PENDIENTE);
+        assertThat(d.getMotivo()).isNull();
+        assertThat(r.get("conteoOriginal")).isEqualTo((short) 8);
+
+        service.corregirConteoRevision(10, 500, 10, "Era uno más", "admin");
+        assertThat(d.getConteoOriginal()).isEqualTo((short) 8);   // sigue siendo lo que contó el encargado
+        assertThat(d.getCorreccionMotivo()).isEqualTo("Faltó contar un cable | Era uno más");
+    }
+
+    @Test
+    @DisplayName("corregirConteoRevision: exige motivo y que lo haga quien confirma")
+    void corregirConteoRevision_validaciones() {
+        InventarioAuditoria a = auditoriaCatalogando();
+        InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder()
+                .iddetalleInv(500).inventarioAuditoria(a).codpro("ACC-001").conteo((short) 8).stockSistema((short) 10)
+                .estado(InventarioFisicoService.DETALLE_PENDIENTE).build();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        lenient().when(detalleRepository.findById(500)).thenReturn(Optional.of(d));
+
+        assertThatThrownBy(() -> service.corregirConteoRevision(10, 500, 9, "  ", "admin"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        assertThatThrownBy(() -> service.corregirConteoRevision(10, 500, 9, "Motivo", "enc2"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        assertThat(d.getConteo()).isEqualTo((short) 8);
+    }
+
+    @Test
+    @DisplayName("corregirEquipoRevision: marcar que un IMEI no estaba lo quita del conteo; marcar que sí estaba lo suma")
+    void corregirEquipoRevision_quitaYSuma() {
+        InventarioAuditoria a = auditoriaCatalogando();
+        ProductoMaster celular = ProductoMaster.builder().idprodmaster(7).tipo(TipoProducto.CELULAR).nombreBase("Celular A15").build();
+        InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder().iddetalleInv(500).inventarioAuditoria(a)
+                .productoMaster(celular).codpro("EQ7").conteo((short) 2).stockSistema((short) 3)
+                .estado(InventarioFisicoService.DETALLE_PENDIENTE).build();
+        InventarioAuditoriaUnidad contada = InventarioAuditoriaUnidad.builder().imei("350000000000011").productoMaster(celular).enSistema(true).build();
+        ProductoImei faltante = ProductoImei.builder().imei("350000000000022").productoMaster(celular).tienda(zocalo).estado("DISPONIBLE").build();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findByInventarioAuditoria_IdinventarioAndCodpro(10, "EQ7")).thenReturn(Optional.of(d));
+        when(unidadRepository.findByInventarioAuditoria_IdinventarioAndImei(10, "350000000000011")).thenReturn(Optional.of(contada));
+        when(imeiRepository.findByImei("350000000000022")).thenReturn(Optional.of(faltante));
+
+        service.corregirEquipoRevision(10, "350000000000011", false, "No estaba, era otro modelo", "admin");
+        assertThat(d.getConteo()).isEqualTo((short) 1);
+        verify(unidadRepository).delete(contada);
+
+        service.corregirEquipoRevision(10, "350000000000022", true, "Estaba en el mostrador", "admin");
+        assertThat(d.getConteo()).isEqualTo((short) 2);
+        assertThat(d.getConteoOriginal()).isEqualTo((short) 2);
+        verify(unidadRepository).save(any(InventarioAuditoriaUnidad.class));
+    }
+
+    @Test
     @DisplayName("devolver: el administrador regresa el conteo al encargado y las decisiones se borran")
     void devolver_reabre() {
         InventarioAuditoria a = auditoriaCatalogando();

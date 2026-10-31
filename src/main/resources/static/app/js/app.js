@@ -198,7 +198,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (tiene('TALLER_TRABAJAR')) items.push({ h: '#/taller', i: ic('wrench'), t: 'Taller', grupo: 'Taller' });
   if (tiene('ORDEN_CONSULTAR', 'ORDEN_RECIBIR', 'TALLER_TRABAJAR')) items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
   if (tiene('EMPLEADOS_ADMIN')) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
-  if (s.rol === 'ROOT') items.push({ h: '#/permisos', i: ic('lock'), t: 'Permisos', grupo: 'Administración' });
+  if (Sesion.tiene('PERMISOS_ADMIN')) items.push({ h: '#/permisos', i: ic('lock'), t: 'Permisos', grupo: 'Administración' });
   if (tiene('NOMINA')) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
   if (tiene('NOMINA')) items.push({ h: '#/comisiones', i: ic('percent'), t: 'Comisiones', grupo: 'Administración' });
   if (tiene('DESCANSOS')) items.push({ h: '#/descansos', i: ic('calendar'), t: 'Descansos', grupo: 'Administración' });

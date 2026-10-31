@@ -61,7 +61,7 @@ public class AuthService {
                 .rol(usuario.getRol().name())
                 .codti(usuario.getTienda().getCodti())
                 .tecnicoEncargado(Boolean.TRUE.equals(usuario.getTecnicoEncargado()))
-                .permisos(permisoService.deRol(usuario.getRol()))
+                .permisos(permisoService.deUsuario(usuario))
                 .build();
     }
 

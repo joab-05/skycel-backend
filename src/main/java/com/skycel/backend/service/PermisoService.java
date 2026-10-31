@@ -28,6 +28,9 @@ public class PermisoService {
 
     private static final String ROLE_ = "ROLE_";
 
+    /** Código que se le suma a los permisos de quien puede cambiar los permisos sin ser root (no es un permiso de rol). */
+    public static final String PERMISOS_ADMIN = "PERMISOS_ADMIN";
+
     private final PermisoRolRepository permisoRolRepository;
 
     /** código del permiso → roles que lo tienen (sin ROOT, que siempre lo tiene). */
@@ -93,6 +96,13 @@ public class PermisoService {
     /** Los códigos de todos los permisos de un rol (ROOT: todos). */
     public List<String> deRol(Rol rol) {
         return Arrays.stream(Permiso.values()).map(Permiso::name).filter(c -> tiene(rol, c)).collect(Collectors.toList());
+    }
+
+    /** Los permisos de su rol y, si root se lo dio, el de administrar los permisos. */
+    public List<String> deUsuario(com.skycel.backend.domain.entity.Usuario u) {
+        List<String> codigos = new ArrayList<>(deRol(u.getRol()));
+        if (u.getRol() != Rol.ROOT && Boolean.TRUE.equals(u.getAdministraPermisos())) codigos.add(PERMISOS_ADMIN);
+        return codigos;
     }
 
     // ── Administración (solo root) ───────────────────────────────────────────

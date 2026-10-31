@@ -54,6 +54,11 @@ public class Usuario {
     @Builder.Default
     private Boolean tecnicoEncargado = false;
 
+    /** Puede cambiar qué hace cada tipo de usuario (Permisos) aunque no sea ROOT: lo da root a quien de verdad lo necesita. */
+    @Column(name = "administra_permisos", columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Builder.Default
+    private Boolean administraPermisos = false;
+
     @Column(name = "activo", columnDefinition = "TINYINT DEFAULT 1")
     private Boolean activo;
 

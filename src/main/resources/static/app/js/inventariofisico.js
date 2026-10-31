@@ -321,11 +321,13 @@ function dibujarInventarioResumen(cont, inv, enRevision) {
         <div class="orden-equipo">${i.codpro ? `<strong>${escapar(i.codpro)}</strong> · ` : ''}${i.nombreSeccion ? escapar(i.nombreSeccion) + ' · ' : ''}Sistema ${i.stockSistema} · Contado ${i.conteo} ·
           <strong style="color:${i.diferencia < 0 ? '#dc2626' : i.diferencia > 0 ? '#059669' : '#64748b'};">${i.diferencia > 0 ? '+' : ''}${i.diferencia}</strong>${i.valorDiferencia != null && i.diferencia !== 0 ? ' · ' + formatoDinero(Math.abs(i.valorDiferencia)) : ''}</div>
         <div class="grupo-botones" style="margin-top:6px;">
-          ${i.esEquipo ? `<button class="btn btn-gris btn-chico if-equipos" data-id="${i.iddetalleInv}">${ic('smartphone')} Ver equipos</button>` : ''}
+          ${i.esEquipo ? `<button class="btn btn-gris btn-chico if-equipos" data-id="${i.iddetalleInv}">${ic('smartphone')} ${decide ? 'Ver y corregir equipos' : 'Ver equipos'}</button>` : ''}
+          ${decide && !i.esEquipo ? `<button class="btn btn-gris btn-chico if-recontado" data-id="${i.iddetalleInv}">${ic('pencil')} Corregir lo contado</button>` : ''}
           ${decide && i.diferencia !== 0 ? (i.estado === DET_PENDIENTE
             ? `${!(i.esEquipo && i.diferencia > 0) ? `<button class="btn btn-verde btn-chico if-ajustar" data-id="${i.iddetalleInv}">${ic('circle-check')} Ajustar</button>` : ''}<button class="btn btn-gris btn-chico if-justificar" data-id="${i.iddetalleInv}">${ic('pencil')} Justificar</button>`
             : `<button class="btn btn-gris btn-chico if-deshacer" data-id="${i.iddetalleInv}">${ic('undo-2')} Deshacer</button>`) : ''}
         </div>
+        ${i.conteoOriginal != null ? `<div class="ayuda" style="margin-top:4px;">Corregido por ${escapar(i.correccionPor || '')}: el encargado contó ${i.conteoOriginal}. Motivo: ${escapar(i.correccionMotivo || '')}</div>` : ''}
         <div class="oculto" id="if-eq-${i.iddetalleInv}"></div>
       </div>`).join('');
     const item = (b) => items.find(x => x.iddetalleInv === Number(b.dataset.id));
@@ -337,14 +339,31 @@ function dibujarInventarioResumen(cont, inv, enRevision) {
       if (!motivo) return;
       ifEjecutar(api('POST', `/api/inventario-fisico/${inv.idinventario}/detalle/${b.dataset.id}/resolver?accion=JUSTIFICAR&motivo=${encodeURIComponent(motivo)}`));
     });
+    c.querySelectorAll('.if-recontado').forEach(b => b.onclick = () => {
+      const i = item(b);
+      const txt = prompt(`${i.nombreArticulo}\nEl encargado contó ${i.conteo}; el sistema tiene ${i.stockSistema}.\n\nCantidad correcta:`, String(i.conteo));
+      if (txt == null) return;
+      const n = Number(txt);
+      if (txt.trim() === '' || !Number.isInteger(n) || n < 0) { mostrarMensaje(root, 'Escribe un número entero.', 'error'); return; }
+      const motivo = (prompt('Motivo de la corrección (queda registrado):') || '').trim();
+      if (!motivo) return;
+      ifEjecutar(api('PUT', `/api/inventario-fisico/${inv.idinventario}/detalle/${i.iddetalleInv}/revision/conteo?conteo=${n}&motivo=${encodeURIComponent(motivo)}`));
+    });
+    const corregirEquipo = (imei, encontrado) => {
+      const motivo = (prompt(`${encontrado ? 'Sí estaba' : 'No estaba'}: ${imei}\n\nMotivo de la corrección (queda registrado):`) || '').trim();
+      if (!motivo) return;
+      ifEjecutar(api('PUT', `/api/inventario-fisico/${inv.idinventario}/revision/equipo/${encodeURIComponent(imei)}?encontrado=${encontrado}&motivo=${encodeURIComponent(motivo)}`));
+    };
     c.querySelectorAll('.if-equipos').forEach(b => b.onclick = () => {
       const i = item(b);
       const panel = document.getElementById('if-eq-' + i.iddetalleInv);
       panel.classList.toggle('oculto');
       if (panel.classList.contains('oculto')) return;
+      const boton = (imei, encontrado) => decide ? ` <button class="btn btn-gris btn-chico if-eq-corregir" data-imei="${escapar(imei)}" data-encontrado="${encontrado}">${encontrado ? 'Sí estaba' : 'No estaba'}</button>` : '';
       panel.innerHTML = `<div class="ayuda" style="margin-top:6px;">
-        ${(i.imeis || []).length ? `<strong>Contados (${i.imeis.length}):</strong><br>` + i.imeis.map(u => `<span style="font-family:monospace;">${escapar(u.imei)}</span>${u.enSistema === false ? ' ← no estaba disponible en esta sucursal' : ''}`).join('<br>') : ''}
-        ${(i.faltantesImeis || []).length ? `<br><strong>No se encontraron (${i.faltantesImeis.length}):</strong><br>` + i.faltantesImeis.map(u => `<span style="font-family:monospace;">${escapar(u.imei)}</span>`).join('<br>') : ''}</div>`;
+        ${(i.imeis || []).length ? `<strong>Contados (${i.imeis.length}):</strong><br>` + i.imeis.map(u => `<span style="font-family:monospace;">${escapar(u.imei)}</span>${u.enSistema === false ? ' ← no estaba disponible en esta sucursal' : ''}${boton(u.imei, false)}`).join('<br>') : ''}
+        ${(i.faltantesImeis || []).length ? `<br><strong>No se encontraron (${i.faltantesImeis.length}):</strong><br>` + i.faltantesImeis.map(u => `<span style="font-family:monospace;">${escapar(u.imei)}</span>${boton(u.imei, true)}`).join('<br>') : ''}</div>`;
+      panel.querySelectorAll('.if-eq-corregir').forEach(q => q.onclick = () => corregirEquipo(q.dataset.imei, q.dataset.encontrado === 'true'));
     });
   };
   pintar();
