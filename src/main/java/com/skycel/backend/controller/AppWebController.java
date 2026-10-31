@@ -15,4 +15,10 @@ public class AppWebController {
     public String app() {
         return "forward:/app/index.html";
     }
+
+    /** Página pública para que el cliente siga su reparación (la abre el QR del comprobante). */
+    @GetMapping({"/seguimiento", "/seguimiento/"})
+    public String seguimiento() {
+        return "forward:/seguimiento/index.html";
+    }
 }

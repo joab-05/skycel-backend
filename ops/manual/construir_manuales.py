@@ -476,15 +476,34 @@ Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en e
 4. Escribe el **tiempo estimado**, en horas o días (por omisión, 3 horas; máximo 30 días). El sistema dice «Se le promete para el…» con día y hora.
 5. Si el cliente deja un **anticipo**, regístralo con su forma de pago. En efectivo entra a la caja del turno.
 6. Pulsa **Recibir equipo**. Se genera el folio **OS-…** que se le entrega al cliente.
+7. **Imprime el comprobante** y entrégaselo al cliente (el programa te lo ofrece al terminar; también está en el botón **Comprobante** o **Imprimir comprobante** de la orden). Lleva el folio, el equipo, la falla, el anticipo, la fecha prometida, un **código QR** para seguir la reparación desde su celular y las condiciones del servicio. Que el cliente lo **firme**.
 
-La recepción también funciona **sin conexión** en JSystem.
+La recepción también funciona **sin conexión** en JSystem: el comprobante sale con un folio provisional y sin QR; el definitivo (OS-…) se le da cuando se envíe al servidor.
+
+### Avisar al cliente por WhatsApp
+En cualquier orden pulsa **Avisar por WhatsApp**. El sistema escribe el mensaje por ti y abre WhatsApp con el teléfono del cliente: solo revisa y pulsa **enviar**. Por omisión elige el aviso que corresponde al momento, o puedes escoger otro de la lista:
+- **Equipo recibido:** con su folio, la fecha prometida y el enlace para seguir la reparación.
+- **Cotización para autorizar:** el diagnóstico y el costo, pidiéndole que responda SÍ o NO.
+- **Cambio de precio:** de cuánto a cuánto cambió, pidiendo su autorización.
+- **Equipo listo:** cuánto queda por pagar y dónde recogerlo.
+- **Recordatorio de recoger** y **Gracias y garantía** al entregar.
+
+Cada aviso queda anotado en la **bitácora** de la orden (qué se avisó y quién lo hizo). El teléfono del cliente debe tener 10 dígitos; si no, corrígelo en **Clientes**. El cliente también puede seguir su reparación solo, con el QR del comprobante o en la página de seguimiento, con su folio y los últimos 4 dígitos de su teléfono.
+
+### Autorización del cliente al precio
+Para que no haya sorpresas al cobrar, el costo se **cotiza y el cliente lo autoriza**:
+1. El técnico revisa el equipo, agrega los servicios y refacciones con su precio y pulsa **Pedir autorización**. La orden queda «Esperando la respuesta del cliente».
+2. En la tienda se le avisa al cliente (WhatsApp o llamada). Cuando responde, se pulsa **Respuesta del cliente**, se marca si **autorizó** o **no**, **cómo** lo dijo (en persona, llamada, WhatsApp) y, si quieres, una nota. Queda registrado quién lo anotó y cuándo.
+3. Mientras falte la autorización, **no se puede marcar la orden como lista ni entregarla**. Si el cliente no autoriza, se cancela la orden o se cambia la cotización y se vuelve a pedir.
+4. Si **después de autorizado** se agrega o quita un servicio y el total cambia, la autorización **vuelve a quedar pendiente** y el sistema avisa en la tienda («cambió el precio de $A a $B»): hay que avisarle al cliente del cambio y registrar su respuesta.
 
 ### En el taller
 Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las tiendas**.
 1. Un técnico **toma** una orden libre (recoge el equipo en la tienda) o el técnico encargado se la **asigna**.
 2. **Iniciar reparación** cambia la orden a «En reparación».
 3. Agrega **renglones** (refacciones y servicios con su precio) y **observaciones**, que quedan en el historial.
-4. **Marcar lista** avisa que el equipo ya puede recogerse. Si hace falta corregir algo, **Reabrir**.
+4. **Pedir autorización** al cliente cuando el costo esté listo (ver arriba).
+5. **Marcar lista** avisa que el equipo ya puede recogerse. Si hace falta corregir algo, **Reabrir**.
 
 ### Entregar al cliente
 1. En la tienda, abre la orden **Lista** y pulsa **Entregar y cobrar**.

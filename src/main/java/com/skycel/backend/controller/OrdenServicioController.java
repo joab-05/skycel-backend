@@ -160,6 +160,34 @@ public class OrdenServicioController {
         return ResponseEntityBuilder.updated(ordenService.marcarLista(id, user.getUsername()), "orden de servicio");
     }
 
+    @Operation(summary = "Cotizar: dejar la orden esperando que el cliente autorice el total")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/autorizacion/solicitar")
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
+    public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> solicitarAutorizacion(
+            @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(ordenService.solicitarAutorizacion(id, user.getUsername()), "orden de servicio");
+    }
+
+    @Operation(summary = "Registrar la respuesta del cliente a la cotización (autorizó o no, y por qué medio)")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/autorizacion")
+    @PreAuthorize("@permisos.tiene('ORDEN_RECIBIR')")
+    public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> registrarAutorizacion(
+            @PathVariable Integer id, @Valid @RequestBody AutorizacionRequestDto request, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(ordenService.registrarAutorizacion(id, request, user.getUsername()), "orden de servicio");
+    }
+
+    @Operation(summary = "Mensaje de WhatsApp para el cliente (ya escrito) y registro del aviso",
+            description = "tipo: RECIBIDA, COTIZACION, PRECIO_CAMBIO, LISTA, RECORDATORIO o ENTREGADA; sin tipo se elige el que corresponde al momento.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/aviso-whatsapp")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<StandardApiResponse<java.util.Map<String, Object>>> avisoWhatsapp(
+            @PathVariable Integer id, @RequestParam(required = false) String tipo, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(ordenService.avisoWhatsapp(id, tipo, user.getUsername()), "aviso");
+    }
+
     @Operation(summary = "Reabrir una orden lista (vuelve a reparación)")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/reabrir")

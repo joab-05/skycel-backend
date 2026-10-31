@@ -63,6 +63,17 @@ public class OrdenServicioService {
     private final VentaService                     ventaService;
     private final ClienteService                   clienteService;
     private final NotificacionService              notificacionService;
+    private final ConfiguracionNegocioRepository   negocioRepository;
+
+    /** Dirección pública del servidor: va en el enlace de seguimiento que se manda al cliente. */
+    @org.springframework.beans.factory.annotation.Value("${skycel.publico.url:https://skycelsys.ddns.net}")
+    private String urlPublica;
+
+    /** Autorización del cliente a la cotización (orden_servicio.autorizacion_estado). */
+    public static final byte AUT_PENDIENTE  = 1;
+    public static final byte AUT_AUTORIZADA = 2;
+    public static final byte AUT_RECHAZADA  = 3;
+    private static final Set<String> MEDIOS_AUTORIZACION = Set.of("EN_PERSONA", "LLAMADA", "WHATSAPP", "OTRO");
 
     // ── Recibir el equipo ────────────────────────────────────────────────────
 
@@ -258,6 +269,7 @@ public class OrdenServicioService {
         OrdenServicioDetalle linea = nuevaLinea(orden, dto, usuario);
         registrar(orden, usuario, "Se agregó: " + linea.getProductoMaster().getNombreBase() + " ×" + linea.getCantidad()
                 + " ($" + linea.getPrecioUnitario() + ")");
+        alCambiarElTotal(orden, usuario);
         return toDto(orden);
     }
 
@@ -272,7 +284,174 @@ public class OrdenServicioService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "El renglón " + iddetalle + " no existe en la orden " + orden.getFolio() + "."));
         detalleRepository.delete(linea);
         registrar(orden, usuario, "Se quitó: " + linea.getProductoMaster().getNombreBase());
+        alCambiarElTotal(orden, usuario);
         return toDto(orden);
+    }
+
+    // ── Autorización del cliente a la cotización ─────────────────────────────
+
+    /** El técnico terminó de cotizar: queda esperando que el cliente autorice el total. */
+    @Transactional
+    public OrdenServicioResponseDto solicitarAutorizacion(Integer id, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirTaller(usuario, orden);
+        exigirEstado(orden, "pedir autorización", RECIBIDA, EN_REPARACION);
+        List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(id);
+        if (lineas.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Agregue al menos un servicio antes de cotizar al cliente.");
+        }
+        BigDecimal total = total(lineas);
+        if (orden.getAutorizacionEstado() != null && orden.getAutorizacionEstado() == AUT_AUTORIZADA
+                && total.compareTo(orden.getAutorizacionTotal()) == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El cliente ya autorizó este total ($" + total + ").");
+        }
+        orden.setAutorizacionEstado(AUT_PENDIENTE);
+        orden.setAutorizacionTotal(total);
+        orden.setAutorizacionTotalPrevio(null);
+        orden.setAutorizacionMedio(null);
+        orden.setAutorizacionNota(null);
+        orden.setAutorizacionPor(null);
+        orden.setAutorizacionFecha(null);
+        registrar(orden, usuario, "Cotización de $" + total + " lista: falta que el cliente la autorice");
+        ordenRepository.save(orden);
+        notificarCambioOrden(orden, "Cotización de $" + total + " lista: avisa al cliente y registra su respuesta");
+        return toDto(orden);
+    }
+
+    /** La sucursal registra lo que respondió el cliente (autorizó o no) y por qué medio lo dijo. */
+    @Transactional
+    public OrdenServicioResponseDto registrarAutorizacion(Integer id, AutorizacionRequestDto dto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirGestiona(usuario, orden);
+        exigirEstado(orden, "registrar la respuesta del cliente", RECIBIDA, EN_REPARACION);
+        if (orden.getAutorizacionEstado() == null || orden.getAutorizacionEstado() != AUT_PENDIENTE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No hay una cotización esperando la respuesta del cliente.");
+        }
+        String medio = dto.getMedio().trim().toUpperCase().replace(' ', '_');
+        if (!MEDIOS_AUTORIZACION.contains(medio)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique cómo respondió el cliente: EN_PERSONA, LLAMADA, WHATSAPP u OTRO.");
+        }
+        boolean autoriza = Boolean.TRUE.equals(dto.getAutorizada());
+        orden.setAutorizacionEstado(autoriza ? AUT_AUTORIZADA : AUT_RECHAZADA);
+        orden.setAutorizacionMedio(medio);
+        orden.setAutorizacionNota(trimOrNull(dto.getNota()));
+        orden.setAutorizacionPor(usuario.getNombreCompleto());
+        orden.setAutorizacionFecha(LocalDateTime.now());
+        if (autoriza) orden.setAutorizacionTotalPrevio(null);
+        registrar(orden, usuario, (autoriza ? "El cliente AUTORIZÓ el total de $" : "El cliente NO autorizó el total de $") + orden.getAutorizacionTotal()
+                + " (" + medioLegible(medio) + ")" + (orden.getAutorizacionNota() != null ? ": " + orden.getAutorizacionNota() : ""));
+        ordenRepository.save(orden);
+        String aviso = (autoriza ? "El cliente autorizó $" : "El cliente NO autorizó $") + orden.getAutorizacionTotal();
+        notificarCambioOrden(orden, aviso);
+        if (orden.getTecnico() != null) {
+            notificacionService.notificarUsuario(orden.getTecnico(), "ORDEN_AVANCE",
+                    "Orden " + orden.getFolio() + " (" + orden.getMarca() + " " + orden.getModelo() + "): " + aviso, "#/orden/" + orden.getIdorden());
+        }
+        return toDto(orden);
+    }
+
+    /** Si ya había cotización, cambiar los renglones cambia el total: lo autorizado deja de valer y hay que avisar al cliente otra vez. */
+    private void alCambiarElTotal(OrdenServicio orden, Usuario usuario) {
+        Byte e = orden.getAutorizacionEstado();
+        if (e == null) return;
+        BigDecimal total = total(detalleRepository.findByOrden_IdordenOrderByIddetalle(orden.getIdorden()));
+        if (e == AUT_AUTORIZADA && total.compareTo(orden.getAutorizacionTotal()) != 0) {
+            BigDecimal antes = orden.getAutorizacionTotal();
+            orden.setAutorizacionTotalPrevio(antes);
+            orden.setAutorizacionTotal(total);
+            orden.setAutorizacionEstado(AUT_PENDIENTE);
+            orden.setAutorizacionMedio(null);
+            orden.setAutorizacionNota(null);
+            orden.setAutorizacionPor(null);
+            orden.setAutorizacionFecha(null);
+            registrar(orden, usuario, "El total cambió de $" + antes + " a $" + total + ": falta que el cliente autorice el nuevo precio");
+            notificarCambioOrden(orden, "Cambió el precio de $" + antes + " a $" + total + ": avisa al cliente y registra su respuesta");
+        } else if (e == AUT_PENDIENTE || e == AUT_RECHAZADA) {
+            // La cotización que sigue abierta (o que el cliente rechazó) se reajusta al total actual y vuelve a pedirse
+            orden.setAutorizacionEstado(AUT_PENDIENTE);
+            orden.setAutorizacionTotal(total);
+        }
+        ordenRepository.save(orden);
+    }
+
+    private static String medioLegible(String medio) {
+        return switch (medio) {
+            case "EN_PERSONA" -> "en persona";
+            case "LLAMADA" -> "por llamada";
+            case "WHATSAPP" -> "por WhatsApp";
+            default -> "otro medio";
+        };
+    }
+
+    /** No se termina ni se entrega con una cotización sin respuesta o rechazada. */
+    private void exigirAutorizacionVigente(OrdenServicio orden) {
+        Byte e = orden.getAutorizacionEstado();
+        if (e == null || e == AUT_AUTORIZADA) return;
+        if (e == AUT_PENDIENTE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta que el cliente autorice el total de $" + orden.getAutorizacionTotal()
+                    + ". Avísale por WhatsApp o llámale y registra su respuesta.");
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El cliente no autorizó la reparación. Cancela la orden o vuelve a cotizar y pide su autorización.");
+    }
+
+    // ── Avisos al cliente por WhatsApp ───────────────────────────────────────
+
+    /**
+     * Arma el mensaje de WhatsApp para el cliente (ya escrito, para que el empleado solo lo envíe) y deja constancia en la bitácora de
+     * qué se le avisó. Sin tipo, elige el que corresponde al momento de la orden.
+     */
+    @Transactional
+    public Map<String, Object> avisoWhatsapp(Integer id, String tipoPedido, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirPuedeTrabajar(usuario, orden);
+        if (orden.getEstado() == CANCELADA) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La orden está cancelada: no hay nada que avisar.");
+        }
+        OrdenAvisos.Tipo tipo;
+        if (tipoPedido == null || tipoPedido.isBlank()) {
+            tipo = tipoSugerido(orden);
+        } else {
+            try { tipo = OrdenAvisos.Tipo.valueOf(tipoPedido.trim().toUpperCase()); }
+            catch (IllegalArgumentException ex) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de aviso no válido: " + tipoPedido); }
+        }
+        String telefono = OrdenAvisos.telefonoWhatsApp(orden.getCliente().getTelefono());
+        if (telefono == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El cliente no tiene un teléfono válido de 10 dígitos. Corrígelo en Clientes para poder avisarle.");
+        }
+        List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(id);
+        BigDecimal total = total(lineas);
+        BigDecimal pagado = anticipoRepository.findByOrden_IdordenOrderByIdanticipo(id).stream()
+                .map(OrdenServicioAnticipo::getMonto).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal saldo = total.subtract(pagado).max(BigDecimal.ZERO);
+        String negocio = negocioRepository.findAll().stream().findFirst().map(ConfiguracionNegocio::getNombreComercial).orElse("Skycel");
+        String base = urlPublica != null ? urlPublica : "https://skycelsys.ddns.net";
+        OrdenAvisos.Datos datos = new OrdenAvisos.Datos(negocio, orden.getTienda().getNombre(), orden.getTienda().getTelefono(),
+                orden.getTienda().getUbicacion(), orden.getCliente().getNombreCompleto(), orden.getMarca() + " " + orden.getModelo(),
+                orden.getFolio(), orden.getDiagnostico(), total, orden.getAutorizacionTotalPrevio(), pagado, saldo,
+                orden.getFechaPromesaHora(), orden.getFechaPromesa(), orden.getFechaLista(), orden.getDiasGarantia(), orden.getFechaGarantiaHasta(),
+                base + "/seguimiento/?f=" + orden.getFolio());
+        String texto = OrdenAvisos.texto(tipo, datos);
+        registrar(orden, usuario, "Aviso por WhatsApp al cliente: " + tipo.etiqueta());
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("tipo", tipo.name());
+        r.put("tipoDisplay", tipo.etiqueta());
+        r.put("telefono", telefono);
+        r.put("texto", texto);
+        r.put("url", OrdenAvisos.enlaceWhatsApp(telefono, texto));
+        return r;
+    }
+
+    private OrdenAvisos.Tipo tipoSugerido(OrdenServicio o) {
+        if (o.getEstado() == ENTREGADA) return OrdenAvisos.Tipo.ENTREGADA;
+        if (o.getEstado() == LISTA) return OrdenAvisos.Tipo.LISTA;
+        if (o.getAutorizacionEstado() != null && o.getAutorizacionEstado() == AUT_PENDIENTE) {
+            return o.getAutorizacionTotalPrevio() != null ? OrdenAvisos.Tipo.PRECIO_CAMBIO : OrdenAvisos.Tipo.COTIZACION;
+        }
+        return OrdenAvisos.Tipo.RECIBIDA;
     }
 
     /** El técnico (o el personal) empieza la reparación. Requiere un técnico asignado. */
@@ -299,6 +478,7 @@ public class OrdenServicioService {
         OrdenServicio orden = orden(id);
         exigirTaller(usuario, orden);
         exigirEstado(orden, "marcar como lista", EN_REPARACION);
+        exigirAutorizacionVigente(orden);
 
         List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(id);
         if (lineas.isEmpty()) {
@@ -359,6 +539,7 @@ public class OrdenServicioService {
         OrdenServicio orden = orden(id);
         exigirGestiona(usuario, orden);
         exigirEstado(orden, "entregar", LISTA);
+        exigirAutorizacionVigente(orden);
 
         List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(id);
         BigDecimal total = total(lineas);
@@ -765,6 +946,10 @@ public class OrdenServicioService {
                 .idventa(o.getVenta() != null ? o.getVenta().getIdventa() : null)
                 .motivoCancelacion(o.getMotivoCancelacion())
                 .total(total).totalAnticipos(pagado).saldo(saldo)
+                .autorizacionEstado(o.getAutorizacionEstado()).autorizacionDisplay(autorizacionDisplay(o.getAutorizacionEstado()))
+                .autorizacionTotal(o.getAutorizacionTotal()).autorizacionTotalPrevio(o.getAutorizacionTotalPrevio())
+                .autorizacionMedio(o.getAutorizacionMedio()).autorizacionNota(o.getAutorizacionNota())
+                .autorizacionPor(o.getAutorizacionPor()).autorizacionFecha(o.getAutorizacionFecha())
                 .lineas(lineas.stream().map(l -> OrdenServicioResponseDto.OrdenLineaResponseDto.builder()
                         .iddetalle(l.getIddetalle()).codpro(l.getCodpro())
                         .nombre(l.getProductoMaster().getNombreBase()).tipoProducto(l.getProductoMaster().getTipo().name())
@@ -793,6 +978,16 @@ public class OrdenServicioService {
             case ENTREGADA     -> "Entregada";
             case CANCELADA     -> "Cancelada";
             default            -> "Desconocido";
+        };
+    }
+
+    private String autorizacionDisplay(Byte e) {
+        if (e == null) return "Sin cotizar";
+        return switch (e) {
+            case AUT_PENDIENTE -> "Esperando respuesta del cliente";
+            case AUT_AUTORIZADA -> "Autorizada por el cliente";
+            case AUT_RECHAZADA -> "No autorizada por el cliente";
+            default -> "";
         };
     }
 

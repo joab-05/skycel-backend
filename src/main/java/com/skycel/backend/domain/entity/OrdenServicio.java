@@ -137,6 +137,34 @@ public class OrdenServicio {
     @Column(name = "motivo_cancelacion", length = 255)
     private String motivoCancelacion;
 
+    /**
+     * Autorización del cliente para el costo de la reparación: null = todavía no se cotiza; 1 = esperando su respuesta;
+     * 2 = autorizó; 3 = no autorizó. Si el total cambia después de autorizado, vuelve a 1.
+     */
+    @Column(name = "autorizacion_estado")
+    private Byte autorizacionEstado;
+
+    /** El total que se cotizó (esperando) o que el cliente autorizó. */
+    @Column(name = "autorizacion_total", precision = 12, scale = 2)
+    private java.math.BigDecimal autorizacionTotal;
+
+    /** El total que ya estaba autorizado antes de un cambio de precio (para decirle al cliente de cuánto a cuánto). */
+    @Column(name = "autorizacion_total_previo", precision = 12, scale = 2)
+    private java.math.BigDecimal autorizacionTotalPrevio;
+
+    /** Cómo respondió el cliente (en persona, llamada, WhatsApp) y quién lo registró. */
+    @Column(name = "autorizacion_medio", length = 30)
+    private String autorizacionMedio;
+
+    @Column(name = "autorizacion_nota", length = 255)
+    private String autorizacionNota;
+
+    @Column(name = "autorizacion_por", length = 150)
+    private String autorizacionPor;
+
+    @Column(name = "autorizacion_fecha")
+    private LocalDateTime autorizacionFecha;
+
     @UpdateTimestamp
     @Column(name = "fecha_actualizacion")
     private LocalDateTime fechaActualizacion;

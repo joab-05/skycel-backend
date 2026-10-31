@@ -66,7 +66,7 @@ public class SecurityConfig {
                         // Consulta del cliente por folio (sin iniciar sesión); ver PublicoGarantiaController
                         "/api/publico/**",
                         // Web/PWA para celular y tablet: la página misma es pública, el login lo hace el JS contra /api/auth/login
-                        "/app", "/app/**", "/manifest.webmanifest", "/favicon.ico"
+                        "/app", "/app/**", "/seguimiento", "/seguimiento/**", "/manifest.webmanifest", "/favicon.ico"
                 ).permitAll()
                 .anyRequest().authenticated()
             )

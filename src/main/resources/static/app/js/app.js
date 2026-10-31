@@ -1257,6 +1257,40 @@ async function pantallaOrdenDetalle(id) {
 
   const puedeTrabajar = Sesion.tiene('TALLER_TRABAJAR') && (SUPERIOR.includes(s.rol) || s.tecnicoEncargado || (s.rol === 'TECNICO' && o.idTecnico === s.idusuario));
   const esTecnicoLibre = s.rol === 'TECNICO' && !o.idTecnico && o.estado === 1;
+  const puedeResponder = Sesion.tiene('ORDEN_RECIBIR');   // quien atiende al cliente registra su respuesta
+  const viva = o.estado === 1 || o.estado === 2;
+  const lineas = o.lineas || [];
+
+  /** Cuadro de la cotización: qué falta del cliente y qué botones corresponden. */
+  const cuadroAutorizacion = () => {
+    const a = o.autorizacionEstado;
+    if (a == null) {
+      if (!(viva && puedeTrabajar && lineas.length)) return '';
+      return `<div class="tarjeta"><h2>Cotización</h2>
+        <p class="ayuda">Cuando termines de cotizar, pide la autorización del cliente: no se podrá marcar la orden como lista hasta que la dé.</p>
+        <div class="grupo-botones"><button id="au-pedir" class="btn btn-azul">${ic('clipboard-check')} Pedir autorización al cliente</button></div></div>`;
+    }
+    if (a === 1) {
+      return `<div class="tarjeta" style="border-left:5px solid #d97706;"><h2>${ic('hourglass')} Esperando respuesta del cliente</h2>
+        <p>${o.autorizacionTotalPrevio != null ? `El precio cambió de <strong>${formatoDinero(o.autorizacionTotalPrevio)}</strong> a <strong>${formatoDinero(o.autorizacionTotal)}</strong>.` : `Total cotizado: <strong>${formatoDinero(o.autorizacionTotal)}</strong>.`}
+        Avísale por WhatsApp o llámale y registra qué respondió.</p>
+        ${puedeResponder && viva ? `<div class="grupo-botones" style="flex-wrap:wrap;">
+          <button id="au-si" class="btn btn-verde">${ic('circle-check')} El cliente autorizó</button>
+          <button id="au-no" class="btn btn-rojo">${ic('circle-x')} No autorizó</button></div>
+          <div id="au-form" class="oculto" style="margin-top:10px;">
+            <label>¿Cómo respondió?</label>
+            <select id="au-medio"><option value="EN_PERSONA">En persona</option><option value="LLAMADA">Por llamada</option><option value="WHATSAPP">Por WhatsApp</option><option value="OTRO">Otro</option></select>
+            <label>Nota (opcional)</label><input id="au-nota" maxlength="200" placeholder="Por ejemplo: pidió que no se cambie la batería">
+            <div class="grupo-botones" style="margin-top:8px;"><button id="au-guardar" class="btn btn-azul">Guardar respuesta</button></div>
+          </div>` : ''}</div>`;
+    }
+    const quien = `${escapar(o.autorizacionPor || '')}${o.autorizacionMedio ? ' · ' + ({ EN_PERSONA: 'en persona', LLAMADA: 'por llamada', WHATSAPP: 'por WhatsApp', OTRO: 'otro medio' }[o.autorizacionMedio] || '') : ''} · ${formatoFecha(o.autorizacionFecha)}`;
+    return a === 2
+      ? `<div class="tarjeta" style="border-left:5px solid #15803d;"><h2>${ic('circle-check')} Autorizada por el cliente</h2>
+          <p>Total autorizado: <strong>${formatoDinero(o.autorizacionTotal)}</strong>.</p><p class="ayuda">${quien}${o.autorizacionNota ? '<br>' + escapar(o.autorizacionNota) : ''}</p></div>`
+      : `<div class="tarjeta" style="border-left:5px solid #dc2626;"><h2>${ic('circle-x')} El cliente no autorizó</h2>
+          <p>No se puede terminar ni entregar así: cancela la orden o cambia los servicios y vuelve a pedir su autorización.</p><p class="ayuda">${quien}${o.autorizacionNota ? '<br>' + escapar(o.autorizacionNota) : ''}</p></div>`;
+  };
 
   root.innerHTML = `
     <button class="enlace" onclick="history.length > 1 ? history.back() : navegar('#/taller')" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
@@ -1266,6 +1300,27 @@ async function pantallaOrdenDetalle(id) {
       ${kpiH('c3', 'circle-check', formatoDinero(o.totalAnticipos), 'Anticipos')}
       ${kpiH('c4', 'clock', formatoDinero(o.saldo), 'Saldo por cobrar')}
     </div>
+    ${cuadroAutorizacion()}
+    <div class="tarjeta">
+      <h2>Avisar al cliente</h2>
+      <div class="grupo-botones" style="flex-wrap:wrap;align-items:center;">
+        <select id="av-tipo" style="max-width:260px;">
+          <option value="">Lo que corresponde ahora</option>
+          <option value="RECIBIDA">Equipo recibido (con folio)</option>
+          <option value="COTIZACION">Cotización para autorizar</option>
+          <option value="PRECIO_CAMBIO">Cambio de precio</option>
+          <option value="LISTA">Equipo listo</option>
+          <option value="RECORDATORIO">Recordatorio de recoger</option>
+          <option value="ENTREGADA">Gracias y garantía</option>
+        </select>
+        <button id="av-enviar" class="btn btn-verde">${ic('message-circle')} Avisar por WhatsApp</button>
+        <button id="av-imprimir" class="btn btn-gris">${ic('printer')} Imprimir comprobante</button>
+      </div>
+      <p class="ayuda">Se abre WhatsApp con el mensaje ya escrito: solo pulsa enviar. Queda anotado en la bitácora.</p>
+    </div>
+    ${lineas.length ? `<div class="tarjeta"><h2>Servicios y refacciones</h2>
+      ${lineas.map(l => `<div class="detalle-fila"><span class="k">${escapar(l.nombre)} ×${l.cantidad}</span><span class="v">${l.esRegalo ? 'Regalo' : formatoDinero(l.subtotal)}</span></div>`).join('')}
+      <div class="detalle-fila"><span class="k"><strong>Total</strong></span><span class="v"><strong>${formatoDinero(o.total)}</strong></span></div></div>` : ''}
     <div class="tarjeta">
       <h2>Información de la orden</h2>
       <div class="detalle-fila"><span class="k">Cliente</span><span class="v">${escapar(o.nombreCliente)}</span></div>
@@ -1300,6 +1355,36 @@ async function pantallaOrdenDetalle(id) {
           <div class="historial-meta">${escapar(h.nombreUsuario)} · ${formatoFecha(h.fecha)}</div>
         </div>`).join('') || '<div class="vacio">Sin movimientos.</div>'}
     </div>`;
+
+  const fallo = (err) => mostrarMensaje(root, err.network ? 'Sin conexión: esta acción necesita conexión con el servidor.' : err.message, 'error');
+
+  document.getElementById('av-enviar').onclick = async () => {
+    const tipo = document.getElementById('av-tipo').value;
+    const ventana = window.open('', '_blank');   // se abre ya, por el clic, para que el navegador no lo bloquee
+    try {
+      const r = await api('POST', `/api/ordenes-servicio/${id}/aviso-whatsapp${tipo ? '?tipo=' + tipo : ''}`);
+      if (ventana) ventana.location.href = r.url; else window.location.href = r.url;
+      mostrarMensaje(root, `Mensaje «${r.tipoDisplay}» listo en WhatsApp. Pulsa enviar allá.`, 'ok');
+    } catch (err) { if (ventana) ventana.close(); fallo(err); }
+  };
+  document.getElementById('av-imprimir').onclick = () => imprimirComprobanteOrden(o);
+
+  const pedir = document.getElementById('au-pedir');
+  if (pedir) pedir.onclick = async () => {
+    try { await api('POST', `/api/ordenes-servicio/${id}/autorizacion/solicitar`); pantallaOrdenDetalle(id); } catch (err) { fallo(err); }
+  };
+  let autoriza = true;
+  const abrirForm = (si) => { autoriza = si; document.getElementById('au-form').classList.remove('oculto'); document.getElementById('au-guardar').textContent = si ? 'Guardar: el cliente autorizó' : 'Guardar: el cliente no autorizó'; };
+  if (document.getElementById('au-si')) {
+    document.getElementById('au-si').onclick = () => abrirForm(true);
+    document.getElementById('au-no').onclick = () => abrirForm(false);
+    document.getElementById('au-guardar').onclick = async () => {
+      try {
+        await api('POST', `/api/ordenes-servicio/${id}/autorizacion`, { autorizada: autoriza, medio: document.getElementById('au-medio').value, nota: document.getElementById('au-nota').value.trim() || null });
+        pantallaOrdenDetalle(id);
+      } catch (err) { fallo(err); }
+    };
+  }
 
   if (!puedeTrabajar && !esTecnicoLibre) return;
 
@@ -1336,6 +1421,54 @@ async function pantallaOrdenDetalle(id) {
       mostrarMensaje(root, err.network ? 'Sin conexión: esta acción necesita conexión con el servidor.' : err.message, 'error');
     }
   }
+}
+
+/** Condiciones que van al pie del comprobante de recepción (el negocio debe revisarlas y ajustarlas a su gusto). */
+const CONDICIONES_ORDEN = [
+  'El diagnóstico es una estimación y puede cambiar. Si cambia el precio, te avisaremos y esperaremos tu autorización antes de continuar.',
+  'Para entregarte el equipo se necesita este comprobante o una identificación.',
+  'Pasados 30 días desde que te avisemos que tu equipo está listo, la tienda no se hace responsable de él.',
+  'La garantía cubre el trabajo realizado y las piezas cambiadas; no cubre golpes, humedad ni mal uso posteriores.',
+  'Respalda tu información: no nos hacemos responsables por los datos del equipo.',
+];
+
+/** Comprobante de recepción para imprimir (papel de ticket de 80 mm o una hoja): folio, equipo, falla, anticipo, fecha prometida, QR de seguimiento y condiciones. */
+async function imprimirComprobanteOrden(o) {
+  let negocio = 'Skycel';
+  try { const n = await api('GET', '/api/configuracion/negocio'); if (n && n.nombreComercial) negocio = n.nombreComercial; } catch { /* se queda el nombre por omisión */ }
+  const promesa = o.fechaPromesaHora ? formatoFecha(o.fechaPromesaHora) : (o.fechaPromesa ? formatoFecha(o.fechaPromesa) : '');
+  const enlace = `${location.origin}/seguimiento/?f=${encodeURIComponent(o.folio)}`;
+  const qr = !/^OS-/.test(o.folio) ? '' : `<img class="qr" src="/api/publico/qr?t=${encodeURIComponent(enlace)}&px=5" alt="QR de seguimiento">`;
+  const fila = (k, v) => v ? `<div class="f"><span>${k}</span><b>${escapar(v)}</b></div>` : '';
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Comprobante ${escapar(o.folio)}</title>
+    <style>
+      @page { size: 80mm auto; margin: 3mm; }
+      body { font: 12px/1.35 "Segoe UI", Arial, sans-serif; color:#000; width: 74mm; margin: 0 auto; }
+      h1 { font-size:15px; text-align:center; margin:4px 0 0; } .c { text-align:center; } .folio { font-size:22px; font-weight:800; text-align:center; margin:4px 0; letter-spacing:1px; }
+      .f { display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px dotted #999; } .f span { color:#444; } .f b { text-align:right; }
+      .caja { border:1px solid #000; padding:5px; margin:6px 0; } .qr { display:block; margin:6px auto 2px; width:34mm; height:34mm; image-rendering: pixelated; }
+      ol { margin:4px 0 0; padding-left:15px; font-size:10px; } .firma { margin-top:22px; border-top:1px solid #000; text-align:center; font-size:10px; padding-top:2px; }
+    </style></head><body>
+    <h1>${escapar(negocio)}</h1><div class="c">${escapar(o.nombreTienda || '')}</div>
+    <div class="c"><b>COMPROBANTE DE RECEPCIÓN</b></div>
+    <div class="folio">${escapar(o.folio)}</div>
+    ${o.folioLocal ? `<div class="c">Folio provisional: ${escapar(o.folioLocal)}</div>` : ''}
+    ${fila('Fecha', formatoFecha(o.fechaIngreso))}
+    ${fila('Cliente', o.nombreCliente)}${fila('Teléfono', o.telefonoCliente)}
+    ${fila('Equipo', `${o.marca} ${o.modelo}`)}${fila('IMEI / serie', o.imei)}
+    ${fila('Accesorios', o.accesoriosDejados)}${fila('Estado físico', o.estadoFisico)}
+    <div class="caja"><b>Falla reportada:</b> ${escapar(o.fallaReportada)}</div>
+    ${o.autorizacionEstado === 2 || (o.lineas || []).length ? fila('Costo estimado', formatoDinero(o.total)) : ''}
+    ${Number(o.totalAnticipos) > 0 ? fila('Anticipo', formatoDinero(o.totalAnticipos)) : ''}
+    ${fila('Fecha prometida', promesa)}
+    ${qr}<div class="c" style="font-size:10px;">Sigue tu reparación escaneando el código<br>o en ${escapar(location.host)}/seguimiento<br>(folio y últimos 4 dígitos de tu teléfono)</div>
+    <ol>${CONDICIONES_ORDEN.map(c => `<li>${escapar(c)}</li>`).join('')}</ol>
+    <div class="firma">Firma del cliente</div>
+    <script>window.addEventListener('load', () => setTimeout(() => { window.print(); }, 350));<\/script>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { mostrarMensaje(root, 'El navegador bloqueó la ventana de impresión: permite las ventanas emergentes para este sitio.', 'error'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
 }
 
 // ── Guardado en el equipo (colas sin conexión) ────────────────────────────

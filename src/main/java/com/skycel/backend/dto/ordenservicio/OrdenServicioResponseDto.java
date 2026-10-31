@@ -59,6 +59,18 @@ public class OrdenServicioResponseDto {
     /** Lo que falta por cobrar (total - anticipos, nunca negativo). */
     private BigDecimal saldo;
 
+    // ── Autorización del cliente a la cotización ──────────────────────────────
+    /** null = sin cotizar; 1 = esperando respuesta del cliente; 2 = autorizó; 3 = no autorizó. */
+    private Byte       autorizacionEstado;
+    private String     autorizacionDisplay;
+    /** El total cotizado o autorizado; si difiere de {@code total}, el precio cambió y falta avisar. */
+    private BigDecimal autorizacionTotal;
+    private BigDecimal autorizacionTotalPrevio;
+    private String     autorizacionMedio;
+    private String     autorizacionNota;
+    private String     autorizacionPor;
+    private LocalDateTime autorizacionFecha;
+
     private List<OrdenLineaResponseDto> lineas;
     private List<AnticipoResponseDto>   anticipos;
     private List<HistorialResponseDto>  historial;

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sigue tu reparación</title>
+<style>
+  :root { --fondo:#f4f4f5; --tarjeta:#fff; --texto:#1e293b; --suave:#64748b; --borde:#e2e8f0; --oscuro:#111827; --verde:#15803d; --azul:#2563eb; --rojo:#dc2626; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--fondo); color:var(--texto); font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+  main { max-width:480px; margin:0 auto; padding:24px 16px 40px; }
+  h1 { font-size:22px; margin:8px 0 4px; }
+  p.sub { margin:0 0 18px; color:var(--suave); }
+  .tarjeta { background:var(--tarjeta); border:1px solid var(--borde); border-radius:16px; padding:18px; margin-bottom:14px; }
+  label { display:block; font-size:13px; color:var(--suave); margin:10px 0 4px; }
+  input { width:100%; padding:12px; font-size:16px; border:1px solid var(--borde); border-radius:10px; }
+  button { width:100%; margin-top:14px; padding:13px; font-size:16px; font-weight:600; border:0; border-radius:10px; background:var(--oscuro); color:#fff; cursor:pointer; }
+  .estado { display:inline-block; padding:5px 12px; border-radius:999px; font-weight:700; font-size:14px; background:#e0e7ff; color:#3730a3; }
+  .estado.lista { background:#dcfce7; color:var(--verde); }
+  .estado.cancelada { background:#fee2e2; color:var(--rojo); }
+  .mensaje { font-size:17px; margin:14px 0 6px; }
+  dl { margin:14px 0 0; display:grid; grid-template-columns: auto 1fr; gap:6px 14px; font-size:15px; }
+  dt { color:var(--suave); } dd { margin:0; text-align:right; }
+  ol { list-style:none; margin:10px 0 0; padding:0; }
+  li { padding:9px 0 9px 22px; position:relative; border-left:2px solid var(--borde); margin-left:6px; font-size:15px; }
+  li::before { content:""; position:absolute; left:-7px; top:14px; width:12px; height:12px; border-radius:50%; background:var(--azul); }
+  li small { display:block; color:var(--suave); }
+  .error { color:var(--rojo); font-weight:600; margin-top:10px; }
+  .pie { text-align:center; color:var(--suave); font-size:13px; margin-top:22px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sigue tu reparación</h1>
+  <p class="sub">Escribe tu folio y los últimos 4 dígitos del teléfono con el que dejaste tu equipo.</p>
+
+  <form id="f" class="tarjeta" autocomplete="off">
+    <label for="folio">Folio</label>
+    <input id="folio" placeholder="OS-000123" autocapitalize="characters" required>
+    <label for="tel">Últimos 4 dígitos de tu teléfono</label>
+    <input id="tel" inputmode="numeric" maxlength="4" placeholder="1234" required>
+    <button type="submit">Consultar</button>
+    <div id="error" class="error" role="alert"></div>
+  </form>
+
+  <section id="resultado" hidden></section>
+  <p class="pie">¿Dudas? Comunícate con tu sucursal.</p>
+</main>
+<script>
+(function () {
+  const f = document.getElementById('f'), err = document.getElementById('error'), res = document.getElementById('resultado');
+  const folio = document.getElementById('folio'), tel = document.getElementById('tel');
+  const q = new URLSearchParams(location.search);
+  if (q.get('f')) { folio.value = q.get('f').toUpperCase(); tel.focus(); }
+
+  const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fecha = (iso) => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? esc(iso) : d.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: iso.length > 10 ? 'short' : undefined }); };
+
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.textContent = ''; res.hidden = true;
+    const boton = f.querySelector('button'); boton.disabled = true; boton.textContent = 'Buscando…';
+    try {
+      const r = await fetch('/api/publico/ordenes-servicio/' + encodeURIComponent(folio.value.trim().toUpperCase()) + '?telefono=' + encodeURIComponent(tel.value.trim()));
+      if (!r.ok) throw new Error(r.status === 404 ? 'No encontramos una orden con ese folio y teléfono.' : 'No se pudo consultar. Intenta de nuevo en un momento.');
+      const o = (await r.json()).data;
+      const clase = o.estado === 'Lista para entrega' ? 'lista' : (o.estado === 'Cancelada' ? 'cancelada' : '');
+      const promesa = o.fechaPromesaHora ? fecha(o.fechaPromesaHora) : (o.fechaPromesa ? fecha(o.fechaPromesa) : '');
+      res.innerHTML = `
+        <div class="tarjeta">
+          <span class="estado ${clase}">${esc(o.estado)}</span>
+          <p class="mensaje">${esc(o.mensaje)}</p>
+          <dl>
+            <dt>Folio</dt><dd>${esc(o.folio)}</dd>
+            <dt>Equipo</dt><dd>${esc(o.equipo)}</dd>
+            ${o.imei ? `<dt>IMEI</dt><dd>${esc(o.imei)}</dd>` : ''}
+            <dt>Sucursal</dt><dd>${esc(o.sucursal)}</dd>
+            <dt>Recibido</dt><dd>${fecha(o.fechaIngreso)}</dd>
+            ${promesa && !o.fechaEntrega ? `<dt>Fecha estimada</dt><dd>${promesa}</dd>` : ''}
+            ${o.fechaLista ? `<dt>Listo desde</dt><dd>${fecha(o.fechaLista)}</dd>` : ''}
+            ${o.fechaEntrega ? `<dt>Entregado</dt><dd>${fecha(o.fechaEntrega)}</dd>` : ''}
+            ${o.garantiaHasta ? `<dt>Garantía hasta</dt><dd>${fecha(o.garantiaHasta)}</dd>` : ''}
+          </dl>
+        </div>
+        <div class="tarjeta"><strong>Avance</strong><ol>${(o.avance || []).map(p => `<li>${esc(p.estado)}<small>${fecha(p.fecha)}</small></li>`).join('')}</ol></div>`;
+      res.hidden = false;
+    } catch (x) {
+      err.textContent = x.message;
+    } finally {
+      boton.disabled = false; boton.textContent = 'Consultar';
+    }
+  });
+})();
+</script>
+</body>
+</html>

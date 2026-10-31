@@ -54,6 +54,7 @@ class OrdenServicioServiceTest {
     @Mock private VentaService                     ventaService;
     @Mock private ClienteService                   clienteService;
     @Mock private NotificacionService              notificacionService;
+    @Mock private ConfiguracionNegocioRepository   negocioRepository;
 
     @InjectMocks
     private OrdenServicioService service;
@@ -948,6 +949,126 @@ class OrdenServicioServiceTest {
 
             assertEstado(HttpStatus.CONFLICT, () -> service.registrarAnticipo(o, anticipo("100", 1), "abigail"));
             assertEstado(HttpStatus.CONFLICT, () -> service.entregar(o, entrega(1), "abigail"));
+        }
+    }
+
+    // ── Autorización de la cotización y avisos al cliente ────────────────────
+
+    @Nested
+    @DisplayName("autorización del cliente a la cotización")
+    class Autorizacion {
+
+        private AutorizacionRequestDto respuesta(boolean autoriza, String medio) {
+            AutorizacionRequestDto r = new AutorizacionRequestDto();
+            r.setAutorizada(autoriza);
+            r.setMedio(medio);
+            r.setNota("Dijo que sí");
+            return r;
+        }
+
+        @Test
+        @DisplayName("cotizar deja la orden esperando al cliente; no se puede terminar hasta que autorice")
+        void cotizarYBloquear() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.iniciar(o, "juan.perez");
+            OrdenServicioResponseDto cot = service.solicitarAutorizacion(o, "juan.perez");
+            assertThat(cot.getAutorizacionEstado()).isEqualTo(OrdenServicioService.AUT_PENDIENTE);
+            assertThat(cot.getAutorizacionTotal()).isEqualByComparingTo("1200");
+
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.marcarLista(o, "juan.perez"));
+
+            OrdenServicioResponseDto ok = service.registrarAutorizacion(o, respuesta(true, "whatsapp"), "abigail");
+            assertThat(ok.getAutorizacionEstado()).isEqualTo(OrdenServicioService.AUT_AUTORIZADA);
+            assertThat(ok.getAutorizacionMedio()).isEqualTo("WHATSAPP");
+            assertThat(ok.getAutorizacionPor()).isEqualTo("ABIGAIL");
+            assertThat(service.marcarLista(o, "juan.perez").getEstado()).isEqualTo(OrdenServicioService.LISTA);
+            assertThat(historial.stream().map(OrdenServicioHistorial::getComentario)).anyMatch(c -> c.contains("AUTORIZÓ") && c.contains("por WhatsApp"));
+        }
+
+        @Test
+        @DisplayName("si el total cambia después de autorizado, vuelve a pedirse la autorización y se recuerda el precio anterior")
+        void cambioDePrecio() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.iniciar(o, "juan.perez");
+            service.solicitarAutorizacion(o, "juan.perez");
+            service.registrarAutorizacion(o, respuesta(true, "EN_PERSONA"), "abigail");
+
+            OrdenServicioResponseDto r = service.agregarLinea(o, linea("ACC-000010", 1, "90", false), "juan.perez");
+
+            assertThat(r.getAutorizacionEstado()).isEqualTo(OrdenServicioService.AUT_PENDIENTE);
+            assertThat(r.getAutorizacionTotalPrevio()).isEqualByComparingTo("1200");
+            assertThat(r.getAutorizacionTotal()).isEqualByComparingTo("1290");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.marcarLista(o, "juan.perez"));
+            Map<String, Object> aviso = service.avisoWhatsapp(o, null, "abigail");
+            assertThat(aviso.get("tipo")).isEqualTo("PRECIO_CAMBIO");
+            assertThat((String) aviso.get("texto")).contains("$1,200").contains("$1,290");
+        }
+
+        @Test
+        @DisplayName("si el cliente no autoriza, no se puede terminar ni entregar; se debe volver a cotizar o cancelar")
+        void rechazada() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.iniciar(o, "juan.perez");
+            service.solicitarAutorizacion(o, "juan.perez");
+            assertThat(service.registrarAutorizacion(o, respuesta(false, "LLAMADA"), "abigail").getAutorizacionEstado())
+                    .isEqualTo(OrdenServicioService.AUT_RECHAZADA);
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.marcarLista(o, "juan.perez"));
+        }
+
+        @Test
+        @DisplayName("responder exige una cotización pendiente y un medio válido; un técnico no registra la respuesta")
+        void validaciones() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.iniciar(o, "juan.perez");
+            int sinRenglones = orden();
+            service.iniciar(sinRenglones, "juan.perez");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.solicitarAutorizacion(sinRenglones, "juan.perez"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.registrarAutorizacion(o, respuesta(true, "EN_PERSONA"), "abigail"));   // no hay pendiente
+            service.solicitarAutorizacion(o, "juan.perez");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.registrarAutorizacion(o, respuesta(true, "paloma mensajera"), "abigail"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.registrarAutorizacion(o, respuesta(true, "EN_PERSONA"), "juan.perez"));
+        }
+
+        @Test
+        @DisplayName("una orden sin cotización formal sigue funcionando como antes")
+        void sinCotizacion() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            hastaLista(o);
+            assertThat(viva(o).getEstado()).isEqualTo(OrdenServicioService.LISTA);
+            assertThat(service.obtener(o, "abigail").getAutorizacionDisplay()).isEqualTo("Sin cotizar");
+        }
+    }
+
+    @Nested
+    @DisplayName("aviso por WhatsApp al cliente")
+    class AvisoWhatsapp {
+
+        @Test
+        @DisplayName("sugiere el aviso según el momento, arma el enlace con el teléfono de México y deja constancia")
+        void sugerido() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            Map<String, Object> r = service.avisoWhatsapp(o, null, "abigail");
+            assertThat(r.get("tipo")).isEqualTo("RECIBIDA");
+            assertThat(r.get("telefono")).isEqualTo("527571200001");
+            assertThat((String) r.get("url")).startsWith("https://wa.me/527571200001?text=");
+            assertThat((String) r.get("texto")).contains("Sofia").contains("Apple iPhone 13").contains("OS-");
+
+            hastaLista(o);
+            assertThat(service.avisoWhatsapp(o, null, "abigail").get("tipo")).isEqualTo("LISTA");
+            assertThat(historial.stream().map(OrdenServicioHistorial::getComentario)).anyMatch(c -> c.startsWith("Aviso por WhatsApp al cliente"));
+        }
+
+        @Test
+        @DisplayName("sin teléfono válido o con la orden cancelada no se arma el aviso")
+        void sinTelefono() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            cliente.setTelefono("123");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.avisoWhatsapp(o, null, "abigail"));
+            cliente.setTelefono("7571200001");
+            CancelarOrdenRequestDto c = new CancelarOrdenRequestDto();
+            c.setMotivo("Ya no lo quiso");
+            service.cancelar(o, c, "abigail");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.avisoWhatsapp(o, null, "abigail"));
         }
     }
 
