@@ -674,7 +674,7 @@ Los datos de **esta computadora** (servidor, sucursal, impresoras) y del negocio
 ### Configurar y probar la impresora de etiquetas
 1. En **Etiquetas** elige la **impresora** y el **tipo de papel**: **rollo continuo** (como el ticket) o **etiqueta de tamaño fijo** con su ancho y alto en milímetros (por ejemplo, 30 × 14).
 2. Elige qué lleva la etiqueta: el nombre, el código escrito y el precio. A la derecha ves una **vista previa**: si algo se corta ahí, también se corta al imprimir.
-3. Pulsa **Imprimir etiqueta de prueba** y léela con el lector para comprobar que el código se entiende. Luego **Guardar configuración**.
+3. En **Imprimir etiquetas** (a la derecha) escribe el **código**, el nombre y el precio si quieres, y la **cantidad**; pulsa **Imprimir etiquetas** y léela con el lector para comprobar que el código se entiende. Sirve también para imprimir cualquier código aparte de la prueba. Luego **Guardar configuración**.
 
 Las etiquetas bajas (20 mm de alto o menos, como las de 30 × 14) salen en versión compacta: el nombre en un renglón, las barras con todo el alto posible y, abajo, el código a la izquierda y el precio a la derecha. Si el código es largo, las barras salen más finas: prueba con el lector; si no lee, quita el nombre o el código escrito.
 
@@ -742,12 +742,17 @@ ATAJOS_JS = """## Atajos de teclado
 | Punto de Venta | Supr | Quita la línea marcada |
 | Punto de Venta | Esc | Limpia el buscador |
 | Corte de Servicios | ↑ ↓ ← → o Enter | Pasa de un campo a otro, como en Excel |
+| Listas desplegables con varias opciones | Escribir | Abre un buscador: escribe parte del nombre (sin importar mayúsculas ni acentos) y pulsa Enter para elegir |
 
 Con texto escrito en un campo, **+**, **−** y **Supr** son texto normal.
+
+> En las listas desplegables con varias opciones (colores, categorías, proveedores…) también puedes **hacer clic y escribir** para buscar, en lugar de recorrer toda la lista.
 """
 ATAJOS_WEB = """## Atajos de teclado
 
 En la web casi todo se hace tocando. Los atajos de teclado están en **JSystem**: **F1** (ayuda), **F2** (buscar), **F4** (cliente), **F9** (cobrar), **← →** (cambiar de categoría) y **Ctrl + 1 … 9** (secciones del menú).
+
+En las listas desplegables con varias opciones (colores, categorías, proveedores…) puedes **tocar y escribir** para buscar, en lugar de recorrer toda la lista.
 """
 
 # ───────────────────────────── Rutina y preguntas ─────────────────────────────

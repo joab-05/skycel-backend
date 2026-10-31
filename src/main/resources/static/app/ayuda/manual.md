@@ -427,6 +427,8 @@ La **versión web** necesita internet. Si se cae, usa **JSystem** en la computad
 
 En la web casi todo se hace tocando. Los atajos de teclado están en **JSystem**: **F1** (ayuda), **F2** (buscar), **F4** (cliente), **F9** (cobrar), **← →** (cambiar de categoría) y **Ctrl + 1 … 9** (secciones del menú).
 
+En las listas desplegables con varias opciones (colores, categorías, proveedores…) puedes **tocar y escribir** para buscar, en lugar de recorrer toda la lista.
+
 ## Rutina diaria sugerida
 
 ### Al abrir
