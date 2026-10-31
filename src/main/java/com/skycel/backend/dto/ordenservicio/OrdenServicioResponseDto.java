@@ -26,6 +26,9 @@ public class OrdenServicioResponseDto {
     private String  nombreRecibe;
     private Integer idTecnico;
     private String  nombreTecnico;
+    /** La sucursal del técnico asignado (el taller): de su inventario salen las refacciones. Null mientras no hay técnico. */
+    private Integer codtiTaller;
+    private String  nombreTaller;
 
     // ── Equipo ────────────────────────────────────────────────────────────────
     private String marca;
@@ -106,6 +109,9 @@ public class OrdenServicioResponseDto {
         private BigDecimal precioUnitario;
         private BigDecimal subtotal;
         private Boolean    esRegalo;
+        /** De qué sucursal sale la refacción (el taller); null en un servicio o en una línea anterior. */
+        private Integer    codtiStock;
+        private String     nombreTiendaStock;
     }
 
     @Data

@@ -206,7 +206,7 @@ public class VentaService {
         //    fallar rápido antes de tocar stock/IMEIs.
         List<LineaResuelta> lineas = new ArrayList<>();
         for (VentaDetalleRequestDto d : dto.getDetalles()) {
-            lineas.add(resolverLinea(d, tienda, offline, esRenglonPayjoy(d)));
+            lineas.add(resolverLinea(d, tienda, offline, esRenglonPayjoy(d), desdeOrden));
         }
         // La promoción de equipo (chip, mica y protector) depende de toda la venta: se aplica con todas las líneas ya resueltas.
         // Las ventas que arman una orden de servicio o una devolución traen sus precios ya acordados y no la llevan.
@@ -575,7 +575,7 @@ public class VentaService {
     }
 
     /** Los datos de la línea y el precio del sistema (sin promoción); el precio cobrado se valida en {@link #validarPrecioYRegalo}. */
-    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, boolean sinConexion, boolean esPayjoy) {
+    private LineaResuelta resolverLinea(VentaDetalleRequestDto d, Tienda tienda, boolean sinConexion, boolean esPayjoy, boolean desdeOrden) {
         // Un equipo se vende por su IMEI: la unidad ya sabe de qué artículo es
         ProductoImei unidadPedida = d.getImei() != null && !d.getImei().isBlank()
                 ? productoImeiRepository.findByImei(d.getImei().trim().toUpperCase()).orElse(null) : null;
@@ -631,7 +631,13 @@ public class VentaService {
                     descuentoService.calcularDescuento(master, tienda.getCodti(), lista, LocalDateTime.now()));
 
         } else {
-            Producto producto = resolverProductoNoSerial(d, master, tienda);
+            // La refacción de una orden de servicio puede salir del inventario del taller aunque la venta (y la caja) sea de la sucursal
+            Tienda deDonde = tienda;
+            if (desdeOrden && d.getCodtiStock() != null && !d.getCodtiStock().equals(tienda.getCodti())) {
+                deDonde = tiendaRepository.findById(d.getCodtiStock())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tienda no encontrada: " + d.getCodtiStock()));
+            }
+            Producto producto = resolverProductoNoSerial(d, master, deDonde);
 
             if (master.getTipo() != TipoProducto.SERVICIO) {
                 BigDecimal cantidad = BigDecimal.valueOf(d.getCantidad());

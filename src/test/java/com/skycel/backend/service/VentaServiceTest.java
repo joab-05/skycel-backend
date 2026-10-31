@@ -1744,4 +1744,65 @@ class VentaServiceTest {
             verify(promocionEquipoService, never()).calcularConPrevios(any(), any());
         }
     }
+
+    // ── Refacciones que salen de otra sucursal (el taller) ───────────────────
+
+    @Nested
+    @DisplayName("stock de otra sucursal (codtiStock)")
+    class StockDeOtraSucursal {
+
+        private Tienda taller;
+        private Producto enElTaller;
+        private Producto enLaSucursal;
+
+        @org.junit.jupiter.api.BeforeEach
+        void montar() {
+            taller = Tienda.builder().codti(4).nombre("Taller Superche").build();
+            lenient().when(tiendaRepository.findById(4)).thenReturn(Optional.of(taller));
+            ProductoMaster master = masterAccesorio();
+            lenient().when(productoMasterRepository.findById(2)).thenReturn(Optional.of(master));
+            enLaSucursal = productoAccesorio(master, new BigDecimal("1"));
+            enElTaller = Producto.builder().idproducto(21).codpro("ACC-0001").tienda(taller).productoMaster(master)
+                    .stock(new BigDecimal("3")).preciopro(new BigDecimal("5")).preciopub(new BigDecimal("15")).build();
+            lenient().when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, CODTI)).thenReturn(List.of(enLaSucursal));
+            lenient().when(productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(2, 4)).thenReturn(List.of(enElTaller));
+        }
+
+        private VentaRequestDto delTaller() {
+            VentaDetalleRequestDto d = lineaAccesorio((short) 2);
+            d.setCodtiStock(4);
+            return ventaBase(List.of(d));
+        }
+
+        @Test
+        @DisplayName("la venta de una orden de servicio descuenta del inventario del taller y deja intacto el de la sucursal que cobra")
+        void desdeOrden_descuentaDelTaller() {
+            VentaResponseDto r = ventaService.crearDesdeOrdenServicio(delTaller(), ID_VENDEDOR);
+
+            assertThat(r.getCodti()).isEqualTo(CODTI);
+            assertThat(enElTaller.getStock()).isEqualByComparingTo("1");
+            assertThat(enLaSucursal.getStock()).isEqualByComparingTo("1");
+        }
+
+        @Test
+        @DisplayName("si el taller no alcanza, la venta se rechaza aunque la sucursal tenga")
+        void desdeOrden_sinStockEnElTaller() {
+            enElTaller.setStock(BigDecimal.ONE);
+            enLaSucursal.setStock(new BigDecimal("50"));
+
+            assertThatThrownBy(() -> ventaService.crearDesdeOrdenServicio(delTaller(), ID_VENDEDOR))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Stock insuficiente");
+        }
+
+        @Test
+        @DisplayName("en una venta normal del punto de venta se ignora: nadie puede sacar stock de otra sucursal")
+        void ventaNormal_loIgnora() {
+            enLaSucursal.setStock(new BigDecimal("5"));
+
+            ventaService.crear(delTaller(), ID_VENDEDOR);
+
+            assertThat(enLaSucursal.getStock()).isEqualByComparingTo("3");
+            assertThat(enElTaller.getStock()).isEqualByComparingTo("3");
+        }
+    }
 }

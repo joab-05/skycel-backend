@@ -501,13 +501,20 @@ Para que no haya sorpresas al cobrar, el costo se **cotiza y el cliente lo autor
 3. Mientras falte la autorización, **no se puede marcar la orden como lista ni entregarla**. Si el cliente no autoriza, se cancela la orden o se cambia la cotización y se vuelve a pedir.
 4. Si **después de autorizado** se agrega o quita un servicio y el total cambia, la autorización **vuelve a quedar pendiente** y el sistema avisa en la tienda («cambió el precio de $A a $B»): hay que avisarle al cliente del cambio y registrar su respuesta.
 
+### El camino de un equipo
+1. La **sucursal** recibe el equipo, lo registra y, si el cliente decide dejar un **anticipo**, lo cobra ahí mismo.
+2. La sucursal **manda el equipo al taller**; el técnico lo registra con **Recibir en el taller**.
+3. En el **taller** se diagnostica, se cotiza y se cambia la pieza que haga falta.
+4. Al terminar, el equipo **regresa a la sucursal que lo mandó**.
+5. La **sucursal cobra** el saldo y lo **entrega** al cliente.
+
 ### En el taller
 Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las tiendas**.
-1. Un técnico **toma** una orden libre (recoge el equipo en la tienda) o el técnico encargado se la **asigna**.
+1. Un técnico **recibe en el taller** una orden libre (el equipo ya llegó de la tienda) o el técnico encargado se la **asigna**.
 2. **Iniciar reparación** cambia la orden a «En reparación».
-3. Agrega **renglones** (refacciones y servicios con su precio) y **observaciones**, que quedan en el historial.
+3. Agrega **renglones** (refacciones y servicios con su precio) y **observaciones**, que quedan en el historial. Las **refacciones salen del inventario del taller** (la sucursal del técnico), no del de la sucursal que recibió el equipo; cada renglón dice de dónde sale.
 4. **Pedir autorización** al cliente cuando el costo esté listo (ver arriba).
-5. **Marcar lista** avisa que el equipo ya puede recogerse. Si hace falta corregir algo, **Reabrir**.
+5. **Marcar lista** avisa a la sucursal que el equipo ya puede recogerse. Si hace falta corregir algo, **Reabrir**.
 
 ### Cuando falta una refacción
 Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Esperar refacción** y escribe cuál es (por ejemplo, «pantalla original, llega el jueves»).
@@ -516,7 +523,7 @@ Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Espe
 - Cuando llega la pieza, pulsa **Llegó la refacción**: la reparación continúa. El sistema anota cuánto esperó para **no contarlo como tardanza del taller** en el reporte.
 
 ### Equipos listos que nadie recoge
-Entra a **{por_recoger}**: muestra las reparaciones **listas que siguen en la tienda**, las más viejas primero, con los **días sin recoger**, cuándo fue el último recordatorio y cuánto queda por pagar. Con **Avisar / recordar por WhatsApp** mandas el mensaje ya escrito.
+Entra a **{por_recoger}**: muestra las reparaciones **listas que esperan al cliente**, las más viejas primero, con los **días sin recoger**, cuándo fue el último recordatorio y cuánto queda por pagar. Con **Avisar / recordar por WhatsApp** mandas el mensaje ya escrito.
 - A los **7 días** conviene recordárselo al cliente; a los **30 días** vence el plazo que dice su comprobante.
 - Cada mañana el sistema avisa a cada sucursal (en sus avisos) cuántos equipos llevan una semana o más sin recogerse y a quién todavía no se le ha recordado. **No manda nada al cliente por sí solo**: el aviso siempre lo envía una persona.
 
@@ -526,7 +533,8 @@ Entra a **{por_recoger}**: muestra las reparaciones **listas que siguen en la ti
 ### Entregar al cliente
 1. En la tienda, abre la orden **Lista** y pulsa **Entregar y cobrar**.
 2. El sistema calcula el total, **descuenta el anticipo** y cobra la diferencia. Se genera la venta y su ticket.
-3. Una orden se puede **cancelar** antes de entregarse; si tenía anticipo, se devuelve.
+3. La venta es de la **sucursal que cobra**, pero las refacciones se descuentan del **inventario del taller**, que es donde estaban.
+4. Una orden se puede **cancelar** antes de entregarse; si tenía anticipo, se devuelve.
 {consultar}"""
 ORDENES_JS = ORDENES.format(entrada="Órdenes de Servicio", consultar="", por_recoger="Órdenes de Servicio → Por recoger", reporte_entrada="El botón **Reporte de tiempos** de Órdenes de Servicio")
 ORDENES_WEB = ORDENES.format(entrada="Recibir equipo", por_recoger="Equipos por recoger", reporte_entrada="**Reporte del taller**", consultar="""

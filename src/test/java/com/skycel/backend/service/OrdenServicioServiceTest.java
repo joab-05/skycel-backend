@@ -479,7 +479,7 @@ class OrdenServicioServiceTest {
             assertThatThrownBy(() -> service.agregarLinea(o, linea("CEL-000001", 1, null, null), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Un equipo no se agrega");
             assertThatThrownBy(() -> service.agregarLinea(o, linea("NO-EXISTE", 1, null, null), "root"))
-                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no existe en la tienda");
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no existe en el inventario de");
         }
 
         @Test
@@ -635,7 +635,7 @@ class OrdenServicioServiceTest {
         }
 
         @Test
-        @DisplayName("tomar: un técnico toma una orden libre (recoge el equipo) y queda asignada; con el encargado ausente, cualquiera puede")
+        @DisplayName("tomar: un técnico toma una orden libre (recibe el equipo en el taller) y queda asignada; con el encargado ausente, cualquiera puede")
         void tomar() {
             int o = service.crear(recepcion(), "abigail").getIdorden();
 
@@ -645,7 +645,7 @@ class OrdenServicioServiceTest {
             OrdenServicioResponseDto r = service.tomar(o, "ana.lopez");   // un técnico de otra tienda, en el taller
 
             assertThat(r.getNombreTecnico()).isEqualTo("ANA.LOPEZ");
-            assertThat(r.getHistorial().get(r.getHistorial().size() - 1).getComentario()).contains("Equipo recogido en Zocalo").contains("taller");
+            assertThat(r.getHistorial().get(r.getHistorial().size() - 1).getComentario()).contains("Equipo recibido en el taller").contains("lo envió Zocalo");
             assertEstado(HttpStatus.CONFLICT, () -> service.tomar(o, "juan.perez"));   // ya la tomó otro
             assertEstado(HttpStatus.CONFLICT, () -> service.tomar(o, "ana.lopez"));
             assertThat(service.iniciar(o, "ana.lopez").getEstadoDisplay()).isEqualTo("En reparación");
@@ -1098,6 +1098,109 @@ class OrdenServicioServiceTest {
     }
 
     // ── Espera de refacción, equipos sin recoger, revisión y fotos, reporte ─────
+
+    @Nested
+    @DisplayName("el inventario del taller")
+    class InventarioDelTaller {
+
+        private Tienda superche;
+        private Producto micaSuperche;
+
+        @BeforeEach
+        void taller() {
+            superche = Tienda.builder().codti(4).nombre("Taller Superche").build();
+            lenient().when(tiendaRepository.findById(4)).thenReturn(Optional.of(superche));
+            otroTecnico.setTienda(superche);
+            micaSuperche = Producto.builder().idproducto(id++).codpro("ACC-000010").tienda(superche).productoMaster(mMica)
+                    .stock(new BigDecimal("5")).preciopub(new BigDecimal("90")).preciopro(new BigDecimal("10")).activo(true).build();
+            productos.add(micaSuperche);
+        }
+
+        private int ordenDelTaller(OrdenLineaRequestDto... lineas) {
+            OrdenServicioRequestDto dto = recepcion();
+            dto.setLineas(lineas.length == 0 ? null : List.of(lineas));
+            int idorden = service.crear(dto, "abigail").getIdorden();
+            ordenes.get(idorden).setTecnico(otroTecnico);   // el técnico trabaja en Taller Superche; la orden es de Zócalo
+            return idorden;
+        }
+
+        @Test
+        @DisplayName("las refacciones se toman del inventario del técnico, no del de la sucursal que recibió el equipo")
+        void agregaDelTaller() {
+            int o = ordenDelTaller();
+
+            OrdenServicioResponseDto r = service.agregarLinea(o, linea("ACC-000010", 2, null, null), "ana.lopez");
+
+            assertThat(r.getCodtiTaller()).isEqualTo(4);
+            assertThat(r.getNombreTaller()).isEqualTo("Taller Superche");
+            assertThat(r.getLineas().get(0).getCodtiStock()).isEqualTo(4);
+            assertThat(r.getLineas().get(0).getNombreTiendaStock()).isEqualTo("Taller Superche");
+            assertThat(r.getCodti()).isEqualTo(2);   // la orden (y su cobro) siguen siendo de Zócalo
+        }
+
+        @Test
+        @DisplayName("si la refacción no existe en el taller, lo dice con su nombre aunque sí exista en la sucursal")
+        void noExisteEnElTaller() {
+            productos.remove(micaSuperche);
+            int o = ordenDelTaller();
+
+            assertThatThrownBy(() -> service.agregarLinea(o, linea("ACC-000010", 1, null, null), "ana.lopez"))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                        assertThat(e.getReason()).contains("Taller Superche");
+                    });
+        }
+
+        @Test
+        @DisplayName("sin técnico asignado, el técnico que cotiza usa el inventario de su propia sucursal")
+        void tecnicoQueCotizaSinAsignar() {
+            OrdenServicioRequestDto dto = recepcion();
+            int o = service.crear(dto, "abigail").getIdorden();   // sin técnico
+            ordenes.get(o).setTecnico(null);
+
+            OrdenServicioResponseDto r = service.agregarLinea(o, linea("ACC-000010", 1, null, null), "luis.tecnico");   // técnico encargado de Zócalo
+
+            assertThat(r.getCodtiTaller()).isNull();
+            assertThat(r.getLineas().get(0).getCodtiStock()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("marcar lista exige stock en el taller, no en la sucursal: Zócalo tiene 10 pero el taller solo 1")
+        void stockDelTaller() {
+            micaSuperche.setStock(new BigDecimal("1"));
+            int o = ordenDelTaller();
+            service.agregarLinea(o, linea("SRV-000001", null, null, null), "ana.lopez");
+            service.agregarLinea(o, linea("ACC-000010", 2, null, null), "ana.lopez");
+            service.iniciar(o, "ana.lopez");
+
+            assertThatThrownBy(() -> service.marcarLista(o, "ana.lopez"))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                        assertThat(e.getReason()).contains("Taller Superche").contains("hay 1");
+                    });
+
+            micaSuperche.setStock(new BigDecimal("2"));
+            assertThat(service.marcarLista(o, "ana.lopez").getEstado()).isEqualTo(OrdenServicioService.LISTA);
+        }
+
+        @Test
+        @DisplayName("al entregar, la venta es de la sucursal pero la refacción sale del taller; el servicio de la sucursal no indica otra sucursal")
+        void ventaDeLaSucursalConStockDelTaller() {
+            int o = ordenDelTaller();
+            service.agregarLinea(o, linea("SRV-000001", null, null, null), "ana.lopez");
+            service.agregarLinea(o, linea("ACC-000010", 1, null, null), "ana.lopez");
+            service.iniciar(o, "ana.lopez");
+            service.marcarLista(o, "ana.lopez");
+
+            service.entregar(o, entrega(1), "abigail");
+
+            ArgumentCaptor<VentaRequestDto> cap = ArgumentCaptor.forClass(VentaRequestDto.class);
+            verify(ventaService).crearDesdeOrdenServicio(cap.capture(), anyInt());
+            assertThat(cap.getValue().getCodti()).isEqualTo(2);
+            assertThat(cap.getValue().getDetalles()).extracting("codpro", "codtiStock")
+                    .containsExactly(org.assertj.core.groups.Tuple.tuple("SRV-000001", null), org.assertj.core.groups.Tuple.tuple("ACC-000010", 4));
+        }
+    }
 
     @Nested
     @DisplayName("espera de refacción")

@@ -30,6 +30,12 @@ public class VentaDetalleRequestDto {
     /** Descuento puntual que un administrador aprobó para esta línea (ver solicitudes de descuento). */
     private Integer idSolicitudDescuento;
 
+    /**
+     * Solo lo usan las ventas que arma una orden de servicio: la sucursal de donde sale la refacción (el taller), cuando no es la
+     * misma que cobra. En cualquier otra venta se ignora y el stock sale de la sucursal de la venta.
+     */
+    private Integer codtiStock;
+
     /** ¿El artículo es un regalo (precio 0 autorizado)? */
     private Boolean esRegalo = false;
 

@@ -103,7 +103,7 @@ public class OrdenServicioController {
         return ResponseEntityBuilder.ok(ordenService.taller(user.getUsername()), "órdenes del taller");
     }
 
-    @Operation(summary = "Tomar una orden (recoger el equipo en la tienda)",
+    @Operation(summary = "Tomar una orden (recibir el equipo en el taller)",
             description = "Un técnico toma una orden que nadie ha tomado: queda asignada a él y en la bitácora consta la recolección. " +
                     "Cualquier técnico puede hacerlo (p. ej. si el técnico encargado no está).")
     @SecurityRequirement(name = "Bearer Authentication")

@@ -27,7 +27,7 @@ public class OrdenServicioDetalle {
     @JoinColumn(name = "idprodmaster", nullable = false)
     private ProductoMaster productoMaster;
 
-    /** Código del producto en la tienda de la orden. */
+    /** Código del producto (el mismo en todas las sucursales). */
     @Column(name = "codpro", nullable = false, length = 25)
     private String codpro;
 
@@ -36,6 +36,14 @@ public class OrdenServicioDetalle {
 
     @Column(name = "precio_unitario", nullable = false, precision = 12, scale = 2)
     private BigDecimal precioUnitario;
+
+    /**
+     * La sucursal de cuyo inventario se tomó el renglón: el taller, que no es la sucursal que recibió el equipo y cobra (sus códigos
+     * pueden ser otros). Null en las líneas anteriores, que salen de la sucursal de la orden.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "codti_stock")
+    private Tienda tiendaStock;
 
     /** Regalo (precio $0 autorizado), p. ej. "incluye mica gratis". */
     @Column(name = "es_regalo", columnDefinition = "TINYINT(1) DEFAULT 0")

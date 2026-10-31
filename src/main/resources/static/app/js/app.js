@@ -1532,7 +1532,7 @@ async function pantallaOrdenDetalle(id) {
       <p class="ayuda">Se abre WhatsApp con el mensaje ya escrito: solo pulsa enviar. Queda anotado en la bitácora.</p>
     </div>
     ${lineas.length ? `<div class="tarjeta"><h2>Servicios y refacciones</h2>
-      ${lineas.map(l => `<div class="detalle-fila"><span class="k">${escapar(l.nombre)} ×${l.cantidad}</span><span class="v">${l.esRegalo ? 'Regalo' : formatoDinero(l.subtotal)}</span></div>`).join('')}
+      ${lineas.map(l => `<div class="detalle-fila"><span class="k">${escapar(l.nombre)} ×${l.cantidad}${l.nombreTiendaStock && l.tipoProducto !== 'SERVICIO' ? ' <span class="ayuda">· sale de ' + escapar(l.nombreTiendaStock) + '</span>' : ''}</span><span class="v">${l.esRegalo ? 'Regalo' : formatoDinero(l.subtotal)}</span></div>`).join('')}
       <div class="detalle-fila"><span class="k"><strong>Total</strong></span><span class="v"><strong>${formatoDinero(o.total)}</strong></span></div></div>` : ''}
     <div class="tarjeta">
       <h2>Información de la orden</h2>
@@ -1545,7 +1545,7 @@ async function pantallaOrdenDetalle(id) {
       <div class="detalle-fila"><span class="k">Estado físico</span><span class="v">${escapar(o.estadoFisico || '—')}</span></div>
       <div class="detalle-fila"><span class="k">Falla reportada</span><span class="v">${escapar(o.fallaReportada)}</span></div>
       <div class="detalle-fila"><span class="k">Diagnóstico</span><span class="v">${escapar(o.diagnostico || '—')}</span></div>
-      <div class="detalle-fila"><span class="k">Técnico</span><span class="v">${escapar(o.nombreTecnico || 'Sin asignar')}</span></div>
+      <div class="detalle-fila"><span class="k">Técnico</span><span class="v">${escapar(o.nombreTecnico || 'Sin asignar')}${o.nombreTaller ? ' · ' + escapar(o.nombreTaller) : ''}</span></div>
       <div class="detalle-fila"><span class="k">Recibió</span><span class="v">${escapar(o.nombreRecibe)}</span></div>
       <div class="detalle-fila"><span class="k">Fecha prometida</span><span class="v">${o.fechaPromesaHora ? formatoFecha(o.fechaPromesaHora) + (o.horasEstimadas != null ? ' (' + o.horasEstimadas + ' h)' : '') : (o.fechaPromesa || '—')}</span></div>
       ${o.esperaMinutos > 0 ? `<div class="detalle-fila"><span class="k">Esperó refacciones</span><span class="v">${o.esperaMinutos >= 120 ? Math.round(o.esperaMinutos / 60) + ' h' : o.esperaMinutos + ' min'}</span></div>` : ''}
@@ -1684,7 +1684,7 @@ async function pantallaOrdenDetalle(id) {
   contAcc.classList.remove('oculto');
   const acciones = [];
 
-  if (esTecnicoLibre) acciones.push({ t: ic('hand') + ' Tomar', color: 'btn-azul', fn: () => accionSimple(id, 'tomar', 'POST') });
+  if (esTecnicoLibre) acciones.push({ t: ic('hand') + ' Recibir en el taller', color: 'btn-azul', fn: () => accionSimple(id, 'tomar', 'POST') });
   if (puedeTrabajar && o.estado === 1 && o.idTecnico && !o.esperaMotivo) acciones.push({ t: '▶️ Iniciar reparación', color: 'btn-verde', fn: () => accionSimple(id, 'iniciar', 'POST') });
   if (puedeTrabajar && o.estado === 2 && !o.esperaMotivo) acciones.push({ t: ic('circle-check') + ' Marcar lista', color: 'btn-verde', fn: () => accionSimple(id, 'lista', 'POST') });
   if (puedeTrabajar && viva && !o.esperaMotivo) acciones.push({ t: ic('hourglass') + ' Esperar refacción', color: 'btn-gris', fn: () => document.getElementById('dt-espera-cont').classList.toggle('oculto') });

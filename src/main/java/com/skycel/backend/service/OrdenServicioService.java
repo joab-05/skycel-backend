@@ -221,7 +221,7 @@ public class OrdenServicioService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "La orden " + orden.getFolio() + " ya la tomó " + quien + ".");
         }
         orden.setTecnico(usuario);
-        registrar(orden, usuario, "Equipo recogido en " + orden.getTienda().getNombre() + " por " + usuario.getNombreCompleto() + " (pasa al taller)");
+        registrar(orden, usuario, "Equipo recibido en el taller por " + usuario.getNombreCompleto() + " (lo envió " + orden.getTienda().getNombre() + ")");
         return toDto(ordenRepository.save(orden));
     }
 
@@ -525,11 +525,12 @@ public class OrdenServicioService {
         }
         for (OrdenServicioDetalle l : lineas) {
             if (l.getProductoMaster().getTipo() == TipoProducto.ACCESORIO) {
-                BigDecimal hay = productoRepository.findByCodproAndTienda_Codti(l.getCodpro(), orden.getTienda().getCodti())
+                Tienda deDonde = l.getTiendaStock() != null ? l.getTiendaStock() : orden.getTienda();
+                BigDecimal hay = productoRepository.findByCodproAndTienda_Codti(l.getCodpro(), deDonde.getCodti())
                         .map(p -> p.getStock() != null ? p.getStock() : BigDecimal.ZERO).orElse(BigDecimal.ZERO);
                 if (hay.compareTo(BigDecimal.valueOf(l.getCantidad())) < 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta stock de la refacción '"
-                            + l.getProductoMaster().getNombreBase() + "': se necesitan " + l.getCantidad() + " y hay " + hay + ".");
+                            + l.getProductoMaster().getNombreBase() + "' en " + deDonde.getNombre() + ": se necesitan " + l.getCantidad() + " y hay " + hay + ".");
                 }
             }
         }
@@ -904,10 +905,14 @@ public class OrdenServicioService {
 
     private OrdenServicioDetalle nuevaLinea(OrdenServicio orden, OrdenLineaRequestDto l, Usuario usuario) {
         String codpro = l.getCodpro().trim();
-        Producto p = productoRepository.findByCodproAndTienda_Codti(codpro, orden.getTienda().getCodti())
+        Tienda deDonde = tiendaDeInventario(orden, usuario);
+        // Un servicio (mano de obra) no ocupa inventario: si el taller no lo tiene dado de alta, vale el de la sucursal de la orden
+        Producto p = productoRepository.findByCodproAndTienda_Codti(codpro, deDonde.getCodti())
                 .filter(x -> Boolean.TRUE.equals(x.getActivo()))
+                .or(() -> productoRepository.findByCodproAndTienda_Codti(codpro, orden.getTienda().getCodti())
+                        .filter(x -> Boolean.TRUE.equals(x.getActivo()) && x.getProductoMaster().getTipo() == TipoProducto.SERVICIO))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "El producto '" + codpro + "' no existe en la tienda de la orden."));
+                        "El producto '" + codpro + "' no existe en el inventario de " + deDonde.getNombre() + "."));
         ProductoMaster master = p.getProductoMaster();
         if (master.getTipo() == TipoProducto.CELULAR || master.getTipo() == TipoProducto.TABLET) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -934,6 +939,7 @@ public class OrdenServicioService {
         }
         return detalleRepository.save(OrdenServicioDetalle.builder()
                 .orden(orden).productoMaster(master).codpro(codpro).cantidad(cantidad)
+                .tiendaStock(p.getTienda())   // de dónde se tomó: sus códigos pueden no ser los de la sucursal que cobra
                 .precioUnitario(precio.setScale(2, java.math.RoundingMode.HALF_UP)).esRegalo(regalo).build());
     }
 
@@ -972,6 +978,9 @@ public class OrdenServicioService {
         VentaDetalleRequestDto d = new VentaDetalleRequestDto();
         d.setIdprodmaster(l.getProductoMaster().getIdprodmaster());
         d.setCodpro(l.getCodpro());
+        // La refacción sale del taller; la venta es de la sucursal. Solo se indica cuando son distintas.
+        boolean deOtraSucursal = l.getTiendaStock() != null && !l.getTiendaStock().getCodti().equals(l.getOrden().getTienda().getCodti());
+        d.setCodtiStock(deOtraSucursal ? l.getTiendaStock().getCodti() : null);
         d.setCantidad(l.getCantidad());
         d.setPrecioUnitarioFinal(l.getPrecioUnitario());
         d.setEsRegalo(Boolean.TRUE.equals(l.getEsRegalo()));
@@ -1102,6 +1111,22 @@ public class OrdenServicioService {
         }
     }
 
+    /** El taller de la orden: la sucursal del técnico asignado, o null mientras nadie la ha tomado. */
+    private Tienda tallerDe(OrdenServicio o) {
+        return o.getTecnico() != null ? o.getTecnico().getTienda() : null;
+    }
+
+    /**
+     * De qué inventario sale lo que se agrega a la orden. Las refacciones están en el taller (el equipo viaja de la sucursal que lo
+     * recibió al taller y regresa a cobrarse), así que sale de la sucursal del técnico asignado; si aún no hay técnico, de la del
+     * técnico que está cotizando; y si ninguno, de la sucursal de la orden.
+     */
+    private Tienda tiendaDeInventario(OrdenServicio orden, Usuario usuario) {
+        Tienda taller = tallerDe(orden);
+        if (taller == null && usuario.getRol() == Rol.TECNICO) taller = usuario.getTienda();
+        return taller != null ? taller : orden.getTienda();
+    }
+
     private boolean esTecnicoAsignado(Usuario u, OrdenServicio o) {
         return u.getRol() == Rol.TECNICO && o.getTecnico() != null && o.getTecnico().getIdusuario().equals(u.getIdusuario());
     }
@@ -1151,6 +1176,7 @@ public class OrdenServicioService {
                 .idusuarioRecibe(o.getUsuarioRecibe().getIdusuario()).nombreRecibe(o.getUsuarioRecibe().getNombreCompleto())
                 .idTecnico(o.getTecnico() != null ? o.getTecnico().getIdusuario() : null)
                 .nombreTecnico(o.getTecnico() != null ? o.getTecnico().getNombreCompleto() : null)
+                .codtiTaller(tallerDe(o) != null ? tallerDe(o).getCodti() : null).nombreTaller(tallerDe(o) != null ? tallerDe(o).getNombre() : null)
                 .marca(o.getMarca()).modelo(o.getModelo()).imei(o.getImei())
                 .accesoriosDejados(o.getAccesoriosDejados()).estadoFisico(o.getEstadoFisico())
                 .fallaReportada(o.getFallaReportada()).diagnostico(o.getDiagnostico())
@@ -1174,7 +1200,9 @@ public class OrdenServicioService {
                         .nombre(l.getProductoMaster().getNombreBase()).tipoProducto(l.getProductoMaster().getTipo().name())
                         .cantidad(l.getCantidad()).precioUnitario(l.getPrecioUnitario())
                         .subtotal(l.getPrecioUnitario().multiply(BigDecimal.valueOf(l.getCantidad())))
-                        .esRegalo(l.getEsRegalo()).build()).collect(Collectors.toList()))
+                        .esRegalo(l.getEsRegalo())
+                        .codtiStock(l.getTiendaStock() != null ? l.getTiendaStock().getCodti() : null)
+                        .nombreTiendaStock(l.getTiendaStock() != null ? l.getTiendaStock().getNombre() : null).build()).collect(Collectors.toList()))
                 .anticipos(anticipos.stream().map(a -> OrdenServicioResponseDto.AnticipoResponseDto.builder()
                         .idanticipo(a.getIdanticipo()).monto(a.getMonto()).metodoPago(a.getMetodoPago())
                         .descripcionMetodoPago(descripcionMetodo(a.getMetodoPago())).folioOperacion(a.getFolioOperacion())
