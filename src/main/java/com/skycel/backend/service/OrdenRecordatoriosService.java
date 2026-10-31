@@ -41,6 +41,7 @@ public class OrdenRecordatoriosService {
         Map<Integer, List<OrdenServicio>> porTienda = new TreeMap<>();
         for (OrdenServicio o : ordenRepository.listasSinRecoger(null)) {
             if (OrdenServicioService.diasSinRecoger(o) < OrdenServicioService.DIAS_PARA_RECORDAR) continue;
+            if (OrdenServicioService.regresoPendiente(o)) continue;   // sigue en el taller: no se le recuerda al cliente que lo recoja
             // ya se le recordó hace menos de una semana: todavía no toca
             if (o.getUltimoRecordatorio() != null
                     && o.getUltimoRecordatorio().toLocalDate().isAfter(hoy.minusDays(OrdenServicioService.DIAS_PARA_RECORDAR))) continue;

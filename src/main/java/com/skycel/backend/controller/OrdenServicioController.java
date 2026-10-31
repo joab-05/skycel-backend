@@ -160,6 +160,16 @@ public class OrdenServicioController {
         return ResponseEntityBuilder.updated(ordenService.marcarLista(id, user.getUsername()), "orden de servicio");
     }
 
+    @Operation(summary = "Confirmar que el equipo regresó del taller a la sucursal",
+            description = "Hasta que regrese no se avisa al cliente que ya puede recogerlo ni se cobra. Lo confirma el personal de la sucursal que recibió el equipo.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/regreso")
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
+    public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> regreso(
+            @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(ordenService.regresoATienda(id, user.getUsername()), "orden de servicio");
+    }
+
     @Operation(summary = "Cotizar: dejar la orden esperando que el cliente autorice el total")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/autorizacion/solicitar")

@@ -118,6 +118,13 @@ public class OrdenServicio {
     @Column(name = "fecha_lista")
     private LocalDateTime fechaLista;
 
+    /**
+     * Cuándo regresó el equipo a la sucursal que lo recibió (y que cobra), de vuelta del taller. Null mientras sigue en el taller; si se
+     * repara en la misma sucursal que cobra, se llena sola al marcarla lista.
+     */
+    @Column(name = "fecha_regreso_tienda")
+    private LocalDateTime fechaRegresoTienda;
+
     @Column(name = "fecha_entrega")
     private LocalDateTime fechaEntrega;
 

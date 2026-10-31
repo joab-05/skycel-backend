@@ -1185,6 +1185,7 @@ function textoRevision(checklist) {
 /** La pastilla de estado de una orden: una reparación detenida por una pieza se ve distinta. */
 function pastillaOrden(o) {
   if (o.estado === 1 && !o.idTecnico) return '<span class="pastilla por-tomar">' + ic('hourglass') + ' Por tomar</span>';
+  if (o.regresoPendiente) return '<span class="pastilla espera" title="Está reparado y sigue en el taller: falta que regrese a la sucursal">' + ic('truck') + ' Lista · en el taller</span>';
   if (o.esperaMotivo) return '<span class="pastilla espera" title="' + escapar(o.esperaMotivo) + '">' + ic('hourglass') + ' Esperando refacción</span>';
   return pastillaEstado(o.estadoDisplay);
 }
@@ -1685,6 +1686,7 @@ async function pantallaOrdenDetalle(id) {
   const acciones = [];
 
   if (esTecnicoLibre) acciones.push({ t: ic('hand') + ' Recibir en el taller', color: 'btn-azul', fn: () => accionSimple(id, 'tomar', 'POST') });
+  if (o.estado === 3 && o.regresoPendiente) acciones.push({ t: ic('truck') + ' Regresó a la tienda', color: 'btn-azul', fn: () => accionSimple(id, 'regreso', 'POST') });
   if (puedeTrabajar && o.estado === 1 && o.idTecnico && !o.esperaMotivo) acciones.push({ t: '▶️ Iniciar reparación', color: 'btn-verde', fn: () => accionSimple(id, 'iniciar', 'POST') });
   if (puedeTrabajar && o.estado === 2 && !o.esperaMotivo) acciones.push({ t: ic('circle-check') + ' Marcar lista', color: 'btn-verde', fn: () => accionSimple(id, 'lista', 'POST') });
   if (puedeTrabajar && viva && !o.esperaMotivo) acciones.push({ t: ic('hourglass') + ' Esperar refacción', color: 'btn-gris', fn: () => document.getElementById('dt-espera-cont').classList.toggle('oculto') });
@@ -6643,18 +6645,70 @@ async function pantallaFaltantes() {
 
 // ── Notificaciones ───────────────────────────────────────────────────────
 
+// El sonido y el recuadro de un aviso nuevo. El navegador solo deja sonar después de que la persona tocó la pantalla alguna vez:
+// por eso el audio se «desbloquea» con el primer toque o tecla.
+let ctxAudio = null;
+function sonidoActivado() { try { return localStorage.getItem('skycel-sonido-avisos') !== 'no'; } catch { return true; } }
+function desbloquearAudio() {
+  try {
+    ctxAudio = ctxAudio || new (window.AudioContext || window.webkitAudioContext)();
+    if (ctxAudio.state === 'suspended') ctxAudio.resume();
+  } catch { /* sin audio en este navegador */ }
+}
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, desbloquearAudio, { passive: true }));
+function sonidoAviso(siempre) {
+  if (!siempre && !sonidoActivado()) return;
+  try {
+    desbloquearAudio();
+    if (!ctxAudio || ctxAudio.state !== 'running') return;
+    const nota = (hz, ini, dur) => {
+      const t0 = ctxAudio.currentTime + ini;
+      const o = ctxAudio.createOscillator(), g = ctxAudio.createGain();
+      o.type = 'sine'; o.frequency.value = hz;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(ctxAudio.destination);
+      o.start(t0); o.stop(t0 + dur + 0.05);
+    };
+    nota(987.77, 0, 0.18);    // si
+    nota(1318.51, 0.16, 0.6); // mi
+  } catch { /* si no suena, el aviso igual se ve */ }
+}
+function recuadroAviso(titulo) {
+  const viejo = document.getElementById('aviso-vivo');
+  if (viejo) viejo.remove();
+  const d = document.createElement('div');
+  d.id = 'aviso-vivo';
+  d.className = 'aviso-vivo';
+  d.innerHTML = `<strong>Aviso nuevo</strong><span>${escapar(titulo || '')}</span>`;
+  d.onclick = () => { d.remove(); navegar('#/notificaciones'); };
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 8000);
+}
+
+let ultimoIdAviso = -1;   // el aviso más nuevo que ya se conocía (-1: aún no se ha revisado)
 async function actualizarBadgeNotificaciones() {
   const badge = document.getElementById('notif-badge');
   if (!badge) return;
   const s = Sesion.obtener();
-  if (!s) { badge.classList.add('oculto'); return; }
+  if (!s) { badge.classList.add('oculto'); ultimoIdAviso = -1; document.title = TITULO_BASE; return; }
   try {
-    const n = await api('GET', '/api/notificaciones/pendientes');
+    const lista = await api('GET', '/api/notificaciones');
+    const n = lista.length;
+    const masNuevo = lista.reduce((m, x) => (m && m.idnotificacion > x.idnotificacion ? m : x), null);
+    const id = masNuevo ? masNuevo.idnotificacion : 0;
+    const nuevo = ultimoIdAviso >= 0 && id > ultimoIdAviso;
+    ultimoIdAviso = Math.max(ultimoIdAviso, id);
     if (n > 0) { badge.textContent = n > 9 ? '9+' : String(n); badge.classList.remove('oculto'); }
     else badge.classList.add('oculto');
+    document.title = n > 0 ? '(' + n + ') ' + TITULO_BASE : TITULO_BASE;
+    if (nuevo) { sonidoAviso(); recuadroAviso(masNuevo.titulo); }
   } catch { /* sin conexión: se deja como estaba */ }
 }
-setInterval(actualizarBadgeNotificaciones, 45000);
+const TITULO_BASE = document.title;
+setInterval(actualizarBadgeNotificaciones, 20000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) actualizarBadgeNotificaciones(); });
 
 async function pantallaNotificaciones() {
   root.innerHTML = `
@@ -6665,6 +6719,7 @@ async function pantallaNotificaciones() {
     </div>
     <div class="grupo-botones" style="margin:10px 0;">
       <button id="nt-marcar-todas" class="btn btn-gris btn-chico">Marcar todas como leídas</button>
+      <label style="display:inline-flex;align-items:center;gap:6px;margin:0 0 0 8px;"><input type="checkbox" style="width:auto;" id="nt-sonido" ${sonidoActivado() ? 'checked' : ''}> Sonido al llegar un aviso</label>
     </div>
     <div id="nt-lista"><div class="vacio">Cargando...</div></div>`;
 
@@ -6673,6 +6728,11 @@ async function pantallaNotificaciones() {
   const segTodas = document.getElementById('nt-seg-todas');
   segPend.onclick = () => { soloPendientes = true; segPend.classList.add('activo'); segTodas.classList.remove('activo'); cargar(); };
   segTodas.onclick = () => { soloPendientes = false; segTodas.classList.add('activo'); segPend.classList.remove('activo'); cargar(); };
+
+  document.getElementById('nt-sonido').onchange = (e) => {
+    try { localStorage.setItem('skycel-sonido-avisos', e.target.checked ? 'si' : 'no'); } catch { /* sin almacenamiento: vale hasta recargar */ }
+    if (e.target.checked) sonidoAviso(true);   // para escuchar cómo suena
+  };
 
   document.getElementById('nt-marcar-todas').onclick = async (e) => {
     e.target.disabled = true;

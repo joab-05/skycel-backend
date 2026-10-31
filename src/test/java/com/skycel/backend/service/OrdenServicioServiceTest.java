@@ -1191,6 +1191,7 @@ class OrdenServicioServiceTest {
             service.agregarLinea(o, linea("ACC-000010", 1, null, null), "ana.lopez");
             service.iniciar(o, "ana.lopez");
             service.marcarLista(o, "ana.lopez");
+            service.regresoATienda(o, "abigail");
 
             service.entregar(o, entrega(1), "abigail");
 
@@ -1199,6 +1200,82 @@ class OrdenServicioServiceTest {
             assertThat(cap.getValue().getCodti()).isEqualTo(2);
             assertThat(cap.getValue().getDetalles()).extracting("codpro", "codtiStock")
                     .containsExactly(org.assertj.core.groups.Tuple.tuple("SRV-000001", null), org.assertj.core.groups.Tuple.tuple("ACC-000010", 4));
+        }
+
+        @Test
+        @DisplayName("regreso a la tienda: lista en el taller no se cobra ni se avisa al cliente hasta que regrese; entonces sí")
+        void regresoATienda() {
+            int o = ordenDelTaller();
+            service.agregarLinea(o, linea("SRV-000001", null, "300", null), "ana.lopez");
+            service.iniciar(o, "ana.lopez");
+
+            OrdenServicioResponseDto lista = service.marcarLista(o, "ana.lopez");
+            assertThat(lista.getRegresoPendiente()).isTrue();
+            assertThat(lista.getFechaRegresoTienda()).isNull();
+            assertEstado(HttpStatus.CONFLICT, () -> service.entregar(o, entrega(1), "abigail"));
+            assertEstado(HttpStatus.CONFLICT, () -> service.avisoWhatsapp(o, "LISTA", "abigail"));
+            assertEstado(HttpStatus.CONFLICT, () -> service.avisoWhatsapp(o, null, "abigail"));
+            assertThat(service.consultaPublica(viva(o).getFolio(), "0001").getMensaje()).containsIgnoringCase("de regreso");
+
+            OrdenServicioResponseDto regreso = service.regresoATienda(o, "abigail");
+            assertThat(regreso.getRegresoPendiente()).isFalse();
+            assertThat(regreso.getFechaRegresoTienda()).isNotNull();
+            assertThat(regreso.getHistorial().get(regreso.getHistorial().size() - 1).getComentario()).contains("regresó a Zocalo");
+            assertThat(service.avisoWhatsapp(o, null, "abigail").get("tipo")).isEqualTo("LISTA");
+            assertThat(service.entregar(o, entrega(1), "abigail").getEstadoDisplay()).isEqualTo("Entregada");
+        }
+
+        @Test
+        @DisplayName("regreso: lo confirma quien atiende esa sucursal, solo con la orden lista, y repetirlo no cambia nada")
+        void regresoPermisos() {
+            int o = ordenDelTaller();
+            service.agregarLinea(o, linea("SRV-000001", null, "300", null), "ana.lopez");
+            assertEstado(HttpStatus.CONFLICT, () -> service.regresoATienda(o, "abigail"));   // aún no está lista
+            service.iniciar(o, "ana.lopez");
+            service.marcarLista(o, "ana.lopez");
+
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.regresoATienda(o, "guillermo"));   // encargado de otra sucursal
+            service.regresoATienda(o, "abigail");
+            LocalDateTime cuando = viva(o).getFechaRegresoTienda();
+            assertThat(service.regresoATienda(o, "root").getFechaRegresoTienda()).isEqualTo(cuando);
+        }
+
+        @Test
+        @DisplayName("si se repara en la misma sucursal que cobra no hay viaje: queda en la tienda al marcarla lista, y reabrir lo vuelve a pedir")
+        void mismaSucursal() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));   // el técnico es de Zócalo, igual que la orden
+            service.iniciar(o, "juan.perez");
+
+            OrdenServicioResponseDto lista = service.marcarLista(o, "juan.perez");
+            assertThat(lista.getRegresoPendiente()).isFalse();
+            assertThat(lista.getFechaRegresoTienda()).isNotNull();
+
+            int d = ordenDelTaller();
+            service.agregarLinea(d, linea("SRV-000001", null, "300", null), "ana.lopez");
+            service.iniciar(d, "ana.lopez");
+            service.marcarLista(d, "ana.lopez");
+            service.regresoATienda(d, "abigail");
+            ComentarioRequestDto motivo = new ComentarioRequestDto();
+            motivo.setComentario("Falló otra cosa");
+            OrdenServicioResponseDto reabierta = service.reabrir(d, motivo, "ana.lopez");
+            assertThat(reabierta.getFechaRegresoTienda()).isNull();
+            assertThat(service.marcarLista(d, "ana.lopez").getRegresoPendiente()).isTrue();
+        }
+
+        @Test
+        @DisplayName("el aviso diario de equipos sin recoger no cuenta los que siguen en el taller")
+        void recordatoriosOmitenLosDelTaller() {
+            int o = ordenDelTaller();
+            service.agregarLinea(o, linea("SRV-000001", null, "300", null), "ana.lopez");
+            service.iniciar(o, "ana.lopez");
+            service.marcarLista(o, "ana.lopez");
+            viva(o).setFechaLista(LocalDateTime.now().minusDays(10));
+
+            OrdenRecordatoriosService avisos = new OrdenRecordatoriosService(ordenRepository, notificacionService);
+            assertThat(avisos.avisar(LocalDate.now())).isZero();
+            service.regresoATienda(o, "abigail");
+            viva(o).setFechaRegresoTienda(LocalDateTime.now().minusDays(10));
+            assertThat(avisos.avisar(LocalDate.now())).isEqualTo(1);
         }
     }
 
@@ -1271,6 +1348,8 @@ class OrdenServicioServiceTest {
             assertThat(service.avisoWhatsapp(o, null, "abigail").get("tipo")).isEqualTo("LISTA");
 
             viva(o).setFechaLista(LocalDateTime.now().minusDays(10));
+
+            viva(o).setFechaRegresoTienda(viva(o).getFechaLista());
             assertThat(service.porRecoger(2, "abigail")).singleElement().satisfies(d -> {
                 assertThat(d.getDiasListaSinRecoger()).isEqualTo(10);
                 assertThat(d.getUltimoRecordatorio()).isNull();
@@ -1299,8 +1378,11 @@ class OrdenServicioServiceTest {
             hastaLista(b);
             hastaLista(c);
             viva(a).setFechaLista(LocalDateTime.now().minusDays(9));
+            viva(a).setFechaRegresoTienda(viva(a).getFechaLista());
             viva(b).setFechaLista(LocalDateTime.now().minusDays(40));
+            viva(b).setFechaRegresoTienda(viva(b).getFechaLista());
             viva(c).setFechaLista(LocalDateTime.now().minusDays(12));
+            viva(c).setFechaRegresoTienda(viva(c).getFechaLista());
             viva(c).setUltimoRecordatorio(LocalDateTime.now().minusDays(2));   // ya se le recordó hace poco
             OrdenRecordatoriosService avisos = new OrdenRecordatoriosService(ordenRepository, notificacionService);
 

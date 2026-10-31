@@ -422,6 +422,10 @@ public class OrdenServicioService {
             try { tipo = OrdenAvisos.Tipo.valueOf(tipoPedido.trim().toUpperCase()); }
             catch (IllegalArgumentException ex) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de aviso no válido: " + tipoPedido); }
         }
+        if (regresoPendiente(orden) && (tipo == OrdenAvisos.Tipo.LISTA || tipo == OrdenAvisos.Tipo.RECORDATORIO)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El equipo aún no regresa de " + tallerDe(orden).getNombre() + " a " + orden.getTienda().getNombre()
+                    + ": avísale al cliente que ya puede recogerlo cuando llegue (pulsa «Regresó a la tienda»).");
+        }
         String telefono = OrdenAvisos.telefonoWhatsApp(orden.getCliente().getTelefono());
         if (telefono == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -471,8 +475,9 @@ public class OrdenServicioService {
     public static final int DIAS_PLAZO_RECOGER = 30;
 
     static int diasSinRecoger(OrdenServicio o) {
-        if (o.getEstado() == null || o.getEstado() != LISTA || o.getFechaLista() == null) return 0;
-        return (int) Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(o.getFechaLista().toLocalDate(), LocalDate.now()));
+        LocalDateTime desde = o.getFechaRegresoTienda() != null ? o.getFechaRegresoTienda() : o.getFechaLista();   // el cliente espera desde que el equipo está en la tienda
+        if (o.getEstado() == null || o.getEstado() != LISTA || desde == null) return 0;
+        return (int) Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(desde.toLocalDate(), LocalDate.now()));
     }
 
     // ── Equipos listos que nadie recoge ──────────────────────────────────────
@@ -536,10 +541,32 @@ public class OrdenServicioService {
         }
         orden.setEstado(LISTA);
         orden.setFechaLista(LocalDateTime.now());
-        registrar(orden, usuario, "Equipo listo para entrega");
+        boolean enElTaller = requiereRegreso(orden);
+        orden.setFechaRegresoTienda(enElTaller ? null : LocalDateTime.now());   // si se repara donde se cobra, ya está en la tienda
+        registrar(orden, usuario, enElTaller ? "Equipo listo en " + tallerDe(orden).getNombre() + ": falta que regrese a " + orden.getTienda().getNombre()
+                : "Equipo listo para entrega");
         OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
-        notificarCambioOrden(orden, "El equipo ya está listo para entrega");
+        notificarCambioOrden(orden, enElTaller ? "El equipo ya está listo en " + tallerDe(orden).getNombre() + ": debe regresar a " + orden.getTienda().getNombre()
+                + " y ahí se confirma con «Regresó a la tienda»" : "El equipo ya está listo para entrega");
         return resultado;
+    }
+
+    /**
+     * El equipo ya regresó del taller a la sucursal que lo recibió: desde aquí se le puede avisar al cliente y cobrar. Lo confirma el
+     * personal de esa sucursal (o el taller, que lo llevó).
+     */
+    @Transactional
+    public OrdenServicioResponseDto regresoATienda(Integer id, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        if (!puedeGestionarTienda(usuario, orden.getTienda().getCodti()) && !puedeTrabajarTaller(usuario, orden)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el personal de " + orden.getTienda().getNombre() + " o el taller confirma que el equipo regresó.");
+        }
+        exigirEstado(orden, "marcar como regresado a la tienda", LISTA);
+        if (orden.getFechaRegresoTienda() != null) return toDto(orden);   // ya estaba confirmado
+        orden.setFechaRegresoTienda(LocalDateTime.now());
+        registrar(orden, usuario, "El equipo regresó a " + orden.getTienda().getNombre() + " (recibido por " + usuario.getNombreCompleto() + ")");
+        return toDto(ordenRepository.save(orden));
     }
 
     /** Vuelve a reparación una orden ya marcada como lista (p. ej. el cliente detectó otra falla). */
@@ -551,6 +578,7 @@ public class OrdenServicioService {
         exigirEstado(orden, "reabrir", LISTA);
         orden.setEstado(EN_REPARACION);
         orden.setFechaLista(null);
+        orden.setFechaRegresoTienda(null);
         registrar(orden, usuario, "Reabierta: " + dto.getComentario().trim());
         OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
         notificarCambioOrden(orden, "Se reabrió la reparación: " + dto.getComentario().trim());
@@ -633,6 +661,10 @@ public class OrdenServicioService {
         OrdenServicio orden = orden(id);
         exigirGestiona(usuario, orden);
         exigirEstado(orden, "entregar", LISTA);
+        if (regresoPendiente(orden)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El equipo de la orden " + orden.getFolio() + " sigue en " + tallerDe(orden).getNombre()
+                    + ". Cuando llegue a " + orden.getTienda().getNombre() + ", pulsa «Regresó a la tienda» y entonces se puede cobrar.");
+        }
         exigirAutorizacionVigente(orden);
 
         List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(id);
@@ -773,6 +805,7 @@ public class OrdenServicioService {
                 .sucursal(o.getTienda().getNombre())
                 .estado(estadoDisplay(o.getEstado())).mensaje(o.getEsperaDesde() != null && o.getEstado() != LISTA && o.getEstado() != ENTREGADA && o.getEstado() != CANCELADA
                         ? "Estamos esperando una refacción para terminar la reparación de tu equipo. En cuanto llegue seguimos y te avisamos."
+                        : regresoPendiente(o) ? "Tu equipo ya está reparado y va de regreso a la sucursal. Te avisamos en cuanto puedas recogerlo."
                         : mensajeParaElCliente(o.getEstado()))
                 .fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).fechaPromesaHora(o.getFechaPromesaHora())
                 .fechaLista(o.getFechaLista()).fechaEntrega(o.getFechaEntrega())
@@ -1111,6 +1144,19 @@ public class OrdenServicioService {
         }
     }
 
+    /** ¿Se repara en otra sucursal que la que cobra? Entonces el equipo tiene que regresar antes de avisar al cliente y de cobrar. */
+    private boolean requiereRegreso(OrdenServicio o) {
+        Tienda taller = tallerDe(o);
+        return taller != null && !taller.getCodti().equals(o.getTienda().getCodti());
+    }
+
+    /** Lista, pero todavía en el taller. */
+    static boolean regresoPendiente(OrdenServicio o) {
+        if (o.getEstado() == null || o.getEstado() != LISTA || o.getFechaRegresoTienda() != null) return false;
+        Tienda taller = o.getTecnico() != null ? o.getTecnico().getTienda() : null;
+        return taller != null && !taller.getCodti().equals(o.getTienda().getCodti());
+    }
+
     /** El taller de la orden: la sucursal del técnico asignado, o null mientras nadie la ha tomado. */
     private Tienda tallerDe(OrdenServicio o) {
         return o.getTecnico() != null ? o.getTecnico().getTienda() : null;
@@ -1182,7 +1228,7 @@ public class OrdenServicioService {
                 .fallaReportada(o.getFallaReportada()).diagnostico(o.getDiagnostico())
                 .estado(o.getEstado()).estadoDisplay(estadoDisplay(o.getEstado()))
                 .folioLocal(o.getFolioLocal()).fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).horasEstimadas(o.getHorasEstimadas()).fechaPromesaHora(o.getFechaPromesaHora())
-                .fechaLista(o.getFechaLista()).fechaEntrega(o.getFechaEntrega())
+                .fechaLista(o.getFechaLista()).fechaRegresoTienda(o.getFechaRegresoTienda()).regresoPendiente(regresoPendiente(o)).fechaEntrega(o.getFechaEntrega())
                 .diasGarantia(o.getDiasGarantia()).fechaGarantiaHasta(o.getFechaGarantiaHasta())
                 .idventa(o.getVenta() != null ? o.getVenta().getIdventa() : null)
                 .motivoCancelacion(o.getMotivoCancelacion())

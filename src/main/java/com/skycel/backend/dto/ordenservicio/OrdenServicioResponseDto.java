@@ -48,6 +48,10 @@ public class OrdenServicioResponseDto {
     private Integer       horasEstimadas;
     private java.time.LocalDateTime fechaPromesaHora;
     private LocalDateTime fechaLista;
+    /** Cuándo regresó el equipo del taller a la sucursal que cobra (null si sigue en el taller). */
+    private LocalDateTime fechaRegresoTienda;
+    /** Está lista pero sigue en el taller: no se avisa al cliente ni se cobra hasta que regrese a la sucursal. */
+    private Boolean regresoPendiente;
     private LocalDateTime fechaEntrega;
     private Integer       diasGarantia;
     private LocalDate     fechaGarantiaHasta;
