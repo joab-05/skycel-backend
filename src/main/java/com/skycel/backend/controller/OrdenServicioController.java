@@ -132,6 +132,16 @@ public class OrdenServicioController {
         return ResponseEntityBuilder.updated(ordenService.agregarLinea(id, request, user.getUsername()), "orden de servicio");
     }
 
+    @Operation(summary = "Agregar una pieza que el técnico compró para la orden y no estaba en el inventario",
+            description = "Da de alta la pieza en el inventario del taller (categoría Refacciones) con la cantidad comprada y la agrega a la orden.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/piezas-compradas")
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
+    public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> agregarPiezaComprada(
+            @PathVariable Integer id, @Valid @RequestBody PiezaCompradaRequestDto request, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(ordenService.agregarPiezaComprada(id, request, user.getUsername()), "orden de servicio");
+    }
+
     @Operation(summary = "Quitar un renglón de la orden")
     @SecurityRequirement(name = "Bearer Authentication")
     @DeleteMapping("/{id}/lineas/{iddetalle}")

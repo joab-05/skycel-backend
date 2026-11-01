@@ -280,6 +280,27 @@ class ProductoServiceInventarioTest {
         }
 
         @Test
+        @DisplayName("un servicio cambia de tipo (tienda <-> mano de obra del taller); un accesorio no puede ser de reparación: 400")
+        void tipoDeServicio() {
+            ProductoMaster m = master(TipoProducto.SERVICIO);
+            when(productoMasterRepository.findById(5)).thenReturn(Optional.of(m));
+            when(productoMasterRepository.save(any(ProductoMaster.class))).thenAnswer(i -> i.getArgument(0));
+            when(productoMapper.toResponse(any(ProductoMaster.class))).thenReturn(new ProductoMasterResponseDTO());
+            ProductoMasterUpdateDTO dto = new ProductoMasterUpdateDTO();
+            dto.setParaReparacion(true);
+            service.actualizarMaster(5, dto);
+            assertThat(m.getParaReparacion()).isTrue();
+            dto.setParaReparacion(false);
+            service.actualizarMaster(5, dto);
+            assertThat(m.getParaReparacion()).isFalse();
+
+            when(productoMasterRepository.findById(6)).thenReturn(Optional.of(master(TipoProducto.ACCESORIO)));
+            dto.setParaReparacion(true);
+            assertThatThrownBy(() -> service.actualizarMaster(6, dto))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Solo un servicio");
+        }
+
+        @Test
         @DisplayName("el tiempo estimado no aplica a un accesorio: 400")
         void tiempoEnAccesorio() {
             when(productoMasterRepository.findById(5)).thenReturn(Optional.of(master(TipoProducto.ACCESORIO)));

@@ -56,6 +56,9 @@ class OrdenServicioServiceTest {
     @Mock private NotificacionService              notificacionService;
     @Mock private ConfiguracionNegocioRepository   negocioRepository;
     @Mock private OrdenServicioFotoRepository      fotoRepository;
+    @Mock private ProductoService                  productoService;
+    @Mock private CategoriaService                 categoriaService;
+    @Mock private CategoriaRepository              categoriaRepository;
 
     @InjectMocks
     private OrdenServicioService service;
@@ -481,6 +484,42 @@ class OrdenServicioServiceTest {
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Un equipo no se agrega");
             assertThatThrownBy(() -> service.agregarLinea(o, linea("NO-EXISTE", 1, null, null), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no existe en el inventario de");
+        }
+
+        @Test
+        @DisplayName("pieza comprada para la orden: se da de alta en el inventario del taller con su costo y se agrega como renglón")
+        void piezaComprada() {
+            int o = orden();
+            Categoria accesorios = Categoria.builder().idcat((short) 56).nombre("Accesorios").tipo(TipoProducto.ACCESORIO).activo(true).build();
+            Categoria refacciones = Categoria.builder().idcat((short) 90).nombre("Refacciones").tipo(TipoProducto.ACCESORIO).categoriaSuperior(accesorios).activo(true).build();
+            when(categoriaRepository.findAll()).thenReturn(List.of(accesorios, refacciones));
+            when(categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat("Refacciones", (short) 56)).thenReturn(Optional.of(refacciones));
+            ProductoMaster mPieza = ProductoMaster.builder().idprodmaster(9).tipo(TipoProducto.ACCESORIO).nombreBase("Pantalla Samsung A16 (OS)").build();
+            when(productoService.crearProducto(any())).thenAnswer(inv -> {
+                com.skycel.backend.domain.dto.request.ProductoRequestDTO alta = inv.getArgument(0);
+                Producto p = producto("REF-000001", mPieza, alta.getStock().toPlainString(), alta.getPrecioVenta().toPlainString());
+                p.setPreciopro(alta.getPrecioCompra());
+                com.skycel.backend.domain.dto.response.ProductoResponseDTO r = new com.skycel.backend.domain.dto.response.ProductoResponseDTO();
+                r.setCodpro(p.getCodpro());
+                return r;
+            });
+            PiezaCompradaRequestDto dto = new PiezaCompradaRequestDto();
+            dto.setDescripcion("  Pantalla   Samsung A16 ");
+            dto.setCantidad((short) 1);
+            dto.setCosto(new BigDecimal("650"));
+            dto.setPrecio(new BigDecimal("1200"));
+
+            OrdenServicioResponseDto r = service.agregarPiezaComprada(o, dto, "root");
+
+            org.mockito.ArgumentCaptor<com.skycel.backend.domain.dto.request.ProductoRequestDTO> alta =
+                    org.mockito.ArgumentCaptor.forClass(com.skycel.backend.domain.dto.request.ProductoRequestDTO.class);
+            verify(productoService).crearProducto(alta.capture());
+            assertThat(alta.getValue().getIdCategoria()).isEqualTo((short) 90);
+            assertThat(alta.getValue().getNombreProducto()).startsWith("Pantalla Samsung A16 (").contains("OS-");
+            assertThat(alta.getValue().getPrecioCompra()).isEqualByComparingTo("650");
+            assertThat(alta.getValue().getStock()).isEqualByComparingTo("1");
+            assertThat(r.getLineas()).hasSize(1);
+            assertThat(r.getLineas().get(0).getPrecioUnitario()).isEqualByComparingTo("1200");
         }
 
         @Test

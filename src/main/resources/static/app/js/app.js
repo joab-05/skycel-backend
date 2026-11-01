@@ -4377,6 +4377,9 @@ async function pantallaProductoEditar(param) {
       `}
       <label>Días de garantía</label>
       <input id="pe-garantia" type="number" inputmode="numeric" min="0" step="1" value="${p.diasGarantia ?? ''}">
+      ${esServicio ? `<label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+        <input type="checkbox" id="pe-reparacion" style="width:auto;" ${p.paraReparacion ? 'checked' : ''}> Es mano de obra del taller (se agrega a las órdenes de reparación, no se cobra en caja)
+      </label>` : ''}
       <button id="pe-guardar-datos" class="btn btn-azul">Guardar datos</button>
     </div>
 
@@ -4486,6 +4489,8 @@ async function pantallaProductoEditar(param) {
     }
     const gar = numero('pe-garantia');
     if (gar != null) cuerpo.diasGarantia = gar;
+    const rep = document.getElementById('pe-reparacion');
+    if (rep) cuerpo.paraReparacion = rep.checked;
     e.target.disabled = true;
     try {
       await api('PATCH', `/api/productos/master/${p.idProductoMaster}`, cuerpo);

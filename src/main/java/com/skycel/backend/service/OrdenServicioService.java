@@ -65,6 +65,9 @@ public class OrdenServicioService {
     private final NotificacionService              notificacionService;
     private final ConfiguracionNegocioRepository   negocioRepository;
     private final OrdenServicioFotoRepository      fotoRepository;
+    private final ProductoService                  productoService;
+    private final CategoriaService                 categoriaService;
+    private final CategoriaRepository              categoriaRepository;
 
     /** Dirección pública del servidor: va en el enlace de seguimiento que se manda al cliente. */
     @org.springframework.beans.factory.annotation.Value("${skycel.publico.url:https://skycelsys.ddns.net}")
@@ -276,6 +279,70 @@ public class OrdenServicioService {
                 + " ($" + linea.getPrecioUnitario() + ")");
         alCambiarElTotal(orden, usuario);
         return toDto(orden);
+    }
+
+    /**
+     * Una pieza que el técnico compró para esta orden y que el taller no tenía: se da de alta en el inventario del taller (categoría
+     * Refacciones, con la cantidad comprada y su costo) y se agrega a la orden como cualquier refacción, de modo que al entregar sale del
+     * inventario y la venta lleva su costo real. El nombre lleva el folio de la orden para no mezclarla con otra pieza parecida.
+     */
+    @Transactional
+    public OrdenServicioResponseDto agregarPiezaComprada(Integer id, PiezaCompradaRequestDto dto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirTaller(usuario, orden);
+        exigirEstado(orden, "agregar renglones", RECIBIDA, EN_REPARACION);
+        Tienda deDonde = tiendaDeInventario(orden, usuario);
+        short cantidad = dto.getCantidad() != null ? dto.getCantidad() : 1;
+        String descripcion = dto.getDescripcion().trim().replaceAll("\s+", " ");
+
+        com.skycel.backend.domain.dto.request.ProductoRequestDTO alta = new com.skycel.backend.domain.dto.request.ProductoRequestDTO();
+        alta.setIdCategoria(categoriaRefacciones());
+        alta.setNombreProducto(descripcion + " (" + orden.getFolio() + ")");
+        alta.setCodti(deDonde.getCodti());
+        alta.setStock(BigDecimal.valueOf(cantidad));
+        alta.setPrecioCompra(dto.getCosto());
+        alta.setPrecioVenta(dto.getPrecio());
+        com.skycel.backend.domain.dto.response.ProductoResponseDTO pieza;
+        try {
+            pieza = productoService.crearProducto(alta);
+        } catch (ResponseStatusException e) {
+            if (e.getStatusCode() == HttpStatus.CONFLICT) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya agregaste «" + descripcion + "» a esta orden: cambia su cantidad o descríbela distinto.");
+            }
+            throw e;
+        }
+
+        OrdenLineaRequestDto linea = new OrdenLineaRequestDto();
+        linea.setCodpro(pieza.getCodpro());
+        linea.setCantidad(cantidad);
+        linea.setPrecioUnitario(dto.getPrecio());
+        OrdenServicioDetalle detalle = nuevaLinea(orden, linea, usuario);
+        registrar(orden, usuario, "Se agregó una pieza comprada para la orden: " + descripcion + " ×" + cantidad
+                + " (costó $" + dto.getCosto() + ", se cobra $" + detalle.getPrecioUnitario() + ")");
+        notificacionService.notificarRol(Rol.ADMIN, "AJUSTE_INVENTARIO", recortar250(usuario.getNombreCompleto() + " compró una pieza para "
+                + orden.getFolio() + ": " + descripcion + " ×" + cantidad + " a $" + dto.getCosto() + " c/u"), "#/taller");
+        alCambiarElTotal(orden, usuario);
+        return toDto(orden);
+    }
+
+    private static String recortar250(String s) { return s.length() <= 250 ? s : s.substring(0, 250); }
+
+    /** La categoría «Refacciones» de los accesorios (se crea la primera vez que hace falta). */
+    private Short categoriaRefacciones() {
+        Categoria raiz = categoriaRepository.findAll().stream()
+                .filter(c -> c.getTipo() == TipoProducto.ACCESORIO && c.getCategoriaSuperior() == null && Boolean.TRUE.equals(c.getActivo()))
+                .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "No hay una categoría principal de accesorios."));
+        return categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat("Refacciones", raiz.getIdcat())
+                .filter(c -> Boolean.TRUE.equals(c.getActivo())).map(Categoria::getIdcat)
+                .orElseGet(() -> {
+                    com.skycel.backend.domain.dto.request.CategoriaRequestDTO nueva = new com.skycel.backend.domain.dto.request.CategoriaRequestDTO();
+                    nueva.setNombreCat("Refacciones");
+                    nueva.setIdCategoriaSuperior(raiz.getIdcat());
+                    nueva.setCodigo("REF");
+                    nueva.setIncluirEnNombre(false);   // el nombre del artículo es solo lo que escribe el técnico
+                    return categoriaService.crear(nueva).getIdcat();
+                });
     }
 
     @Transactional
