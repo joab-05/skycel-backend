@@ -6656,8 +6656,23 @@ function desbloquearAudio() {
   } catch { /* sin audio en este navegador */ }
 }
 ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, desbloquearAudio, { passive: true }));
-function sonidoAviso(siempre) {
+const SONIDOS_AVISO = { campana: 'Campana', cristal: 'Cristal', suave: 'Suave (marimba)', dindon: 'Din-don', ok: 'OK' };
+function sonidoTipo() {
+  let t = 'campana';
+  try { t = localStorage.getItem('skycel-sonido-tipo') || 'campana'; } catch { /* sin almacenamiento */ }
+  return SONIDOS_AVISO[t] ? t : 'campana';
+}
+function sonidoAviso(siempre, tipo) {
   if (!siempre && !sonidoActivado()) return;
+  try {   // los mismos sonidos que JSystem (archivos WAV); si no cargan, la campanita sintetizada de abajo
+    const audio = new Audio('sonidos/' + (tipo || sonidoTipo()) + '.wav');
+    audio.volume = 1;
+    audio.play().catch(() => sonidoSintetico());
+    return;
+  } catch { /* sigue con la sintética */ }
+  sonidoSintetico();
+}
+function sonidoSintetico() {
   try {
     desbloquearAudio();
     if (!ctxAudio || ctxAudio.state !== 'running') return;
@@ -6720,6 +6735,7 @@ async function pantallaNotificaciones() {
     <div class="grupo-botones" style="margin:10px 0;">
       <button id="nt-marcar-todas" class="btn btn-gris btn-chico">Marcar todas como leídas</button>
       <label style="display:inline-flex;align-items:center;gap:6px;margin:0 0 0 8px;"><input type="checkbox" style="width:auto;" id="nt-sonido" ${sonidoActivado() ? 'checked' : ''}> Sonido al llegar un aviso</label>
+      <select id="nt-sonido-tipo" style="width:auto;">${Object.entries(SONIDOS_AVISO).map(([k, v]) => `<option value="${k}" ${k === sonidoTipo() ? 'selected' : ''}>${v}</option>`).join('')}</select>
     </div>
     <div id="nt-lista"><div class="vacio">Cargando...</div></div>`;
 
@@ -6731,7 +6747,14 @@ async function pantallaNotificaciones() {
 
   document.getElementById('nt-sonido').onchange = (e) => {
     try { localStorage.setItem('skycel-sonido-avisos', e.target.checked ? 'si' : 'no'); } catch { /* sin almacenamiento: vale hasta recargar */ }
+    document.getElementById('nt-sonido-tipo').disabled = !e.target.checked;
     if (e.target.checked) sonidoAviso(true);   // para escuchar cómo suena
+  };
+  const selTipo = document.getElementById('nt-sonido-tipo');
+  selTipo.disabled = !sonidoActivado();
+  selTipo.onchange = () => {
+    try { localStorage.setItem('skycel-sonido-tipo', selTipo.value); } catch { /* vale hasta recargar */ }
+    sonidoAviso(true, selTipo.value);   // se escucha al elegirlo
   };
 
   document.getElementById('nt-marcar-todas').onclick = async (e) => {
