@@ -328,6 +328,35 @@ class ProductoServiceTest {
         verify(productoRepository, never()).save(any());
     }
 
+    @Test
+    @DisplayName("completarServicios: un servicio de una sola sucursal se da de alta, sin stock, en las demás sucursales activas")
+    void completarServicios_copiaEnLasSucursalesQueNoLoTienen() {
+        Producto origen = servicio();
+        origen.setTienda(Tienda.builder().codti(1).nombre("Matriz").activo(true).build());
+        origen.setPreciopro(BigDecimal.TEN);
+        origen.setPreciopub(BigDecimal.valueOf(150));
+        origen.setActivo(true);
+        origen.getProductoMaster().setActivo(true);
+        Tienda zocalo = Tienda.builder().codti(2).nombre("Zócalo").activo(true).build();
+        Tienda cerrada = Tienda.builder().codti(3).nombre("Cerrada").activo(false).build();
+        when(productoMasterRepository.findAll()).thenReturn(List.of(origen.getProductoMaster()));
+        when(productoRepository.findByProductoMaster_IdprodmasterOrderByIdproductoAsc(3)).thenReturn(List.of(origen));
+        when(tiendaRepository.findAll()).thenReturn(List.of(origen.getTienda(), zocalo, cerrada));
+        when(productoRepository.findByCodproAndTienda_Codti("SRV-AAA11111", 1)).thenReturn(Optional.of(origen));
+        when(productoRepository.findByCodproAndTienda_Codti("SRV-AAA11111", 2)).thenReturn(Optional.empty());
+
+        int creados = productoService.completarServiciosEnTodasLasSucursales();
+
+        assertThat(creados).isEqualTo(1);
+        verify(productoRepository).save(productoCaptor.capture());
+        Producto copia = productoCaptor.getValue();
+        assertThat(copia.getTienda().getCodti()).isEqualTo(2);
+        assertThat(copia.getCodpro()).isEqualTo("SRV-AAA11111");
+        assertThat(copia.getStock()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(copia.getPreciopub()).isEqualByComparingTo("150");
+        assertThat(copia.getActivo()).isTrue();
+    }
+
     // ── CELULAR: ya no se ajusta por cantidad ────────────────────────────────
 
     @Nested

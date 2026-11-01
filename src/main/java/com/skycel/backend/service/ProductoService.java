@@ -234,8 +234,57 @@ public class ProductoService {
 
         Producto saved = productoRepository.save(producto);
         movimientoInventarioService.registrar(saved, BigDecimal.ZERO, "ALTA", "Stock inicial", null);
+        if (master.getTipo() == TipoProducto.SERVICIO) replicarServicio(saved);
 
         return toDto(saved);
+    }
+
+    /**
+     * Un servicio no tiene stock, así que cualquier sucursal puede cobrarlo: se da de alta en todas las sucursales activas
+     * (mismo código y mismo precio; el precio se cambia después por sucursal o para todas). Devuelve en cuántas sucursales lo creó.
+     */
+    private int replicarServicio(Producto origen) {
+        int creados = 0;
+        for (Tienda t : tiendaRepository.findAll()) {
+            if (!Boolean.TRUE.equals(t.getActivo())) continue;
+            if (productoRepository.findByCodproAndTienda_Codti(origen.getCodpro(), t.getCodti()).isPresent()) continue;
+            productoRepository.save(Producto.builder()
+                    .codpro(origen.getCodpro()).tienda(t).productoMaster(origen.getProductoMaster()).magnitud(origen.getMagnitud())
+                    .color(origen.getColor()).proveedor(origen.getProveedor())
+                    .stock(BigDecimal.ZERO).stockMinimo(BigDecimal.ZERO)
+                    .preciopro(origen.getPreciopro()).preciopub(origen.getPreciopub())
+                    .rezagado(false).publico(origen.getPublico()).activo(true)
+                    .build());
+            creados++;
+        }
+        return creados;
+    }
+
+    /**
+     * Pone al corriente los servicios que ya existían (se registraban en una sola sucursal) y los de una sucursal nueva: cada servicio
+     * activo queda en todas las sucursales activas. Es idempotente, así que corre en cada arranque.
+     */
+    @Transactional
+    public int completarServiciosEnTodasLasSucursales() {
+        int creados = 0;
+        for (ProductoMaster m : productoMasterRepository.findAll()) {
+            if (m.getTipo() != TipoProducto.SERVICIO || !Boolean.TRUE.equals(m.getActivo())) continue;
+            List<Producto> filas = productoRepository.findByProductoMaster_IdprodmasterOrderByIdproductoAsc(m.getIdprodmaster());
+            Producto origen = filas.stream().filter(p -> Boolean.TRUE.equals(p.getActivo())).findFirst().orElse(null);
+            if (origen != null) creados += replicarServicio(origen);
+        }
+        return creados;
+    }
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    @Transactional
+    public void alArrancar() {
+        try {
+            int n = completarServiciosEnTodasLasSucursales();
+            if (n > 0) org.slf4j.LoggerFactory.getLogger(ProductoService.class).info("Servicios dados de alta en las sucursales que no los tenían: {}", n);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(ProductoService.class).error("No se pudieron completar los servicios en todas las sucursales", e);
+        }
     }
 
     /**

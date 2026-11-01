@@ -24,6 +24,7 @@ import java.util.List;
 public class TiendaController {
 
     private final TiendaRepository tiendaRepository;
+    private final com.skycel.backend.service.ProductoService productoService;
 
     /**
      * GET /api/tiendas
@@ -53,7 +54,9 @@ public class TiendaController {
                 .esAlmacen(Boolean.TRUE.equals(request.getEsAlmacen()))
                 .activo(true)
                 .build();
-        return ResponseEntity.status(HttpStatus.CREATED).body(tiendaRepository.save(t));
+        Tienda creada = tiendaRepository.save(t);
+        productoService.completarServiciosEnTodasLasSucursales();   // la sucursal nueva ya puede cobrar los servicios
+        return ResponseEntity.status(HttpStatus.CREATED).body(creada);
     }
 
     /**
