@@ -49,6 +49,8 @@ START TRANSACTION;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Nómina, préstamos y comisiones
+DELETE FROM nomina_novedad;
+DELETE FROM prestamo_descuento;
 DELETE FROM nomina_deduccion;
 DELETE FROM nomina_percepcion;
 DELETE FROM nomina_detalle;
@@ -58,17 +60,20 @@ DELETE FROM empleado_prestamo;
 DELETE FROM comision_periodo;
 
 -- Descuentos pedidos, devoluciones y cuentas por cobrar
+DELETE FROM venta_descuento_solicitud;
 DELETE FROM solicitud_descuento;
 DELETE FROM devolucion_cambio_linea;
 DELETE FROM devolucion_detalle;
 DELETE FROM devolucion;
 DELETE FROM pago_cuenta;
+DELETE FROM cliente_credito_abono;
 DELETE FROM cuenta_por_cobrar;
 
 -- Garantías y órdenes de servicio
 DELETE FROM garantia_historial;
 DELETE FROM garantia;
 DELETE FROM garantia_aud;
+DELETE FROM orden_servicio_foto;
 DELETE FROM orden_servicio_anticipo;
 DELETE FROM orden_servicio_detalle;
 DELETE FROM orden_servicio_historial;
@@ -76,6 +81,8 @@ DELETE FROM orden_servicio;
 DELETE FROM orden_servicio_aud;
 
 -- Ventas
+DELETE FROM venta_devolucion;
+DELETE FROM venta_payjoy;
 DELETE FROM venta_pago_detalle;
 DELETE FROM venta_detalle;
 DELETE FROM venta;
@@ -83,11 +90,14 @@ DELETE FROM venta_detalle_aud;
 DELETE FROM venta_aud;
 
 -- Caja
+DELETE FROM caja_corte_resumen;
+DELETE FROM caja_corte;
 DELETE FROM movimiento_caja;
 DELETE FROM movimiento_caja_aud;
 DELETE FROM sesion_caja;
 
 -- Compras
+DELETE FROM compra_abono;
 DELETE FROM pago_compra;
 DELETE FROM compra_detalle;
 DELETE FROM compra;
@@ -103,6 +113,7 @@ DELETE FROM traspaso;
 DELETE FROM traspaso_aud;
 
 -- Inventarios físicos
+DELETE FROM inventario_seccion_control;
 DELETE FROM inventario_auditoria_unidad;
 DELETE FROM inventario_auditoria_detalle;
 DELETE FROM inventario_auditoria;
@@ -111,7 +122,10 @@ DELETE FROM inventario_auditoria_aud;
 
 -- Movimientos de inventario (kardex), pedidos de mayoreo y avisos
 DELETE FROM movimiento_inventario;
+DELETE FROM pedido_mayoreo_detalle;
+DELETE FROM pedido_mayoreo;
 DELETE FROM notificacion;
+DELETE FROM usuario_sesion;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -146,3 +160,9 @@ ALTER TABLE corte_servicios AUTO_INCREMENT = 1;
 ALTER TABLE movimiento_inventario AUTO_INCREMENT = 1;
 ALTER TABLE notificacion AUTO_INCREMENT = 1;
 ALTER TABLE nomina_periodo AUTO_INCREMENT = 1;
+ALTER TABLE orden_servicio_foto AUTO_INCREMENT = 1;
+ALTER TABLE devolucion_detalle AUTO_INCREMENT = 1;
+ALTER TABLE usuario_sesion AUTO_INCREMENT = 1;
+-- Folios de las órdenes (OS-), garantías (GAR-) y devoluciones (DEV-): la primera real será la 000001.
+-- NO tocar idcat >= 0: son los códigos de equipos y de artículos que ya van pegados en las etiquetas.
+UPDATE categoria_folio SET ultimo_folio = 0 WHERE idcat IN (-1, -2, -3);
