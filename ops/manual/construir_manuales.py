@@ -718,7 +718,7 @@ Los datos de **esta computadora** (servidor, sucursal, impresoras) y del negocio
 - **Sistema:** versión del programa y datos para soporte. Aquí también está **Actualizaciones**: el programa se actualiza solo (revisa al abrirse y cada 4 horas, baja la versión nueva y la instala **al cerrar** el programa). Si quieres instalarla de inmediato, pulsa **Buscar actualizaciones** y luego **Cerrar e instalar la actualización**; el programa se vuelve a abrir solo.
 
 ### Respaldo y limpieza automáticos (los hace el servidor)
-- **Respaldo diario:** cada noche a las 2:30 el servidor guarda una copia completa de la base de datos en dos discos. Se conservan las últimas 14 copias y una por mes. Si falla, llega un aviso a los administradores.
+- **Respaldo diario:** cada noche a las 11:30 pm el servidor guarda una copia completa de la base de datos en dos discos. Se conservan las últimas 14 copias y una por mes. Si falla, llega un aviso a los administradores. Como el servidor se apaga a medianoche, si al encenderlo en la mañana no hay un respaldo de las últimas 26 horas, lo hace solo a los pocos minutos.
 - **Limpieza:** cada noche, después del respaldo, se borran las sesiones de entrada de más de 30 días, los avisos ya leídos de más de 90 días y el historial de cambios del catálogo de más de 24 meses. Las ventas, la caja, las compras y la nómina nunca se borran. Si la noche anterior no hubo respaldo, la limpieza no corre.
 
 ### Configurar y probar la impresora de etiquetas

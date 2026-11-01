@@ -221,7 +221,7 @@ public class CuentaPorCobrarService {
 
     // ── Job automático: marcar vencidas ───────────────────────────────────────
 
-    @Scheduled(cron = "0 0 1 * * *") // todos los días a la 1am
+    @Scheduled(cron = "0 10 7 * * *") // todos los días a las 7:10am (el servidor se enciende a las 7:00; al arrancar también se pone al corriente)
     @Transactional
     public void marcarVencidas() {
         List<CuentaPorCobrar> vencidas = cpcRepository

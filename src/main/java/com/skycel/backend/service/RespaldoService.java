@@ -81,7 +81,8 @@ public class RespaldoService {
 
     // ── Cada noche ───────────────────────────────────────────────────────────
 
-    @Scheduled(cron = "${skycel.respaldo.cron:0 30 2 * * *}")
+    // El servidor está encendido de 7:00 a 24:00: el respaldo va al final del día, antes de que se apague
+    @Scheduled(cron = "${skycel.respaldo.cron:0 30 23 * * *}")
     public void programado() {
         if (!activo) return;
         Map<String, Object> r = ejecutar();

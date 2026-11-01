@@ -258,7 +258,7 @@ public class CompraService {
 
     // ── Job automático: marcar vencidas ───────────────────────────────────────
 
-    @Scheduled(cron = "0 15 1 * * *") // todos los días a la 1:15am
+    @Scheduled(cron = "0 15 7 * * *") // todos los días a las 7:15am (el servidor se enciende a las 7:00; al arrancar también se pone al corriente)
     @Transactional
     public void marcarVencidas() {
         List<Compra> vencidas = compraRepository.findByFechaVencimientoBeforeAndEstadoIn(LocalDate.now(), List.of((byte) 0, (byte) 1));

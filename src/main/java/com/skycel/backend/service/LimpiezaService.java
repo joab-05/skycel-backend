@@ -58,7 +58,8 @@ public class LimpiezaService {
         this.diasFotos = Math.max(30, diasFotos);
     }
 
-    @Scheduled(cron = "${skycel.limpieza.cron:0 30 3 * * *}")
+    // Después del respaldo de las 23:30 y antes de que el servidor se apague (24:00)
+    @Scheduled(cron = "${skycel.limpieza.cron:0 45 23 * * *}")
     public void programada() {
         if (!activo) return;
         if (!respaldoService.hayRespaldoReciente()) {
