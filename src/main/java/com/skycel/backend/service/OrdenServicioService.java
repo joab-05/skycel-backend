@@ -1,6 +1,7 @@
 package com.skycel.backend.service;
 
 import com.skycel.backend.domain.entity.*;
+import com.skycel.backend.domain.enums.Permiso;
 import com.skycel.backend.domain.enums.Rol;
 import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.dto.ordenservicio.*;
@@ -68,6 +69,7 @@ public class OrdenServicioService {
     private final ProductoService                  productoService;
     private final CategoriaService                 categoriaService;
     private final CategoriaRepository              categoriaRepository;
+    private final PermisoService                   permisoService;
 
     /** Dirección pública del servidor: va en el enlace de seguimiento que se manda al cliente. */
     @org.springframework.beans.factory.annotation.Value("${skycel.publico.url:https://skycelsys.ddns.net}")
@@ -1287,6 +1289,7 @@ public class OrdenServicioService {
     private OrdenServicioResponseDto toDto(OrdenServicio o) {
         List<OrdenServicioDetalle> lineas = detalleRepository.findByOrden_IdordenOrderByIddetalle(o.getIdorden());
         List<OrdenServicioAnticipo> anticipos = anticipoRepository.findByOrden_IdordenOrderByIdanticipo(o.getIdorden());
+        boolean veCostos = veCostosDeOrden();
         BigDecimal total = total(lineas);
         BigDecimal pagado = anticipos.stream().map(OrdenServicioAnticipo::getMonto).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal saldo = total.subtract(pagado);
@@ -1324,6 +1327,7 @@ public class OrdenServicioService {
                         .nombre(l.getProductoMaster().getNombreBase()).tipoProducto(l.getProductoMaster().getTipo().name())
                         .cantidad(l.getCantidad()).precioUnitario(l.getPrecioUnitario())
                         .subtotal(l.getPrecioUnitario().multiply(BigDecimal.valueOf(l.getCantidad())))
+                        .costoUnitario(veCostos ? costoDe(l) : null)
                         .esRegalo(l.getEsRegalo())
                         .codtiStock(l.getTiendaStock() != null ? l.getTiendaStock().getCodti() : null)
                         .nombreTiendaStock(l.getTiendaStock() != null ? l.getTiendaStock().getNombre() : null).build()).collect(Collectors.toList()))
@@ -1339,6 +1343,21 @@ public class OrdenServicioService {
                                 .nombreUsuario(h.getUsuario() != null ? h.getUsuario().getNombreCompleto() : null)
                                 .fecha(h.getFecha()).build()).collect(Collectors.toList()))
                 .build();
+    }
+
+    /** El costo de las refacciones de una orden lo ve solo el técnico encargado (y quien tenga COSTOS_VER, por omisión el administrador). */
+    private boolean veCostosDeOrden() {
+        if (permisoService != null && permisoService.tiene(Permiso.COSTOS_VER.name())) return true;
+        org.springframework.security.core.Authentication a = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        return a != null && a.isAuthenticated()
+                && usuarioRepository.findByUsername(a.getName()).map(this::esTecnicoEncargado).orElse(false);
+    }
+
+    /** Lo que costó una unidad de la refacción en la sucursal de donde sale; null en la mano de obra o si ya no se encuentra. */
+    private BigDecimal costoDe(OrdenServicioDetalle l) {
+        if (l.getTiendaStock() == null) return null;
+        return productoRepository.findByCodproAndTienda_Codti(l.getCodpro(), l.getTiendaStock().getCodti())
+                .map(Producto::getPreciopro).orElse(null);
     }
 
     private String estadoDisplay(Byte estado) {

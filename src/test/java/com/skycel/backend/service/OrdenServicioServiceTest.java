@@ -59,6 +59,7 @@ class OrdenServicioServiceTest {
     @Mock private ProductoService                  productoService;
     @Mock private CategoriaService                 categoriaService;
     @Mock private CategoriaRepository              categoriaRepository;
+    @Mock private PermisoService                   permisoService;
 
     @InjectMocks
     private OrdenServicioService service;
@@ -225,6 +226,11 @@ class OrdenServicioServiceTest {
         int idorden = service.crear(dto, "abigail").getIdorden();
         ordenes.get(idorden).setTecnico(tecnico);   // la asignación la hace el técnico encargado o un administrador
         return idorden;
+    }
+
+    private void autenticado(String username) {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(username, "x", List.of()));
     }
 
     private OrdenServicio viva(int idorden) {
@@ -528,6 +534,27 @@ class OrdenServicioServiceTest {
             assertThatThrownBy(() -> service.agregarPiezaComprada(o, dto, "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Ya agregaste");
             verify(productoService, times(1)).crearProducto(any());
+        }
+
+        @Test
+        @DisplayName("el costo de la refacción en la orden solo lo ve el técnico encargado o quien tenga COSTOS_VER")
+        void costoDeLaRefaccion() {
+            int o = orden(linea("ACC-000010", 1, null, null));
+            mica.setPreciopro(new BigDecimal("35"));
+            when(productoRepository.findByCodproAndTienda_Codti(eq("ACC-000010"), anyInt())).thenReturn(Optional.of(mica));
+            try {
+                autenticado("juan.perez");   // el técnico que repara, pero no el encargado
+                assertThat(service.obtener(o, "juan.perez").getLineas().get(0).getCostoUnitario()).isNull();
+
+                autenticado("luis.tecnico");  // el técnico encargado
+                assertThat(service.obtener(o, "luis.tecnico").getLineas().get(0).getCostoUnitario()).isEqualByComparingTo("35");
+
+                autenticado("juan.perez");
+                when(permisoService.tiene("COSTOS_VER")).thenReturn(true);
+                assertThat(service.obtener(o, "juan.perez").getLineas().get(0).getCostoUnitario()).isEqualByComparingTo("35");
+            } finally {
+                org.springframework.security.core.context.SecurityContextHolder.clearContext();
+            }
         }
 
         @Test

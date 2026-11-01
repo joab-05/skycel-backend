@@ -112,6 +112,8 @@ public class OrdenServicioResponseDto {
         private Short      cantidad;
         private BigDecimal precioUnitario;
         private BigDecimal subtotal;
+        /** Lo que costó la refacción (por unidad). Solo lo trae el técnico encargado de la orden o quien tenga COSTOS_VER; para los demás, null. */
+        private BigDecimal costoUnitario;
         private Boolean    esRegalo;
         /** De qué sucursal sale la refacción (el taller); null en un servicio o en una línea anterior. */
         private Integer    codtiStock;
