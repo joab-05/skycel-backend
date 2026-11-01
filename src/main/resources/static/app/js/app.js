@@ -3663,7 +3663,7 @@ async function cargarNominaDetalle(iddetalle, s) {
 
 // ── Inventario ───────────────────────────────────────────────────────────
 
-const TIPO_ICONO = { CELULAR: ic('smartphone'), TABLET: ic('smartphone'), ACCESORIO: ic('headphones'), SERVICIO: ic('wrench') };
+const TIPO_ICONO = { CELULAR: ic('smartphone'), TABLET: ic('smartphone'), ACCESORIO: ic('headphones'), SERVICIO: ic('receipt') };
 
 async function pantallaInventario() {
   const s = Sesion.obtener();
