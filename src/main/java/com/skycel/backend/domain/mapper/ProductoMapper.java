@@ -21,6 +21,7 @@ public interface ProductoMapper {
     @Mapping(target = "color", ignore = true)
     @Mapping(target = "nombreProducto", ignore = true)
     @Mapping(target = "notaAdicional", ignore = true)
+    @Mapping(target = "paraReparacion", ignore = true)
     @Mapping(target = "categoria", ignore = true) // Set in service
     @Mapping(target = "activo", constant = "true")
     @Mapping(target = "version", ignore = true)
@@ -33,6 +34,7 @@ public interface ProductoMapper {
     @Mapping(target = "color", ignore = true)
     @Mapping(target = "nombreProducto", ignore = true)
     @Mapping(target = "notaAdicional", ignore = true)
+    @Mapping(target = "paraReparacion", ignore = true)
     @Mapping(target = "categoria", ignore = true)
     @Mapping(target = "activo", ignore = true)
     @Mapping(target = "version", ignore = true)
@@ -95,6 +97,7 @@ public interface ProductoMapper {
     @Mapping(target = "compatibilidad", ignore = true)
     @Mapping(target = "tiempoEstimadoMin", ignore = true)
     @Mapping(target = "diasGarantia", ignore = true)
+    @Mapping(target = "paraReparacion", ignore = true)
     @Mapping(target = "bajoStock", ignore = true)
     @Mapping(target = "imeisDisponibles", ignore = true)
     ProductoResponseDTO toProductoResponse(Producto entity);

@@ -74,7 +74,7 @@ class OrdenServicioServiceTest {
     private Usuario root, encZocalo, vendZocalo, encCorpo, tecnico, otroTecnico, sinRol, tecnicoEncargado;
     private Cliente cliente;
     private ProductoMaster mServicio, mMica, mCelular;
-    private Producto pantalla, mica, celular;
+    private Producto pantalla, mica, celular, esim;
     private Caja cajaZocalo;
 
     @BeforeEach
@@ -92,11 +92,12 @@ class OrdenServicioServiceTest {
         tecnicoEncargado.setTecnicoEncargado(true);
         cliente = Cliente.builder().idcliente(7).nombreCompleto("Sofia Ramirez").telefono("7571200001").build();
 
-        mServicio = ProductoMaster.builder().idprodmaster(1).tipo(TipoProducto.SERVICIO).nombreBase("Cambio de Pantalla").diasGarantia(30).build();
+        mServicio = ProductoMaster.builder().idprodmaster(1).tipo(TipoProducto.SERVICIO).nombreBase("Cambio de Pantalla").diasGarantia(30).paraReparacion(true).build();
         mMica     = ProductoMaster.builder().idprodmaster(2).tipo(TipoProducto.ACCESORIO).nombreBase("Mica Hidrogel").diasGarantia(15).build();
         mCelular  = ProductoMaster.builder().idprodmaster(3).tipo(TipoProducto.CELULAR).nombreBase("iPhone 15").build();
         pantalla = producto("SRV-000001", mServicio, "0", "1200");
         mica     = producto("ACC-000010", mMica, "10", "90");
+        esim     = producto("ESM-000001", ProductoMaster.builder().idprodmaster(4).tipo(TipoProducto.SERVICIO).nombreBase("E-SIM Telcel Prepago").build(), "0", "299");
         celular  = producto("CEL-000001", mCelular, "3", "15999");
         cajaZocalo = Caja.builder().idCaja(1).nombreCaja("Caja Zocalo").tienda(zocalo).build();
 
@@ -480,6 +481,15 @@ class OrdenServicioServiceTest {
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Un equipo no se agrega");
             assertThatThrownBy(() -> service.agregarLinea(o, linea("NO-EXISTE", 1, null, null), "root"))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no existe en el inventario de");
+        }
+
+        @Test
+        @DisplayName("un servicio de la tienda (E-SIM, registro de línea...) se cobra en caja: no se agrega a una orden (400)")
+        void servicioDeLaTienda() {
+            int o = orden();
+
+            assertThatThrownBy(() -> service.agregarLinea(o, linea("ESM-000001", 1, null, null), "root"))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("se cobra en caja");
         }
 
         @Test

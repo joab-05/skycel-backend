@@ -80,6 +80,11 @@ public class ProductoMaster {
     @Column(name = "tiempo_estimado_min")
     private Integer tiempoEstimadoMin;
 
+    // Solo SERVICIO. Hay dos clases: true = mano de obra del taller (se agrega a las órdenes de reparación);
+    // false o null = servicio que se ofrece en la tienda (E-SIM, registro de línea...) y se cobra en caja.
+    @Column(name = "para_reparacion", columnDefinition = "TINYINT DEFAULT 0")
+    private Boolean paraReparacion;
+
     // Días de garantía que ofrece este artículo o servicio (null = sin garantía definida).
     @Column(name = "dias_garantia")
     private Integer diasGarantia;

@@ -24,6 +24,7 @@ public class ProductoRequestDTO {
     private String  compatibilidad;    // ACCESORIO/SERVICIO: modelos con los que sirve (ej. "iPhone 13", "Universal")
     private Integer tiempoEstimadoMin; // SERVICIO: duración estimada en minutos
     private Integer diasGarantia;      // Días de garantía del artículo o servicio
+    private Boolean paraReparacion;    // SERVICIO: true = mano de obra del taller (órdenes de reparación); por omisión, servicio de la tienda
 
     @NotNull(message = "La tienda es obligatoria")
     private Integer codti;              // ← antes hardcodeado en el service como 1

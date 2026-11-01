@@ -4008,8 +4008,9 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
         <textarea id="np-imeis" placeholder="Un IMEI o serie por línea. El stock inicial es la cantidad que captures aquí."></textarea>`;
     } else if (tipo === 'SERVICIO') {
       extra.innerHTML = `
-        <label>Minutos estimados</label>
-        <input id="np-tiempo" type="number" inputmode="numeric" min="0" placeholder="Opcional">`;
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+          <input type="checkbox" id="np-reparacion" style="width:auto;"> Es mano de obra del taller (se agrega a las órdenes de reparación, no se cobra en caja)
+        </label>`;
     } else {
       extra.innerHTML = `
         <label class="obligatorio">Stock inicial</label>
@@ -4132,8 +4133,7 @@ function dibujarFormularioProducto(cont, categorias, obtenerCodti, alGuardar) {
       payload.imeis = imeis;
       payload.stock = imeis.length;
     } else if (esServicio) {
-      const tiempo = document.getElementById('np-tiempo').value;
-      payload.tiempoEstimadoMin = tiempo ? Number(tiempo) : null;
+      payload.paraReparacion = document.getElementById('np-reparacion').checked;
       payload.stock = 0;
     } else {
       const stock = Number(document.getElementById('np-stock').value);

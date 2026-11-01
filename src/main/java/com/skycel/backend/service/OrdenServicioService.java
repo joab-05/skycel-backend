@@ -947,6 +947,10 @@ public class OrdenServicioService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El producto '" + codpro + "' no existe en el inventario de " + deDonde.getNombre() + "."));
         ProductoMaster master = p.getProductoMaster();
+        if (master.getTipo() == TipoProducto.SERVICIO && !Boolean.TRUE.equals(master.getParaReparacion())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "'" + master.getNombreBase() + "' es un servicio de la tienda y se cobra en caja: no se agrega a una orden de reparación.");
+        }
         if (master.getTipo() == TipoProducto.CELULAR || master.getTipo() == TipoProducto.TABLET) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Un equipo no se agrega a una orden de servicio: solo servicios y refacciones (accesorios).");

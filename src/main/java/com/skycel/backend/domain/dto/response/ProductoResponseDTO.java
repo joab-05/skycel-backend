@@ -29,6 +29,7 @@ public class ProductoResponseDTO {
     private String  compatibilidad;       // modelos con los que sirve — ACCESORIO/SERVICIO
     private Integer tiempoEstimadoMin;    // duración estimada en minutos — solo SERVICIO
     private Integer diasGarantia;         // días de garantía del artículo o servicio
+    private Boolean paraReparacion;       // solo SERVICIO: true = mano de obra del taller; false = servicio de la tienda
     private String  nombreCategoria;      // ← categoría del maestro (la más profunda del árbol)
     private Short   idCategoria;          // id de esa categoría
     private String  nombreProducto;       // la descripción del producto (sin el color), si la tiene

@@ -54,12 +54,14 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     /**
      * Igual que {@link #findActivosConDetalleByTienda} pero solo lo que el punto de venta puede vender: lo que tiene stock y los
-     * servicios, que no manejan stock (siempre en 0) y se venden siempre.
+     * servicios de la tienda, que no manejan stock (siempre en 0) y se venden siempre. La mano de obra del taller
+     * ({@code paraReparacion}) se cobra desde su orden de reparación, no en caja.
      */
     @Query("SELECT p FROM Producto p JOIN FETCH p.tienda LEFT JOIN FETCH p.productoMaster m LEFT JOIN FETCH m.categoria " +
            "LEFT JOIN FETCH p.color LEFT JOIN FETCH p.proveedor LEFT JOIN FETCH p.magnitud LEFT JOIN FETCH p.seccion " +
            "WHERE p.tienda.codti = :codti AND p.activo = true " +
-           "AND (p.stock > 0 OR p.productoMaster.tipo = com.skycel.backend.domain.enums.TipoProducto.SERVICIO)")
+           "AND (p.stock > 0 OR (p.productoMaster.tipo = com.skycel.backend.domain.enums.TipoProducto.SERVICIO " +
+           "AND (p.productoMaster.paraReparacion IS NULL OR p.productoMaster.paraReparacion = false)))")
     List<Producto> findDisponiblesConDetalleByTienda(Integer codti);
     
     List<Producto> findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(Integer idprodmaster, Integer codti);

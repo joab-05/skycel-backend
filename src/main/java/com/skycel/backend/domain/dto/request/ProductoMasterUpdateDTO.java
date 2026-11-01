@@ -37,4 +37,7 @@ public class ProductoMasterUpdateDTO {
 
     @Min(value = 0, message = "Los días de garantía no pueden ser negativos")
     private Integer diasGarantia;
+
+    /** Solo servicios: true = mano de obra del taller (órdenes de reparación); false = servicio de la tienda (se cobra en caja). */
+    private Boolean paraReparacion;
 }

@@ -175,6 +175,7 @@ public class ProductoService {
                         .notaAdicional(esServicio ? trimOrNull(dto.getDescripcion2()) : null)
                         .compatibilidad(!esEquipo ? trimOrNull(dto.getCompatibilidad()) : null)
                         .tiempoEstimadoMin(esServicio ? validarTiempo(dto.getTiempoEstimadoMin()) : null)
+                        .paraReparacion(esServicio && Boolean.TRUE.equals(dto.getParaReparacion()))
                         .diasGarantia(validarDiasGarantia(dto.getDiasGarantia()))
                         .activo(true)
                         .build();
@@ -345,6 +346,7 @@ public class ProductoService {
                 .tipo(tipo)
                 .compatibilidad(trimOrNull(dto.getCompatibilidad()))
                 .tiempoEstimadoMin(esServicio ? validarTiempo(dto.getTiempoEstimadoMin()) : null)
+                .paraReparacion(esServicio && Boolean.TRUE.equals(dto.getParaReparacion()))
                 .diasGarantia(validarDiasGarantia(dto.getDiasGarantia()))
                 .activo(true)
                 .build());
@@ -513,6 +515,12 @@ public class ProductoService {
             master.setTiempoEstimadoMin(validarTiempo(dto.getTiempoEstimadoMin()));
         }
         if (dto.getDiasGarantia() != null) master.setDiasGarantia(validarDiasGarantia(dto.getDiasGarantia()));
+        if (dto.getParaReparacion() != null) {
+            if (master.getTipo() != com.skycel.backend.domain.enums.TipoProducto.SERVICIO) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo un servicio puede ser de reparación.");
+            }
+            master.setParaReparacion(dto.getParaReparacion());
+        }
 
         return productoMapper.toResponse(productoMasterRepository.save(master));
     }
@@ -656,6 +664,8 @@ public class ProductoService {
             dto.setCompatibilidad(p.getProductoMaster().getCompatibilidad());
             dto.setTiempoEstimadoMin(p.getProductoMaster().getTiempoEstimadoMin());
             dto.setDiasGarantia(p.getProductoMaster().getDiasGarantia());
+            dto.setParaReparacion(p.getProductoMaster().getTipo() == com.skycel.backend.domain.enums.TipoProducto.SERVICIO
+                    ? Boolean.TRUE.equals(p.getProductoMaster().getParaReparacion()) : null);
             esServicio = p.getProductoMaster().getTipo() == com.skycel.backend.domain.enums.TipoProducto.SERVICIO;
         }
         // Alerta de reposición: stock <= umbral, solo si hay umbral definido y no es un servicio
