@@ -34,6 +34,9 @@ for r in hoja(1).iter_rows(min_row=2, values_only=True):
     if r[0] and r[0] != 'TOTAL': TIPOS[r[0]] = (r[5].strip(), r[6].strip(), r[7].strip())
 # Aclaración del usuario (2026-09-23): las baterías externas con existencia son power banks -> Bateria Portatil.
 TIPOS['BATERIA EXTERNA'] = ('Bateria Portatil', 'BPO', 'Accesorio')
+# Tipos que aparecieron en el inventario después de la revisión del usuario (corte del 2026-11-01).
+TIPOS.setdefault('MICROFONO', ('Microfono', 'MCR', 'Accesorio'))
+TIPOS.setdefault('REPRODUCTOR', ('Reproductor', 'RPR', 'Accesorio'))
 COLORES = {}  # color viejo (upper) -> (color limpio o None, estilo o None)
 for r in hoja(2).iter_rows(min_row=2, values_only=True):
     if r[0] and r[0] != 'TOTAL':
