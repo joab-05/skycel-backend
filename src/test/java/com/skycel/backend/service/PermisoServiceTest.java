@@ -140,13 +140,13 @@ class PermisoServiceTest {
     void permisoNuevo() {
         service.sembrar();
         service.asignar("DESCUENTOS", List.of("VENDEDOR"));
-        // simula que "COMPRAS" se agregó en una versión posterior: aún no tiene su marca ni sus roles
-        base.removeIf(f -> f.getPermiso().equals("COMPRAS"));
+        // simula que "TRASPASOS" se agregó en una versión posterior: aún no tiene su marca ni sus roles
+        base.removeIf(f -> f.getPermiso().equals("TRASPASOS"));
 
         PermisoService reinicio = new PermisoService(repo);
         reinicio.sembrar();
 
-        assertThat(reinicio.tiene(Rol.ENCARGADO_TIENDA, "COMPRAS")).isTrue();
+        assertThat(reinicio.tiene(Rol.ENCARGADO_TIENDA, "TRASPASOS")).isTrue();
         assertThat(reinicio.tiene(Rol.VENDEDOR, "DESCUENTOS")).isTrue();
     }
 

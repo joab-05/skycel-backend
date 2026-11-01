@@ -43,9 +43,9 @@ public enum Permiso {
 
     // ── Finanzas ──────────────────────────────────────────────────────────────
     CUENTAS_COBRAR("Cuentas por cobrar: crear cuentas y cobrar abonos", "Finanzas", Set.of(ADMIN, ENCARGADO_TIENDA)),
-    COMPRAS("Compras a proveedores y cuentas por pagar", "Finanzas", Set.of(ADMIN, ENCARGADO_TIENDA)),
+    COMPRAS("Compras a proveedores y cuentas por pagar", "Finanzas", Set.of(ADMIN)),
     DESCUENTOS("Definir las reglas de descuento", "Finanzas", Set.of(ADMIN)),
-    REPORTES("Ver los reportes (resultados, gerencial, rezagados)", "Finanzas", Set.of(ADMIN, ENCARGADO_TIENDA)),
+    REPORTES("Ver los reportes (resultados, gerencial, rezagados)", "Finanzas", Set.of(ADMIN)),
     REPORTES_CONSOLIDADOS("Ver la caja de todas las sucursales a la vez", "Finanzas", Set.of(ADMIN)),
 
     // ── Clientes ──────────────────────────────────────────────────────────────
