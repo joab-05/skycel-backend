@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Lista del encargado · Arranque del nuevo sistema</title>
+<style>
+  @page { size: Letter; margin: 11mm 13mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #1e293b; font-size: 9.8pt; line-height: 1.28; margin: 0; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #0f172a; padding-bottom: 6px; margin-bottom: 8px; }
+  h1 { font-size: 18pt; margin: 0; letter-spacing: -.3px; }
+  header .sub { color: #64748b; font-size: 10pt; }
+  .datos { display: flex; gap: 18px; margin: 8px 0 10px; font-size: 10pt; }
+  .datos span { flex: 1; border-bottom: 1px solid #94a3b8; padding-bottom: 2px; color: #64748b; }
+  h2 { font-size: 11.5pt; background: #0f172a; color: #fff; padding: 3px 9px; border-radius: 5px; margin: 8px 0 4px; }
+  h2 small { font-weight: 400; opacity: .8; margin-left: 6px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; gap: 8px; padding: 1.5px 0; align-items: flex-start; }
+  li::before { content: ""; flex: 0 0 11px; height: 11px; margin-top: 3px; border: 1.5px solid #334155; border-radius: 2px; }
+  li b { color: #0f172a; }
+  .nota { background: #fef9c3; border-left: 4px solid #eab308; padding: 4px 9px; margin: 5px 0; border-radius: 3px; font-size: 9.5pt; }
+  .azul { background: #eff6ff; border-left-color: #2563eb; }
+  .roja { background: #fee2e2; border-left-color: #dc2626; }
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  table { border-collapse: collapse; width: 100%; font-size: 10pt; margin-top: 4px; }
+  td, th { border: 1px solid #cbd5e1; padding: 4px 7px; text-align: left; vertical-align: top; }
+  th { background: #f1f5f9; }
+  .flujo { display: flex; align-items: stretch; gap: 4px; margin: 6px 0; font-size: 9.5pt; }
+  .flujo div { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 6px; text-align: center; background: #f8fafc; }
+  .flujo div b { display: block; color: #2563eb; }
+  .flujo i { align-self: center; font-style: normal; color: #94a3b8; }
+  .salto { page-break-before: always; }
+  footer { margin-top: 10px; color: #64748b; font-size: 9pt; border-top: 1px solid #e2e8f0; padding-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div><h1>Arranque del nuevo sistema</h1><div class="sub">Lista del encargado de sucursal · Skycel</div></div>
+  <div class="sub">Marca cada punto con una palomita</div>
+</header>
+
+<div class="datos"><span>Sucursal:</span><span>Encargado:</span><span>Fecha:</span></div>
+
+<div class="nota azul"><b>El servidor trabaja de 7:00 am a 12:00 am (medianoche).</b> Antes de las 7:00 y después de esa hora el sistema central está apagado: no esperes avisos, reportes ni traspasos en ese horario. Ventas, caja y recepción de equipos siguen funcionando en la computadora (ver «Si se cae el internet»).</div>
+
+<h2>1 · Antes de abrir <small>(a primera hora)</small></h2>
+<ul>
+  <li><span>Abre <b>JSystem</b> en la computadora del mostrador e inicia sesión con <b>tu usuario</b>. Si pide actualizarse, déjalo terminar y vuelve a abrirlo.</span></li>
+  <li><span>En <b>Configuración → Este equipo</b> revisa que diga <b>tu sucursal</b> y <b>tu caja</b> (no «sin asignar»). Si está mal, avisa al administrador.</span></li>
+  <li><span>Prueba la <b>impresora de tickets</b>: haz una venta pequeña (o reimprime un ticket) y confirma que sale bien.</span></li>
+  <li><span>Entra a <b>Avisos</b> y elige el <b>sonido</b> que prefieras (hay un botón <b>Probar</b>). Confirma que el volumen de la computadora está activo: así sabrás cuándo llega algo.</span></li>
+  <li><span>Abre la <b>caja del día</b> en <b>Caja</b> con el fondo inicial y cuéntalo contigo presente.</span></li>
+  <li><span>Revisa que tu <b>inventario</b> tenga existencias y precios (<b>Inventario</b>). Si falta algo, no lo inventes: avisa al administrador.</span></li>
+</ul>
+
+<h2>2 · Durante el día</h2>
+<div class="dos">
+<ul>
+  <li><span><b>Vender:</b> Punto de Venta → buscar o escanear → cobrar. Los equipos se venden por <b>IMEI</b>.</span></li>
+  <li><span>Cada venta sale con <b>ticket</b>. Si el administrador no ha habilitado la <b>tarjeta</b>, solo se cobra en efectivo o transferencia.</span></li>
+  <li><span><b>Devoluciones y cambios:</b> dentro de 15 días, con la venta original.</span></li>
+  <li><span><b>Anticipos y entregas de reparaciones</b> entran a la caja en efectivo; tarjeta y transferencia no.</span></li>
+</ul>
+<ul>
+  <li><span><b>Avisos:</b> cuando suene la campanita, abre el aviso (traspasos que llegan, garantías, órdenes).</span></li>
+  <li><span><b>Traspasos:</b> al recibir mercancía confirma las piezas <b>contándolas</b>.</span></li>
+  <li><span><b>Reportes</b> de ventas y de caja: en <b>Reportes</b> y en <b>Caja</b>.</span></li>
+  <li><span>Dudas: <b>F1</b> abre el manual en el tema de la pantalla.</span></li>
+</ul>
+</div>
+
+<h2>3 · Reparaciones <small>(el camino de un equipo)</small></h2>
+<div class="flujo">
+  <div><b>1 · Recibir</b>Tu sucursal registra el equipo y el anticipo</div><i>›</i>
+  <div><b>2 · Mandar</b>Se lleva al taller (Taller Superche)</div><i>›</i>
+  <div><b>3 · Reparar</b>El técnico cotiza, el cliente autoriza y se repara</div><i>›</i>
+  <div><b>4 · Regresar</b>El equipo vuelve a tu sucursal</div><i>›</i>
+  <div><b>5 · Cobrar</b>Tu sucursal cobra y entrega</div>
+</div>
+<ul>
+  <li><span><b>Recibir un equipo:</b> Órdenes de servicio → <b>Nueva orden</b>. Captura cliente, marca, modelo y falla; marca la <b>revisión rápida</b> (Bien / Falla / No probado); anota el <b>código de desbloqueo</b> solo si el cliente lo da; toma <b>fotos</b>; registra el <b>anticipo</b> si deja.</span></li>
+  <li><span><b>Imprime el comprobante</b> (lleva QR) y pide la <b>firma</b> del cliente. Avísale por WhatsApp si quieres (botón «Avisar por WhatsApp»).</span></li>
+  <li><span>Cuando el técnico pida la <b>autorización del precio</b>, avisa al cliente y registra su respuesta en «Respuesta del cliente» (no se puede terminar ni cobrar sin ella).</span></li>
+  <li><span><b>Cuando el equipo regrese</b> de Taller Superche, abre la orden y pulsa <b>«Regresó a la tienda»</b>. <u>Hasta que lo hagas no se puede cobrar ni avisar al cliente que ya puede recogerlo.</u></span></li>
+  <li><span>Para entregar: <b>Entregar y cobrar</b> (método de pago, anticipo ya descontado). Se genera la venta y la garantía.</span></li>
+  <li><span>Cada día revisa <b>Por recoger</b>: equipos listos que el cliente no ha recogido (a los 7 días se le recuerda; a los 30 vence el plazo del comprobante).</span></li>
+</ul>
+<div class="nota">Los <b>técnicos</b> no reciben equipos ni cobran: lo hace la sucursal. Si un equipo se repara en la misma sucursal que lo recibió, el paso «Regresó a la tienda» no aparece.</div>
+
+<div class="salto"></div>
+
+<h2>4 · Al cerrar</h2>
+<ul>
+  <li><span>Antes de las <b>11:30 pm</b> termina lo pendiente que necesite el servidor (traspasos, compras, reportes). A las 12:00 am se apaga.</span></li>
+  <li><span>Haz el <b>corte de caja</b> (Caja → Cerrar caja): cuenta el efectivo, anótalo y revisa la diferencia contra lo que dice el sistema.</span></li>
+  <li><span>Haz el <b>Corte de servicios</b> del día (recargas, pagos de servicios, pines) si manejas esos servicios.</span></li>
+  <li><span>Revisa <b>Guardado en este equipo</b>: debe decir <b>0 pendientes</b>. Si hay pendientes, déjalos para enviarse al encender el servidor; si hay <b>errores</b>, avisa al administrador.</span></li>
+  <li><span><b>Cierra sesión</b> (botón de salida, arriba a la derecha): así cada venta queda a tu nombre.</span></li>
+</ul>
+
+<h2>5 · Si algo falla</h2>
+<table>
+  <tr><th style="width:30%">Qué pasa</th><th>Qué hacer</th></tr>
+  <tr><td><b>Se cae el internet o el servidor</b> (o es antes de las 7:00)</td><td>Sigue trabajando en <b>JSystem</b>: <b>Punto de Venta, Caja, recepción de equipos, Corte de Servicios y abonos</b> se guardan en la computadora y se envían solos al volver la conexión. Una franja de color arriba avisa que no hay conexión. Las demás secciones (traspasos, compras, reportes) esperan.</td></tr>
+  <tr><td><b>Un equipo no se vendió / «ya se vendió ese IMEI»</b></td><td>No lo repitas. Revisa en <b>Equipos</b> el estado del IMEI. Si lo vendiste sin internet, el administrador revisa el error en «Guardado en este equipo».</td></tr>
+  <tr><td><b>La orden no deja cobrar</b></td><td>Lee el mensaje: casi siempre falta <b>«Regresó a la tienda»</b>, la <b>autorización del cliente</b> o un <b>saldo</b>. Hazlo y reintenta.</td></tr>
+  <tr><td><b>No suenan los avisos</b></td><td>Avisos → casilla <b>«Sonido al llegar un aviso»</b> activa → <b>Probar</b>. Revisa el volumen de la computadora. Si sigue sin sonar, avisa al administrador.</td></tr>
+  <tr><td><b>Olvidé mi contraseña</b></td><td>Un administrador la cambia en <b>Empleados</b>. No la compartas.</td></tr>
+  <tr><td><b>Otro problema</b></td><td>No reinicies ni borres nada. Anota <b>qué hacías, a qué hora y qué decía la pantalla</b> (o toma una foto) y avisa a:</td></tr>
+</table>
+<div class="datos" style="margin-top:10px"><span>Administrador / soporte:</span><span>Teléfono:</span></div>
+
+<h2>6 · Reglas que no se rompen</h2>
+<ul>
+  <li><span>Nunca captures una venta «a mano» fuera del sistema: si no está en el sistema, no existe para el inventario ni para la caja.</span></li>
+  <li><span>Nunca cobres una reparación sin haber confirmado que <b>el equipo está en tu sucursal</b>.</span></li>
+  <li><span>El <b>código de desbloqueo</b> del cliente solo lo ve el taller: no se imprime ni se manda por mensaje.</span></li>
+  <li><span>Los precios solo los cambia el administrador (en Inventario); las ventas no se negocian en el sistema.</span></li>
+</ul>
+
+<footer>Skycel · Manual completo dentro de JSystem (tecla F1) y en la versión web (signo de interrogación). Esta lista cubre el primer día; guárdala junto a la computadora del mostrador.</footer>
+
+</body>
+</html>
