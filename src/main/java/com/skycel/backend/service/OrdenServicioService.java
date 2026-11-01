@@ -326,7 +326,7 @@ public class OrdenServicioService {
         linea.setPrecioUnitario(dto.getPrecio());
         OrdenServicioDetalle detalle = nuevaLinea(orden, linea, usuario);
         registrar(orden, usuario, "Se agregó una pieza comprada para la orden: " + descripcion + " ×" + cantidad
-                + " (costó $" + dto.getCosto() + ", se cobra $" + detalle.getPrecioUnitario() + ")");
+                + " (se cobra $" + detalle.getPrecioUnitario() + ")");   // el costo no va en la bitácora: la ven vendedores y encargados
         notificacionService.notificarRol(Rol.ADMIN, "AJUSTE_INVENTARIO", recortar250(usuario.getNombreCompleto() + " compró una pieza para "
                 + orden.getFolio() + ": " + descripcion + " ×" + cantidad + " a $" + dto.getCosto() + " c/u"), "#/taller");
         alCambiarElTotal(orden, usuario);

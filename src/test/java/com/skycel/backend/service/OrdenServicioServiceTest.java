@@ -521,6 +521,8 @@ class OrdenServicioServiceTest {
             assertThat(alta.getValue().getStock()).isEqualByComparingTo("1");
             assertThat(r.getLineas()).hasSize(1);
             assertThat(r.getLineas().get(0).getPrecioUnitario()).isEqualByComparingTo("1200");
+            // el costo de la pieza no se escribe en la bitácora de la orden, que la ven vendedores y encargados
+            assertThat(historial).noneMatch(h -> h.getComentario() != null && h.getComentario().contains("650"));
 
             // la misma pieza dos veces en la misma orden se rechaza, sin duplicar el producto
             assertThatThrownBy(() -> service.agregarPiezaComprada(o, dto, "root"))

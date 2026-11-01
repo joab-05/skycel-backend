@@ -59,6 +59,7 @@ class VentaServiceTest {
     @Mock private PromocionEquipoService promocionEquipoService;
     @Mock private SolicitudDescuentoService solicitudDescuentoService;
     @Mock private ConfiguracionNegocioService configuracionNegocioService;
+    @Mock private PermisoService permisoService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -1266,6 +1267,27 @@ class VentaServiceTest {
                     .isInstanceOfSatisfying(ResponseStatusException.class,
                             e -> assertThat(e.getReason()).contains("12.00").contains("15.00"));
         }
+    }
+
+    // ── Costos ───────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("el detalle de una venta solo trae el costo de compra para quien tiene COSTOS_VER")
+    void costoDeCompraSoloConPermiso() {
+        ProductoMaster master = masterCelular();
+        Venta venta = Venta.builder().idventa(501).estado((byte) 1).total(new BigDecimal("199"))
+                .tienda(tienda).caja(caja).usuarioVendedor(vendedor).montoAbonado(new BigDecimal("199")).build();
+        VentaDetalle detalle = VentaDetalle.builder().iddetalleVenta(901).venta(venta).productoMaster(master).cantidad((short) 1)
+                .precioUnitarioBase(new BigDecimal("200")).precioUnitarioFinal(new BigDecimal("199"))
+                .costoUnitarioCompra(new BigDecimal("100")).build();
+        when(ventaRepository.findById(501)).thenReturn(Optional.of(venta));
+        when(ventaDetalleRepository.findByVenta_Idventa(501)).thenReturn(List.of(detalle));
+
+        when(permisoService.tiene("COSTOS_VER")).thenReturn(false);
+        assertThat(ventaService.obtenerPorId(501).getDetalles().get(0).getCostoUnitarioCompra()).isNull();
+
+        when(permisoService.tiene("COSTOS_VER")).thenReturn(true);
+        assertThat(ventaService.obtenerPorId(501).getDetalles().get(0).getCostoUnitarioCompra()).isEqualByComparingTo("100");
     }
 
     // ── Cancelar ─────────────────────────────────────────────────────────────

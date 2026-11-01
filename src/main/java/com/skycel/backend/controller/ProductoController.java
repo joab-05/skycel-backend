@@ -150,8 +150,9 @@ public class ProductoController {
     @PostMapping
     @PreAuthorize("@permisos.tiene('INVENTARIO_EDITAR')")
     public ResponseEntity<ProductoResponseDTO> crearProducto(
-            @Valid @RequestBody ProductoRequestDTO request) {
-        return ResponseEntity.ok(productoService.crearProducto(request));
+            @Valid @RequestBody ProductoRequestDTO request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostos(productoService.crearProducto(request), user));
     }
 
     @Operation(summary = "Actualizar precios y datos de un producto")
@@ -164,8 +165,9 @@ public class ProductoController {
             @RequestParam(required = false) Integer codti,
             @Parameter(description = "Aplicar el nuevo precio de compra/venta a este código en TODAS las sucursales que lo tienen.")
             @RequestParam(defaultValue = "false") boolean aTodasLasSucursales,
-            @RequestBody ProductoUpdateDTO request) {
-        return ResponseEntity.ok(productoService.actualizar(codpro, codti, aTodasLasSucursales, request));
+            @RequestBody ProductoUpdateDTO request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostos(productoService.actualizar(codpro, codti, aTodasLasSucursales, request), user));
     }
 
     @Operation(summary = "Ajustar stock — ENTRADA / SALIDA / AJUSTE")
@@ -176,8 +178,9 @@ public class ProductoController {
             @PathVariable String codpro,
             @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
             @RequestParam(required = false) Integer codti,
-            @RequestBody StockAjusteDTO request) {
-        return ResponseEntity.ok(productoService.ajustarStock(codpro, codti, request));
+            @RequestBody StockAjusteDTO request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostos(productoService.ajustarStock(codpro, codti, request), user));
     }
 
     @Operation(summary = "Marcar (o desmarcar) un artículo como rezagado a mano")
@@ -188,8 +191,9 @@ public class ProductoController {
             @PathVariable String codpro,
             @Parameter(description = "Sucursal del producto; obligatoria si el código existe en varias.")
             @RequestParam(required = false) Integer codti,
-            @RequestParam boolean rezagado) {
-        return ResponseEntity.ok(productoService.marcarRezagado(codpro, codti, rezagado));
+            @RequestParam boolean rezagado,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails user) {
+        return ResponseEntity.ok(sinCostos(productoService.marcarRezagado(codpro, codti, rezagado), user));
     }
 
     @Operation(summary = "Actualizar compatibilidad, tiempo estimado o garantía de un producto maestro")

@@ -83,6 +83,7 @@ public class VentaService {
     private final PromocionEquipoService promocionEquipoService;
     private final SolicitudDescuentoService solicitudDescuentoService;
     private final ConfiguracionNegocioService configuracionNegocioService;
+    private final PermisoService permisoService;
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
@@ -920,6 +921,10 @@ public class VentaService {
                 .build();
     }
 
+    private boolean veCostos() {
+        return permisoService != null && permisoService.tiene(com.skycel.backend.domain.enums.Permiso.COSTOS_VER.name());
+    }
+
     private VentaDetalleResponseDto toDetalleDto(VentaDetalle d) {
         BigDecimal cantidad = BigDecimal.valueOf(d.getCantidad());
         return VentaDetalleResponseDto.builder()
@@ -930,7 +935,7 @@ public class VentaService {
                 .cantidad(d.getCantidad())
                 .precioUnitarioBase(d.getPrecioUnitarioBase())
                 .precioUnitarioFinal(d.getPrecioUnitarioFinal())
-                .costoUnitarioCompra(d.getCostoUnitarioCompra())
+                .costoUnitarioCompra(veCostos() ? d.getCostoUnitarioCompra() : null)   // el costo solo lo ve quien tiene COSTOS_VER
                 .subtotal(d.getPrecioUnitarioFinal().multiply(cantidad))
                 .imei(d.getImei())
                 .esRegalo(d.getEsRegalo())
