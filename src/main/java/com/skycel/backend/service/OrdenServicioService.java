@@ -295,10 +295,17 @@ public class OrdenServicioService {
         Tienda deDonde = tiendaDeInventario(orden, usuario);
         short cantidad = dto.getCantidad() != null ? dto.getCantidad() : 1;
         String descripcion = dto.getDescripcion().trim().replaceAll("\s+", " ");
+        String nombrePieza = descripcion + " (" + orden.getFolio() + ")";
+        boolean yaAgregada = detalleRepository.findByOrden_IdordenOrderByIddetalle(id).stream()
+                .anyMatch(d -> d.getProductoMaster() != null && nombrePieza.equalsIgnoreCase(d.getProductoMaster().getNombreBase()));
+        if (yaAgregada) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Ya agregaste «" + descripcion + "» a esta orden: quita ese renglón y vuelve a agregarla con la cantidad correcta, o descríbela distinto.");
+        }
 
         com.skycel.backend.domain.dto.request.ProductoRequestDTO alta = new com.skycel.backend.domain.dto.request.ProductoRequestDTO();
         alta.setIdCategoria(categoriaRefacciones());
-        alta.setNombreProducto(descripcion + " (" + orden.getFolio() + ")");
+        alta.setNombreProducto(nombrePieza);
         alta.setCodti(deDonde.getCodti());
         alta.setStock(BigDecimal.valueOf(cantidad));
         alta.setPrecioCompra(dto.getCosto());

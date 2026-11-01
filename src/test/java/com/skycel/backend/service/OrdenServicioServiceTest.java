@@ -497,6 +497,7 @@ class OrdenServicioServiceTest {
             ProductoMaster mPieza = ProductoMaster.builder().idprodmaster(9).tipo(TipoProducto.ACCESORIO).nombreBase("Pantalla Samsung A16 (OS)").build();
             when(productoService.crearProducto(any())).thenAnswer(inv -> {
                 com.skycel.backend.domain.dto.request.ProductoRequestDTO alta = inv.getArgument(0);
+                mPieza.setNombreBase(alta.getNombreProducto());
                 Producto p = producto("REF-000001", mPieza, alta.getStock().toPlainString(), alta.getPrecioVenta().toPlainString());
                 p.setPreciopro(alta.getPrecioCompra());
                 com.skycel.backend.domain.dto.response.ProductoResponseDTO r = new com.skycel.backend.domain.dto.response.ProductoResponseDTO();
@@ -520,6 +521,11 @@ class OrdenServicioServiceTest {
             assertThat(alta.getValue().getStock()).isEqualByComparingTo("1");
             assertThat(r.getLineas()).hasSize(1);
             assertThat(r.getLineas().get(0).getPrecioUnitario()).isEqualByComparingTo("1200");
+
+            // la misma pieza dos veces en la misma orden se rechaza, sin duplicar el producto
+            assertThatThrownBy(() -> service.agregarPiezaComprada(o, dto, "root"))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Ya agregaste");
+            verify(productoService, times(1)).crearProducto(any());
         }
 
         @Test
