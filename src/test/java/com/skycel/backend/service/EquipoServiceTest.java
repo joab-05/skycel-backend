@@ -119,6 +119,23 @@ class EquipoServiceTest {
         return u;
     }
 
+    @Test
+    @DisplayName("el costo y el proveedor de un equipo solo los ve quien tiene el permiso de costos")
+    void costoYProveedorSoloConPermiso() {
+        Proveedor proveedor = Proveedor.builder().idproveedor((short) 7).nombreCorto("Distribuidora Norte").build();
+        ProductoImei u = existente(celular, zocalo, "351000000000011", "DISPONIBLE");
+        u.setProveedor(proveedor);
+
+        EquipoResponseDto conPermiso = service.toDto(u, true);
+        EquipoResponseDto sinPermiso = service.toDto(u, false);
+
+        assertThat(conPermiso.getCosto()).isEqualByComparingTo("2000");
+        assertThat(conPermiso.getNombreProveedor()).isEqualTo("Distribuidora Norte");
+        assertThat(sinPermiso.getCosto()).isNull();
+        assertThat(sinPermiso.getNombreProveedor()).isNull();
+        assertThat(sinPermiso.getIdProveedor()).isNull();
+    }
+
     private void assertEstado(HttpStatus esperado, Runnable accion) {
         assertThatThrownBy(accion::run).isInstanceOfSatisfying(ResponseStatusException.class,
                 e -> assertThat(e.getStatusCode()).isEqualTo(esperado));

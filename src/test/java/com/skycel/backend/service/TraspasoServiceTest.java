@@ -724,6 +724,84 @@ class TraspasoServiceTest {
             return service.crearSolicitud(solicitud(null, 1, lineas), "abigail").getIdtraspaso();
         }
 
+        /** El envío activo que salió de cada solicitud, como lo busca el servicio. */
+        private void enlazarEnvios() {
+            lenient().when(traspasoRepository.findFirstByIdtraspasoRefAndTipoAndActivoTrue(anyInt(), any())).thenAnswer(inv ->
+                    traspasos.values().stream().filter(t -> inv.getArgument(0).equals(t.getIdtraspasoRef())
+                            && t.getTipo().equals(inv.getArgument(1)) && Boolean.TRUE.equals(t.getActivo())).findFirst());
+            lenient().doAnswer(inv -> { detalles.removeAll((java.util.Collection<?>) inv.getArgument(0)); return null; })
+                    .when(detalleRepository).deleteAll(org.mockito.ArgumentMatchers.<Iterable<TraspasoDetalle>>any());
+        }
+
+        @Test
+        @DisplayName("reabrir (administrador): aunque ya se recibió, la mercancía regresa al origen, el envío se anula y la solicitud vuelve a quedar nueva")
+        void reabrirUnTraspasoRecibido() {
+            enlazarEnvios();
+            Producto funda = stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = pedir(linea("ACC-000001", "12"));
+            TraspasoResponseDto envio = service.aceptar(id, null, "root");
+            service.recibir(envio.getIdtraspaso(), "abigail");
+            assertThat(funda.getStock()).isEqualByComparingTo("28");
+            assertThat(enTienda("ACC-000001", zocalo).getStock()).isEqualByComparingTo("12");
+
+            TraspasoResponseDto r = service.reabrir(id, "root");
+
+            assertThat(r.getEstadoDisplay()).isEqualTo("Enviado");
+            assertThat(funda.getStock()).isEqualByComparingTo("40");
+            assertThat(enTienda("ACC-000001", zocalo).getStock()).isEqualByComparingTo("0");
+            assertThat(traspasos.get(envio.getIdtraspaso()).getActivo()).isFalse();
+            assertThat(traspasos.get(id).getUsuarioValida()).isNull();
+        }
+
+        @Test
+        @DisplayName("reabrir: si la tienda que recibió ya usó parte de lo recibido, no se toca nada (409) y se dice qué pasó")
+        void reabrirConLoRecibidoYaUsado() {
+            enlazarEnvios();
+            Producto funda = stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = pedir(linea("ACC-000001", "12"));
+            TraspasoResponseDto envio = service.aceptar(id, null, "root");
+            service.recibir(envio.getIdtraspaso(), "abigail");
+            enTienda("ACC-000001", zocalo).setStock(new BigDecimal("5"));   // ya vendió 7
+
+            assertThatThrownBy(() -> service.reabrir(id, "root"))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                        assertThat(e.getReason()).contains("ACC-000001").contains("solo tiene 5");
+                    });
+            assertThat(funda.getStock()).isEqualByComparingTo("28");
+            assertThat(traspasos.get(envio.getIdtraspaso()).getActivo()).isTrue();
+            assertThat(traspasos.get(id).getEstado()).isEqualTo((byte) 4);
+        }
+
+        @Test
+        @DisplayName("reabrir: solo un administrador (403)")
+        void reabrirSoloAdministrador() {
+            enlazarEnvios();
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = pedir(linea("ACC-000001", "2"));
+            service.aceptar(id, null, "root");
+
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.reabrir(id, "abigail"));
+        }
+
+        @Test
+        @DisplayName("un administrador edita una solicitud ya completada en un solo paso: cambia lo que pide y vuelve a quedar nueva")
+        void administradorEditaUnaSolicitudCompletada() {
+            enlazarEnvios();
+            Producto funda = stock("ACC-000001", almacen, accesorio, "40", negro);
+            stock("ACC-000002", almacen, accesorio, "20", azul);
+            int id = pedir(linea("ACC-000001", "12"));
+            TraspasoResponseDto envio = service.aceptar(id, null, "root");
+            service.recibir(envio.getIdtraspaso(), "abigail");
+
+            TraspasoResponseDto r = service.editarSolicitud(id, solicitud(null, 1, linea("ACC-000001", "4"), linea("ACC-000002", "6")), "root");
+
+            assertThat(r.getEstadoDisplay()).isEqualTo("Enviado");
+            assertThat(r.getLineas()).hasSize(2);
+            assertThat(funda.getStock()).isEqualByComparingTo("40");   // lo que se había movido regresó al origen
+            assertThat(traspasos.get(envio.getIdtraspaso()).getActivo()).isFalse();
+        }
+
         @Test
         @DisplayName("editar: quien pidió cambia las cantidades y la solicitud vuelve a quedar como nueva para quien surte")
         void editar() {

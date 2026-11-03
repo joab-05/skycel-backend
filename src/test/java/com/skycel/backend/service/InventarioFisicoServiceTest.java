@@ -41,6 +41,7 @@ class InventarioFisicoServiceTest {
     @Mock private NotificacionService notificacionService;
     @Mock private PermisoService permisoService;
     @Mock private CategoriaRepository categoriaRepository;
+    @Mock private MovimientoInventarioRepository movimientoInventarioRepository;
 
     @InjectMocks
     private InventarioFisicoService service;
@@ -85,6 +86,57 @@ class InventarioFisicoServiceTest {
         ProductoMaster master = ProductoMaster.builder().idprodmaster(1).tipo(TipoProducto.ACCESORIO).nombreBase("Cable USB-C").build();
         Seccion seccion = Seccion.builder().idseccion((short) 1).nombre("Accesorios").tienda(zocalo).build();
         return Producto.builder().idproducto(50).codpro(codpro).tienda(zocalo).productoMaster(master).stock(stock).seccion(seccion).build();
+    }
+
+    // ── Antes de enviar: movimientos durante el conteo ───────────────────────
+
+    private MovimientoInventario mov(Producto p, String tipo, String cantidad) {
+        return MovimientoInventario.builder().producto(p).codti(2).tipo(tipo).cantidad(new BigDecimal(cantidad))
+                .stockAntes(BigDecimal.TEN).stockDespues(BigDecimal.TEN).build();
+    }
+
+    @Test
+    @DisplayName("revisión previa: avisa de lo vendido y de lo que llegó, y marca lo que llegó y no se ha contado")
+    void revisionPrevia() {
+        InventarioAuditoria a = auditoriaAbierta();
+        a.setFechaInicio(java.time.LocalDateTime.now().minusHours(2));
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        Producto contado = accesorio("ACC-000001", new BigDecimal("8"));
+        Producto sinContar = accesorio("ACC-000002", new BigDecimal("5"));
+        InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder().inventarioAuditoria(a).codpro("ACC-000001")
+                .seccion(contado.getSeccion()).conteo((short) 8).stockSistema((short) 10).estado((byte) 0).build();
+        when(detalleRepository.findByInventarioAuditoria_IdinventarioOrderByIddetalleInvAsc(10)).thenReturn(List.of(d));
+        when(movimientoInventarioRepository.buscar(eq(2), any(), any(), isNull())).thenReturn(List.of(
+                mov(contado, "VENTA", "-2"),
+                mov(sinContar, "TRASPASO_ENTRADA", "3"),
+                mov(contado, "CORTE", "5")));   // el corte no cuenta como movimiento
+
+        Map<String, Object> r = service.revisionPrevia(10, "enc2");
+
+        assertThat(r.get("hayMovimientos")).isEqualTo(true);
+        assertThat(r.get("recibidosSinContar")).isEqualTo(1L);
+        List<Map<String, Object>> filas = (List<Map<String, Object>>) r.get("articulos");
+        assertThat(filas).hasSize(2);
+        assertThat(filas.get(0).get("codpro")).isEqualTo("ACC-000002");   // lo urgente va primero
+        assertThat(filas.get(0).get("recibidoSinContar")).isEqualTo(true);
+        assertThat((String) filas.get(0).get("aviso")).contains("no se ha contado").contains("deben estar en físico");
+        assertThat(filas.get(1).get("vendidas")).isEqualTo(2);
+        assertThat(filas.get(1).get("recibidoSinContar")).isEqualTo(false);
+    }
+
+    @Test
+    @DisplayName("revisión previa sin movimientos: nada que avisar")
+    void revisionPreviaSinMovimientos() {
+        InventarioAuditoria a = auditoriaAbierta();
+        a.setFechaInicio(java.time.LocalDateTime.now().minusHours(1));
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findByInventarioAuditoria_IdinventarioOrderByIddetalleInvAsc(10)).thenReturn(List.of());
+        when(movimientoInventarioRepository.buscar(eq(2), any(), any(), isNull())).thenReturn(List.of());
+
+        Map<String, Object> r = service.revisionPrevia(10, "enc2");
+
+        assertThat(r.get("hayMovimientos")).isEqualTo(false);
+        assertThat((List<?>) r.get("articulos")).isEmpty();
     }
 
     // ── Aperturar ────────────────────────────────────────────────────────────

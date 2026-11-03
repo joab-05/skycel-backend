@@ -16,6 +16,9 @@ public interface TraspasoRepository extends JpaRepository<Traspaso, Integer> {
            "AND (t.activo = true OR :incluirAnulados = true) ORDER BY t.fechaCreacion DESC, t.idtraspaso DESC")
     List<Traspaso> buscar(Integer codti, Byte tipo, Byte estado, boolean incluirAnulados);
 
+    /** El envío activo que generó una solicitud al aceptarse (si lo hay). */
+    java.util.Optional<Traspaso> findFirstByIdtraspasoRefAndTipoAndActivoTrue(Integer idtraspasoRef, Byte tipo);
+
     /** Lo que la tienda tiene por atender: envíos por recibir y solicitudes sin resolver. */
     @Query("SELECT t FROM Traspaso t WHERE t.tiendaDestino.codti = :codti AND t.activo = true AND " +
            "((t.tipo = 1 AND t.estado = 1) OR (t.tipo = 2 AND t.estado IN (1, 3))) " +

@@ -41,6 +41,7 @@ public class CatalogoController {
     @Operation(summary = "Listar todos los proveedores", description = "Incluye activos e inactivos")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/proveedores/todos")
+    @PreAuthorize("@permisos.tiene('COSTOS_VER')")
     public ResponseEntity<StandardApiResponse<List<ProveedorResponseDTO>>> getTodosProveedores() {
         return ResponseEntityBuilder.ok(catalogoService.obtenerTodosProveedores(), "proveedores");
     }
@@ -157,6 +158,7 @@ public class CatalogoController {
     @Operation(summary = "Obtener proveedores", description = "Retorna la lista de proveedores activos")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/proveedores")
+    @PreAuthorize("@permisos.tiene('COSTOS_VER')")
     public ResponseEntity<StandardApiResponse<List<ProveedorResponseDTO>>> getProveedores() {
         return ResponseEntityBuilder.ok(catalogoService.obtenerProveedoresActivos(),"proveedores");
     }

@@ -46,6 +46,7 @@ class GarantiaServiceTest {
     @Mock private UsuarioRepository           usuarioRepository;
     @Mock private CategoriaFolioRepository    categoriaFolioRepository;
     @Mock private NotificacionService         notificacionService;
+    @Mock private PermisoService              permisoService;
     @Mock private ProveedorRepository         proveedorRepository;
     @Mock private MovimientoInventarioService movimientoInventarioService;
 
@@ -123,6 +124,7 @@ class GarantiaServiceTest {
         lenient().when(garantiaRepository.findByImei(anyString())).thenAnswer(inv ->
                 garantias.values().stream().filter(g -> inv.getArgument(0).equals(g.getImei())).collect(Collectors.toList()));
         lenient().when(proveedorRepository.findById((short) 2)).thenReturn(Optional.of(proveedor));
+        lenient().when(permisoService.tiene("COSTOS_VER")).thenReturn(true);   // quien ve costos ve también el proveedor
         lenient().when(historialRepository.save(any(GarantiaHistorial.class))).thenAnswer(inv -> {
             GarantiaHistorial h = inv.getArgument(0);
             h.setFechaMovimiento(LocalDateTime.now());
@@ -205,6 +207,16 @@ class GarantiaServiceTest {
             d.setImei(imei);
             d.setFallaReportada("La pantalla parpadea");
             return d;
+        }
+
+        @Test
+        @DisplayName("el nombre del proveedor de la garantía solo lo ve quien tiene el permiso de costos")
+        void proveedorSoloConPermiso() {
+            when(permisoService.tiene("COSTOS_VER")).thenReturn(false);
+
+            GarantiaResponseDto r = service.crear(reclamoVitrina(IMEI_VITRINA), "abigail");
+
+            assertThat(r.getProveedor()).isNull();
         }
 
         @Test

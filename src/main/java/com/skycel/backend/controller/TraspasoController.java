@@ -57,6 +57,17 @@ public class TraspasoController {
         return ResponseEntityBuilder.updated(traspasoService.editarSolicitud(id, request, user.getUsername()), "solicitud");
     }
 
+    @Operation(summary = "Reabrir un traspaso ya resuelto (administrador)",
+            description = "Revierte el movimiento de mercancía (aunque ya se haya recibido, si lo recibido sigue en la tienda destino) y deja la " +
+                    "solicitud como nueva para editarla y aceptarla otra vez. Un envío sin solicitud solo se anula.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/reabrir")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
+    public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> reabrir(
+            @PathVariable Integer id, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(traspasoService.reabrir(id, user.getUsername()), "traspaso");
+    }
+
     @Operation(summary = "Confirmar la recepción de un envío",
             description = "La tienda destino confirma que llegó la mercancía: el stock y las unidades pasan a su inventario. " +
                     "Sin cuerpo se recibe completo; si algo no llegó, se indica en 'faltantes' (con un comentario obligatorio) " +

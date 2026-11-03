@@ -191,7 +191,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (tiene('CAJA_MOVIMIENTOS')) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
   if (tiene('COMPRAS')) items.push({ h: '#/compras', i: ic('shopping-bag'), t: 'Compras y cuentas por pagar', grupo: 'Finanzas' });
   if (tiene('CUENTAS_COBRAR')) items.push({ h: '#/cxc', i: ic('credit-card'), t: 'Cuentas por cobrar', grupo: 'Finanzas' });
-  if (tiene('VENTA_HISTORIAL', 'REPORTES')) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reportes', grupo: 'Finanzas' });
+  if (tiene('VENTA_HISTORIAL', 'REPORTES_GERENCIA')) items.push({ h: '#/reportes', i: ic('chart-column'), t: 'Reportes', grupo: 'Finanzas' });
   if (tiene('VENTA_CREAR', 'CLIENTE_EDITAR')) items.push({ h: '#/clientes', i: ic('users'), t: 'Clientes', grupo: 'Clientes' });
   if (tiene('GARANTIAS')) items.push({ h: '#/garantias', i: ic('shield-check'), t: 'Garantías', grupo: 'Clientes' });
   if (tiene('ORDEN_RECIBIR')) items.push({ h: '#/recepcion', i: ic('inbox'), t: 'Recibir equipo', grupo: 'Taller' });
@@ -431,7 +431,7 @@ async function pantallaMenu() {
   const err = await Net.cantidadConError();
   const bajoStock = await obtenerBajoStock(s.codti);
   const tarjetas = itemsMenu(s, pend, err, bajoStock);
-  const gestor = Sesion.tiene('VENTA_HISTORIAL', 'REPORTES', 'CAJA_MOVIMIENTOS');
+  const gestor = Sesion.tiene('VENTA_HISTORIAL', 'REPORTES_GERENCIA', 'CAJA_MOVIMIENTOS');
   const personal = Sesion.tiene('VENTA_CREAR');
   const enTaller = Sesion.tiene('TALLER_TRABAJAR');
   const fecha = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -2663,9 +2663,9 @@ function mostrarFormularioAvance(id, hacia) {
 
 async function pantallaReportes() {
   const s = Sesion.obtener();
-  if (!Sesion.tiene('VENTA_HISTORIAL', 'REPORTES')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
+  if (!Sesion.tiene('VENTA_HISTORIAL', 'REPORTES_GERENCIA')) { root.innerHTML = '<div class="tarjeta">No tienes permiso para ver reportes.</div>'; return; }
   const veCaja = Sesion.tiene('REPORTES_CONSOLIDADOS');
-  const veResultados = Sesion.tiene('REPORTES');
+  const veResultados = Sesion.tiene('REPORTES_GERENCIA');
   root.innerHTML = `
     ${cabeceraPantalla(ic('chart-column') + ' Reportes', 'Ventas, resultados, resumen gerencial, productos rezagados y caja')}
     <div class="segmentado">
@@ -6534,6 +6534,21 @@ async function pantallaTraspasoNuevo(tipo) {
   document.getElementById('tn-buscar').addEventListener('input', (e) => {
     const q = e.target.value.trim();
     const cont = document.getElementById('tn-resultados');
+    // Un IMEI o serie escaneado (o escrito completo) se agrega solo, sin buscarlo después en la lista de unidades
+    const leido = q.replace(/[\s-]/g, '').toUpperCase();
+    if (leido.length >= 5) {
+      for (const p of catalogo) {
+        const u = (p.imeisDisponibles || []).find(x => String(x.imei).toUpperCase() === leido);
+        if (!u) continue;
+        let l = lineas.find(x => x.p.codpro === p.codpro);
+        if (!l) { l = { p, cantidad: 1, imeis: [] }; lineas.push(l); }
+        if (!l.imeis.includes(u.imei)) l.imeis.push(u.imei);
+        dibujarLineas();
+        cont.innerHTML = '';
+        e.target.value = '';
+        return;
+      }
+    }
     if (q.length < 2) { cont.innerHTML = ''; return; }
     const encontrados = filtrarProductos(catalogo, q).slice(0, 15);
     cont.innerHTML = encontrados.length === 0 ? '<div class="vacio">Sin resultados.</div>' : encontrados.map(p => `

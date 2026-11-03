@@ -77,6 +77,7 @@ public class GarantiaService {
     private final NotificacionService         notificacionService;
     private final ProveedorRepository         proveedorRepository;
     private final MovimientoInventarioService movimientoInventarioService;
+    private final PermisoService              permisoService;
 
     /** Tope razonable de días de garantía que se acepta capturar a mano (3 años). */
     private static final int MAX_DIAS_GARANTIA_ANTERIOR = 1095;
@@ -569,7 +570,7 @@ public class GarantiaService {
                 .idusuarioRecibe(g.getUsuarioRecibe().getIdusuario()).nombreRecibe(g.getUsuarioRecibe().getNombreCompleto())
                 .nombreContacto(g.getNombreContacto()).telefonoContacto(g.getTelefonoContacto())
                 .fallaReportada(g.getFallaReportada()).diagnosticoInicial(g.getDiagnosticoInicial())
-                .proveedor(g.getProveedor() != null ? (g.getProveedor().getNombreCorto() != null ? g.getProveedor().getNombreCorto() : g.getProveedor().getNombreFiscal()) : null)
+                .proveedor(veProveedor() && g.getProveedor() != null ? (g.getProveedor().getNombreCorto() != null ? g.getProveedor().getNombreCorto() : g.getProveedor().getNombreFiscal()) : null)
                 .estado(g.getEstadoActual()).estadoDisplay(estadoDisplay(g.getEstadoActual()))
                 .fechaIngreso(g.getFechaIngreso()).fechaLimiteSolucion(g.getFechaLimiteSolucion())
                 .diasRestantes(restantes).vencida(abierta && restantes != null && restantes < 0)
@@ -654,5 +655,10 @@ public class GarantiaService {
             case ENTREGADO            -> "Tu producto ya fue entregado.";
             default                   -> "";
         };
+    }
+
+    /** El proveedor, como el costo, solo lo ve quien tiene COSTOS_VER; las tiendas ven el estado de la garantía, no con quién se compró. */
+    private boolean veProveedor() {
+        return permisoService != null && permisoService.tiene(com.skycel.backend.domain.enums.Permiso.COSTOS_VER.name());
     }
 }

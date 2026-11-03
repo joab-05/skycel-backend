@@ -35,7 +35,7 @@ public class ReporteController {
     private final com.skycel.backend.service.MermaService mermaService;
 
     @GetMapping("/gerencial")
-    @PreAuthorize("@permisos.tiene('REPORTES')")
+    @PreAuthorize("@permisos.tiene('REPORTES_GERENCIA')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> gerencial(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
@@ -58,7 +58,7 @@ public class ReporteController {
     }
 
     @GetMapping("/equipos-rezagados")
-    @PreAuthorize("@permisos.tiene('REPORTES')")
+    @PreAuthorize("@permisos.tiene('REPORTES_GERENCIA')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> equiposRezagados(
             @RequestParam(required = false) Integer dias,
@@ -76,7 +76,7 @@ public class ReporteController {
     }
 
     @GetMapping("/estado-resultados")
-    @PreAuthorize("@permisos.tiene('REPORTES')")
+    @PreAuthorize("@permisos.tiene('REPORTES_GERENCIA')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> estadoResultados(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
@@ -87,7 +87,7 @@ public class ReporteController {
     }
 
     @GetMapping("/ventas-por-dia")
-    @PreAuthorize("@permisos.tiene('REPORTES')")
+    @PreAuthorize("@permisos.tiene('REPORTES_GERENCIA')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> ventasPorDia(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
@@ -98,7 +98,7 @@ public class ReporteController {
     }
 
     @GetMapping("/ventas-por-categoria")
-    @PreAuthorize("@permisos.tiene('REPORTES')")
+    @PreAuthorize("@permisos.tiene('REPORTES_GERENCIA')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> ventasPorCategoria(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
@@ -109,7 +109,7 @@ public class ReporteController {
     }
 
     @GetMapping("/sin-movimiento")
-    @PreAuthorize("@permisos.tiene('REPORTES')")
+    @PreAuthorize("@permisos.tiene('REPORTES_GERENCIA')")
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> sinMovimiento(
             @RequestParam(required = false) Integer dias,

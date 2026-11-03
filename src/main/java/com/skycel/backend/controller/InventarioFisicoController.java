@@ -38,6 +38,14 @@ public class InventarioFisicoController {
         return ResponseEntityBuilder.ok(service.abrir(codti, idusuarioEncargado, categorias, userDetails.getUsername()), "auditoria");
     }
 
+    @GetMapping("/{idinventario}/revision-previa")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> revisionPrevia(
+            @PathVariable Integer idinventario, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.revisionPrevia(idinventario, userDetails.getUsername()), "revisión previa");
+    }
+
     @PostMapping("/{idinventario}/escanear")
     @PreAuthorize("@permisos.tiene('INVENTARIO_FISICO')")
     @SecurityRequirement(name = "Bearer Authentication")

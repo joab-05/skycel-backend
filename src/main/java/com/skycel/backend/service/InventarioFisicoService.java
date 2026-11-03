@@ -57,6 +57,7 @@ public class InventarioFisicoService {
     private final NotificacionService notificacionService;
     private final PermisoService permisoService;
     private final CategoriaRepository categoriaRepository;
+    private final MovimientoInventarioRepository movimientoInventarioRepository;
 
     // ── Contar (encargado) ───────────────────────────────────────────────────
 
@@ -244,6 +245,98 @@ public class InventarioFisicoService {
                 "El inventario de " + a.getTienda().getNombre() + " está listo para revisar (" + a.getTotalFaltantes() + " faltante(s), "
                         + a.getTotalSobrantes() + " sobrante(s))", "#/inventario-fisico");
         return toMap(a, filas);
+    }
+
+    // ── Antes de enviar: qué se movió mientras se contaba ────────────────────
+
+    /** Lo que no es un movimiento real de la mercancía: el corte y el alta inicial, y los ajustes (que solo los hace este inventario al cerrar). */
+    private static final Set<String> TIPOS_SIN_REVISAR = Set.of("CORTE", "ALTA", "AJUSTE");
+
+    /**
+     * Revisa, sin cambiar nada, si hubo movimientos (ventas, traspasos, devoluciones...) en la sucursal desde que se abrió el
+     * inventario y los compara con lo contado. Lo que salió (se vendió, se envió) ya no está en el estante pero pudo contarse antes; lo que
+     * entró (un traspaso recibido, una compra) y no se vendió <b>debe estar en físico</b>, así que si el artículo no se contó, o se contó
+     * antes de que llegara, hay que volver a revisarlo. El encargado lo ve antes de enviar el conteo al administrador.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> revisionPrevia(Integer idinventario, String username) {
+        InventarioAuditoria a = auditoriaDe(idinventario);
+        validarAcceso(usuarioPorUsername(username), a.getTienda().getCodti());
+        LocalDateTime hasta = a.getFechaFin() != null ? a.getFechaFin() : LocalDateTime.now();
+        Set<Short> alcance = alcanceDe(a);
+        Map<String, InventarioAuditoriaDetalle> contados = new HashMap<>();
+        for (InventarioAuditoriaDetalle d : detalleRepository.findByInventarioAuditoria_IdinventarioOrderByIddetalleInvAsc(idinventario))
+            contados.put(d.getCodpro(), d);
+        Set<Short> seccionesContadas = contados.values().stream().map(InventarioAuditoriaDetalle::getSeccion)
+                .filter(Objects::nonNull).map(Seccion::getIdseccion).collect(Collectors.toSet());
+
+        Map<String, double[]> porArticulo = new LinkedHashMap<>();   // vendidas, enviadas, recibidas, otras (siempre positivas)
+        Map<String, String> nombres = new HashMap<>();
+        for (MovimientoInventario m : movimientoInventarioRepository.buscar(a.getTienda().getCodti(), a.getFechaInicio(), hasta, null)) {
+            if (TIPOS_SIN_REVISAR.contains(m.getTipo())) continue;
+            String clave;
+            String nombre;
+            if (m.getImei() != null && m.getProductoMaster() != null) {
+                if (!alcance.isEmpty() && !enAlcance(m.getProductoMaster(), alcance)) continue;
+                clave = claveEquipo(m.getProductoMaster());
+                nombre = m.getProductoMaster().getNombreBase();
+            } else if (m.getProducto() != null) {
+                Producto p = m.getProducto();
+                boolean enElConteo = !alcance.isEmpty() ? enAlcance(p.getProductoMaster(), alcance)
+                        : contados.containsKey(p.getCodpro()) || (p.getSeccion() != null && seccionesContadas.contains(p.getSeccion().getIdseccion()));
+                if (!enElConteo) continue;
+                clave = p.getCodpro();
+                nombre = p.getProductoMaster() != null ? p.getProductoMaster().getNombreBase() : p.getCodpro();
+            } else continue;
+            double cant = m.getCantidad() == null ? 0 : m.getCantidad().doubleValue();
+            double[] x = porArticulo.computeIfAbsent(clave, k -> new double[4]);
+            if ("VENTA".equals(m.getTipo())) x[0] += Math.abs(cant);
+            else if (m.getTipo().startsWith("TRASPASO") && cant < 0) x[1] += Math.abs(cant);
+            else if (cant > 0) x[2] += cant;
+            else x[3] += Math.abs(cant);
+            nombres.putIfAbsent(clave, nombre);
+        }
+
+        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Map.Entry<String, double[]> e : porArticulo.entrySet()) {
+            double[] x = e.getValue();
+            InventarioAuditoriaDetalle d = contados.get(e.getKey());
+            boolean contado = d != null && d.getConteo() != null && d.getConteo() > 0;
+            List<String> partes = new ArrayList<>();
+            if (x[0] > 0) partes.add("se vendieron " + entero(x[0]));
+            if (x[1] > 0) partes.add("se enviaron " + entero(x[1]) + " por traspaso");
+            if (x[2] > 0) partes.add("llegaron " + entero(x[2]));
+            if (x[3] > 0) partes.add("otras salidas: " + entero(x[3]));
+            String aviso;
+            if (x[2] > 0 && !contado) aviso = "Llegaron " + entero(x[2]) + " mientras contabas y este artículo no se ha contado: si no se vendieron, deben estar en físico. Cuéntalo.";
+            else if (x[2] > 0) aviso = "Mientras contabas " + String.join(", ", partes) + ". Lo que llegó y no se vendió debe estar en físico: revisa que lo contaste ya con lo que llegó.";
+            else aviso = "Mientras contabas " + String.join(", ", partes) + ". Se cuenta lo que había al escanear; si lo contaste antes del movimiento, no hay problema.";
+            Map<String, Object> f = new LinkedHashMap<>();
+            f.put("codpro", e.getKey());
+            f.put("nombre", nombres.get(e.getKey()));
+            f.put("conteo", d == null ? 0 : d.getConteo());
+            f.put("contado", contado);
+            f.put("vendidas", (int) x[0]);
+            f.put("enviadas", (int) x[1]);
+            f.put("recibidas", (int) x[2]);
+            f.put("otrasSalidas", (int) x[3]);
+            f.put("recibidoSinContar", x[2] > 0 && !contado);
+            f.put("aviso", aviso);
+            filas.add(f);
+        }
+        // Primero lo más urgente: lo que llegó y no se ha contado
+        filas.sort((p, q) -> Boolean.compare((Boolean) q.get("recibidoSinContar"), (Boolean) p.get("recibidoSinContar")));
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("idinventario", idinventario);
+        r.put("desde", a.getFechaInicio());
+        r.put("hayMovimientos", !filas.isEmpty());
+        r.put("recibidosSinContar", filas.stream().filter(f -> (Boolean) f.get("recibidoSinContar")).count());
+        r.put("articulos", filas);
+        return r;
+    }
+
+    private static String entero(double d) {
+        return d == Math.rint(d) ? String.valueOf((long) d) : String.valueOf(d);
     }
 
     // ── Revisar y confirmar (administrador) ──────────────────────────────────

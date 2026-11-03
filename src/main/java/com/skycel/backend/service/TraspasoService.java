@@ -200,7 +200,10 @@ public class TraspasoService {
         }
         validarOpera(usuario, s.getTiendaOrigen().getCodti());
         if (s.getEstado() != ENVIADO && s.getEstado() != LEIDO) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "La solicitud " + id + " ya fue resuelta: ya no se puede editar.");
+            if (!esAdministrador(usuario)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "La solicitud " + id + " ya fue resuelta: ya no se puede editar.");
+            }
+            s = reabrirSolicitud(s, usuario, username);   // un administrador la reinicia: se revierte lo que ya se movió y vuelve a quedar nueva
         }
         Tienda surte = tienda(dto.getCodtiDestino());
         validarDistintas(s.getTiendaOrigen(), surte);
@@ -216,6 +219,110 @@ public class TraspasoService {
                 s.getTiendaOrigen().getNombre() + " corrigió su solicitud de mercancía (traspaso #" + folioDe(guardada) + ")",
                 "#/traspaso/" + guardada.getIdtraspaso());
         return toDto(guardada);
+    }
+
+    // ── Administrador: reabrir un traspaso ya resuelto ───────────────────────
+
+    private boolean esAdministrador(Usuario u) {
+        return u.getRol() == Rol.ROOT || u.getRol() == Rol.ADMIN;
+    }
+
+    /**
+     * Un administrador reabre un traspaso aunque ya se haya completado: se revierte el movimiento de mercancía (el envío queda
+     * anulado y lo que llegó vuelve a la tienda origen) y, si venía de una solicitud, esta vuelve a quedar como nueva para
+     * editarla (cambiar la tienda, agregar o quitar productos) y que se acepte otra vez. Un envío sin solicitud solo se anula:
+     * después se crea uno nuevo.
+     *
+     * <p>Solo se revierte lo que todavía está donde llegó: si la tienda destino ya vendió o movió algo de lo recibido, no se puede
+     * y se dice qué fue. Un envío recibido con faltantes pendientes primero se resuelve.
+     */
+    @Transactional
+    public TraspasoResponseDto reabrir(Integer id, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        if (!esAdministrador(usuario)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador puede reabrir un traspaso.");
+        }
+        Traspaso t = obtenerActivo(id);
+        if (t.getTipo() == TIPO_SOLICITUD) return toDto(reabrirSolicitud(t, usuario, username));
+        Traspaso solicitud = t.getIdtraspasoRef() != null ? traspasoRepository.findById(t.getIdtraspasoRef()).orElse(null) : null;
+        if (solicitud != null) return toDto(reabrirSolicitud(solicitud, usuario, username));
+        revertirEnvio(t, usuario, username);
+        return toDto(t);
+    }
+
+    /** Deja la solicitud como nueva; si ya había generado un envío, lo revierte. Devuelve la solicitud ya guardada. */
+    private Traspaso reabrirSolicitud(Traspaso s, Usuario usuario, String username) {
+        traspasoRepository.findFirstByIdtraspasoRefAndTipoAndActivoTrue(s.getIdtraspaso(), TIPO_ENVIO)
+                .ifPresent(envio -> revertirEnvio(envio, usuario, username));
+        s.setEstado(ENVIADO);
+        s.setUsuarioValida(null);
+        s.setMotivoRechazo(null);
+        Traspaso guardada = traspasoRepository.save(s);
+        notificacionService.notificarTienda(guardada.getTiendaDestino().getCodti(), "TRASPASO_SOLICITUD",
+                "Se reabrió la solicitud de " + guardada.getTiendaOrigen().getNombre() + " (traspaso #" + folioDe(guardada) + "): vuelve a estar por atender",
+                "#/traspaso/" + guardada.getIdtraspaso());
+        return guardada;
+    }
+
+    /** Anula un envío y regresa la mercancía a la tienda origen, esté en camino o ya recibido. */
+    private void revertirEnvio(Traspaso envio, Usuario usuario, String username) {
+        if (envio.getEstado() == ENVIADO) {   // en camino: es lo mismo que anularlo
+            anular(envio.getIdtraspaso(), username);
+            return;
+        }
+        if (Boolean.TRUE.equals(envio.getConFaltantes())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "El envío " + folioDe(envio) + " se recibió con faltantes: resuélvelos (Faltantes) antes de reabrirlo.");
+        }
+        List<TraspasoDetalle> detalles = detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(envio.getIdtraspaso());
+        Tienda origen = envio.getTiendaOrigen();
+        Tienda destino = envio.getTiendaDestino();
+
+        // Primero se comprueba que todo siga donde llegó; si algo ya se vendió o se movió, no se toca nada
+        List<String> problemas = new ArrayList<>();
+        for (TraspasoDetalle d : detalles) {
+            if (d.getImei() != null) {
+                ProductoImei pi = imeiDe(d);
+                boolean sigue = IMEI_DISPONIBLE.equals(pi.getEstado()) && pi.getTienda() != null && destino.getCodti().equals(pi.getTienda().getCodti());
+                if (!sigue) problemas.add("el equipo " + d.getImei() + " ya no está disponible en " + destino.getNombre() + " (estado: " + pi.getEstado() + ")");
+            } else {
+                Producto enDestino = productoRepository.findByCodproAndTienda_Codti(d.getCodpro(), destino.getCodti()).orElse(null);
+                BigDecimal hay = enDestino == null ? BigDecimal.ZERO : stockDe(enDestino);
+                if (hay.compareTo(d.getCantidad()) < 0) {
+                    problemas.add(d.getCodpro() + ": llegaron " + d.getCantidad().stripTrailingZeros().toPlainString() + " y " + destino.getNombre()
+                            + " solo tiene " + hay.stripTrailingZeros().toPlainString());
+                }
+            }
+        }
+        if (!problemas.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "No se puede reabrir: " + String.join("; ", problemas) + ". " + destino.getNombre() + " ya usó parte de lo que recibió.");
+        }
+
+        String ref = "Traspaso #" + folioDe(envio);
+        for (TraspasoDetalle d : detalles) {
+            if (d.getImei() != null) {
+                ProductoImei pi = imeiDe(d);
+                movimientoInventarioService.registrarEquipo(pi, -1, "TRASPASO_REVERSA", "Se reabrió el traspaso", ref);
+                pi.setTienda(origen);
+                pi.setEstado(IMEI_DISPONIBLE);
+                productoImeiRepository.save(pi);
+                movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_REVERSA", "Se reabrió el traspaso", ref);
+                continue;
+            }
+            Producto enDestino = productoDe(d.getCodpro(), destino.getCodti(), "la tienda destino");
+            BigDecimal antesDestino = stockDe(enDestino);
+            enDestino.setStock(antesDestino.subtract(d.getCantidad()));
+            productoRepository.save(enDestino);
+            movimientoInventarioService.registrar(enDestino, antesDestino, "TRASPASO_REVERSA", "Se reabrió el traspaso", ref);
+            Producto enOrigen = productoDe(d.getCodpro(), origen.getCodti(), "la tienda origen");
+            BigDecimal antesOrigen = stockDe(enOrigen);
+            enOrigen.setStock(antesOrigen.add(d.getCantidad()));
+            productoRepository.save(enOrigen);
+            movimientoInventarioService.registrar(enOrigen, antesOrigen, "TRASPASO_REVERSA", "Se reabrió el traspaso", ref);
+        }
+        envio.setActivo(false);
+        traspasoRepository.save(envio);
     }
 
     // ── Envío: recibir / anular ──────────────────────────────────────────────

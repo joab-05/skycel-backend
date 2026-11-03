@@ -376,7 +376,7 @@ public class EquipoService {
         if (m.getColor() != null) b.colorArticulo(m.getColor().getNombre());
         if (u.getTienda() != null) b.codti(u.getTienda().getCodti()).nombreTienda(u.getTienda().getNombre());
         if (u.getSeccion() != null) b.idSeccion(u.getSeccion().getIdseccion()).nombreSeccion(u.getSeccion().getNombre());
-        if (u.getProveedor() != null) {
+        if (verCostos && u.getProveedor() != null) {   // el proveedor, como el costo, solo lo ve quien tiene COSTOS_VER
             b.idProveedor(u.getProveedor().getIdproveedor());
             b.nombreProveedor(u.getProveedor().getNombreCorto() != null ? u.getProveedor().getNombreCorto() : u.getProveedor().getNombreFiscal());
         }

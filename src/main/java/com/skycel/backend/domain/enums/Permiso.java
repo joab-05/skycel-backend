@@ -39,13 +39,13 @@ public enum Permiso {
     INVENTARIO_CONFIRMAR("Revisar y confirmar el inventario físico: al cerrarlo cambian las existencias", "Inventario", Set.of(ADMIN)),
     TRASPASOS("Enviar, pedir y recibir traspasos", "Inventario", Set.of(ADMIN, ENCARGADO_TIENDA)),
     CATALOGOS_EDITAR("Editar categorías, colores, proveedores y demás catálogos", "Inventario", Set.of(ADMIN)),
-    COSTOS_VER("Ver cuánto costó la mercancía", "Inventario", Set.of(ADMIN)),
+    COSTOS_VER("Ver cuánto costó la mercancía y a qué proveedor se le compró", "Inventario", Set.of(ADMIN)),
 
     // ── Finanzas ──────────────────────────────────────────────────────────────
     CUENTAS_COBRAR("Cuentas por cobrar: crear cuentas y cobrar abonos", "Finanzas", Set.of(ADMIN, ENCARGADO_TIENDA)),
     COMPRAS("Compras a proveedores y cuentas por pagar", "Finanzas", Set.of(ADMIN)),
     DESCUENTOS("Definir las reglas de descuento", "Finanzas", Set.of(ADMIN)),
-    REPORTES("Ver los reportes (resultados, gerencial, rezagados)", "Finanzas", Set.of(ADMIN)),
+    REPORTES_GERENCIA("Ver los reportes de Gerencia: resultados, utilidad, inventario valorizado y rezagados", "Finanzas", Set.of(ADMIN)),
     REPORTES_CONSOLIDADOS("Ver la caja de todas las sucursales a la vez", "Finanzas", Set.of(ADMIN)),
 
     // ── Clientes ──────────────────────────────────────────────────────────────

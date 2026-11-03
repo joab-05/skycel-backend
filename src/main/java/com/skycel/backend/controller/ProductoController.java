@@ -33,6 +33,7 @@ public class ProductoController {
     private ProductoResponseDTO sinCostos(ProductoResponseDTO d, org.springframework.security.core.userdetails.UserDetails u) {
         if (veCostos(u)) return d;
         d.setPreciopro(null);
+        d.setProveedor(null);   // a quién se le compra, igual que cuánto costó, solo lo ve quien tiene COSTOS_VER
         if (d.getImeisDisponibles() != null) {
             d.getImeisDisponibles().forEach(i -> { i.setCostoUnitario(null); i.setTieneCostoPropio(null); });
         }
