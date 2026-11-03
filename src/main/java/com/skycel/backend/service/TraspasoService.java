@@ -104,8 +104,17 @@ public class TraspasoService {
                 .tipo(TIPO_SOLICITUD).tiendaOrigen(solicitante).tiendaDestino(surte)
                 .usuarioCrea(usuario).estado(ENVIADO).activo(true).build());
 
+        cargarLineasDeSolicitud(solicitud, surte, dto.getLineas());
+        notificacionService.notificarTienda(surte.getCodti(), "TRASPASO_SOLICITUD",
+                solicitante.getNombre() + " te pidió mercancía (traspaso #" + solicitud.getIdtraspaso() + ")",
+                "#/traspaso/" + solicitud.getIdtraspaso());
+        return toDto(solicitud);
+    }
+
+    /** Valida y guarda los renglones de una solicitud (al crearla y al editarla): lo que se pide debe existir en la tienda que surte. */
+    private void cargarLineasDeSolicitud(Traspaso solicitud, Tienda surte, List<TraspasoLineaRequestDto> lineas) {
         Set<String> vistos = new HashSet<>();
-        for (TraspasoLineaRequestDto l : dto.getLineas()) {
+        for (TraspasoLineaRequestDto l : lineas) {
             if (sinCodigo(l.getCodpro())) {   // un equipo se pide por artículo y cantidad
                 if (l.getIdprodmaster() == null) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el código del producto o, si es un equipo, su artículo.");
@@ -176,10 +185,37 @@ public class TraspasoService {
             }
             detalleRepository.save(TraspasoDetalle.builder().traspaso(solicitud).codpro(codpro).cantidad(l.getCantidad()).build());
         }
+    }
+
+    /**
+     * Quien pidió corrige su solicitud mientras la otra tienda no la haya aceptado ni rechazado: cambia lo que pide (productos y
+     * cantidades) o a quién se lo pide. Vuelve a quedar como nueva para quien surte, que recibe un aviso.
+     */
+    @Transactional
+    public TraspasoResponseDto editarSolicitud(Integer id, SolicitudRequestDto dto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        Traspaso s = obtenerActivo(id);
+        if (s.getTipo() != TIPO_SOLICITUD) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El traspaso " + id + " es un envío: solo se edita una solicitud.");
+        }
+        validarOpera(usuario, s.getTiendaOrigen().getCodti());
+        if (s.getEstado() != ENVIADO && s.getEstado() != LEIDO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La solicitud " + id + " ya fue resuelta: ya no se puede editar.");
+        }
+        Tienda surte = tienda(dto.getCodtiDestino());
+        validarDistintas(s.getTiendaOrigen(), surte);
+
+        detalleRepository.deleteAll(detalleRepository.findByTraspaso_IdtraspasoOrderByIddetalle(id));
+        detalleRepository.flush();
+        cargarLineasDeSolicitud(s, surte, dto.getLineas());
+        s.setTiendaDestino(surte);
+        s.setEstado(ENVIADO);
+        s.setUsuarioValida(null);
+        Traspaso guardada = traspasoRepository.save(s);
         notificacionService.notificarTienda(surte.getCodti(), "TRASPASO_SOLICITUD",
-                solicitante.getNombre() + " te pidió mercancía (traspaso #" + solicitud.getIdtraspaso() + ")",
-                "#/traspaso/" + solicitud.getIdtraspaso());
-        return toDto(solicitud);
+                s.getTiendaOrigen().getNombre() + " corrigió su solicitud de mercancía (traspaso #" + folioDe(guardada) + ")",
+                "#/traspaso/" + guardada.getIdtraspaso());
+        return toDto(guardada);
     }
 
     // ── Envío: recibir / anular ──────────────────────────────────────────────
@@ -237,7 +273,7 @@ public class TraspasoService {
                     pi.setTienda(t.getTiendaDestino());
                     pi.setEstado(IMEI_DISPONIBLE);
                     productoImeiRepository.save(pi);
-                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_ENTRADA", null, "Traspaso #" + id);
+                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_ENTRADA", null, "Traspaso #" + folioDe(t));
                 } else {
                     pi.setEstado(IMEI_FALTANTE);
                     productoImeiRepository.save(pi);
@@ -250,7 +286,7 @@ public class TraspasoService {
                         k -> productoEnDestino(enOrigen, t.getTiendaDestino()));
                 BigDecimal antes = stockDe(enDestino);
                 enDestino.setStock(antes.add(llego));
-                movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_ENTRADA", null, "Traspaso #" + id);
+                movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_ENTRADA", null, "Traspaso #" + folioDe(t));
             }
         }
         destinoPorOrigen.values().forEach(productoRepository::save);
@@ -348,13 +384,13 @@ public class TraspasoService {
                     pi.setTienda(t.getTiendaDestino());
                     pi.setEstado(IMEI_DISPONIBLE);
                     productoImeiRepository.save(pi);
-                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_FALTANTE", "Llegó tarde. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
+                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_FALTANTE", "Llegó tarde. " + (nota == null ? "" : nota), "Traspaso #" + folioDe(t));
                 } else {
                     Producto enDestino = productoEnDestino(enOrigen, t.getTiendaDestino());
                     BigDecimal antes = stockDe(enDestino);
                     enDestino.setStock(antes.add(cantidad));
                     productoRepository.save(enDestino);
-                    movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_FALTANTE", "Llegó tarde. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
+                    movimientoInventarioService.registrar(enDestino, antes, "TRASPASO_FALTANTE", "Llegó tarde. " + (nota == null ? "" : nota), "Traspaso #" + folioDe(t));
                 }
                 d.setCantidadRecibida(d.getCantidadRecibida().add(cantidad));
             }
@@ -364,12 +400,12 @@ public class TraspasoService {
                     ProductoImei pi = imeiDe(d);
                     pi.setEstado(IMEI_DISPONIBLE);
                     productoImeiRepository.save(pi);
-                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_FALTANTE", "Regresó al origen. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
+                    movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_FALTANTE", "Regresó al origen. " + (nota == null ? "" : nota), "Traspaso #" + folioDe(t));
                 } else {
                     BigDecimal antes = stockDe(enOrigen);
                     enOrigen.setStock(antes.add(cantidad));
                     productoRepository.save(enOrigen);
-                    movimientoInventarioService.registrar(enOrigen, antes, "TRASPASO_FALTANTE", "Regresó al origen. " + (nota == null ? "" : nota), "Traspaso #" + t.getIdtraspaso());
+                    movimientoInventarioService.registrar(enOrigen, antes, "TRASPASO_FALTANTE", "Regresó al origen. " + (nota == null ? "" : nota), "Traspaso #" + folioDe(t));
                 }
                 d.setCantidadReintegrada(d.getCantidadReintegrada().add(cantidad));
             }
@@ -438,7 +474,7 @@ public class TraspasoService {
                     .map(x -> x.getProductoMaster().getNombreBase()).orElse(null);
         }
         return FaltanteResponseDto.builder()
-                .iddetalle(d.getIddetalle()).idtraspaso(t.getIdtraspaso())
+                .iddetalle(d.getIddetalle()).idtraspaso(t.getIdtraspaso()).folio(folioDe(t))
                 .codtiOrigen(t.getTiendaOrigen().getCodti()).nombreTiendaOrigen(t.getTiendaOrigen().getNombre())
                 .codtiDestino(t.getTiendaDestino().getCodti()).nombreTiendaDestino(t.getTiendaDestino().getNombre())
                 .codpro(d.getCodpro())
@@ -479,7 +515,7 @@ public class TraspasoService {
                         if (IMEI_EN_TRANSITO.equals(pi.getEstado())) {
                             pi.setEstado(IMEI_DISPONIBLE);
                             productoImeiRepository.save(pi);
-                            movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_ANULADO", null, "Traspaso #" + id);
+                            movimientoInventarioService.registrarEquipo(pi, +1, "TRASPASO_ANULADO", null, "Traspaso #" + folioDe(t));
                         }
                     });
                     continue;
@@ -488,7 +524,7 @@ public class TraspasoService {
                 BigDecimal antes = stockDe(p);
                 p.setStock(antes.add(d.getCantidad()));
                 productoRepository.save(p);
-                movimientoInventarioService.registrar(p, antes, "TRASPASO_ANULADO", null, "Traspaso #" + id);
+                movimientoInventarioService.registrar(p, antes, "TRASPASO_ANULADO", null, "Traspaso #" + folioDe(t));
             }
         } else if (t.getEstado() != ENVIADO && t.getEstado() != LEIDO) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Una solicitud ya resuelta no se puede anular.");
@@ -640,7 +676,7 @@ public class TraspasoService {
                     productoImeiRepository.save(pi);
                     detalleRepository.save(TraspasoDetalle.builder().traspaso(envio).productoMaster(pi.getProductoMaster())
                             .cantidad(BigDecimal.ONE).imei(imei).build());
-                    movimientoInventarioService.registrarEquipo(pi, -1, "TRASPASO_SALIDA", null, "Traspaso #" + envio.getIdtraspaso());
+                    movimientoInventarioService.registrarEquipo(pi, -1, "TRASPASO_SALIDA", null, "Traspaso #" + folioDe(envio));
                 }
                 continue;
             }
@@ -671,11 +707,11 @@ public class TraspasoService {
             }
             p.setStock(stock.subtract(cantidad));
             productoRepository.save(p);
-            movimientoInventarioService.registrar(p, stock, "TRASPASO_SALIDA", null, "Traspaso #" + envio.getIdtraspaso());
+            movimientoInventarioService.registrar(p, stock, "TRASPASO_SALIDA", null, "Traspaso #" + folioDe(envio));
         }
         notificacionService.notificarTienda(destino.getCodti(), "TRASPASO_ENVIO",
                 origen.getNombre() + (idRef != null ? " aceptó tu solicitud y te envió mercancía" : " te envió mercancía")
-                        + " (traspaso #" + envio.getIdtraspaso() + "): confírmala al recibirla",
+                        + " (traspaso #" + folioDe(envio) + "): confírmala al recibirla",
                 "#/traspaso/" + envio.getIdtraspaso());
         return envio;
     }
@@ -833,6 +869,7 @@ public class TraspasoService {
 
         return TraspasoResponseDto.builder()
                 .idtraspaso(t.getIdtraspaso())
+                .folio(folioDe(t))
                 .tipo(t.getTipo())
                 .tipoDisplay(t.getTipo() == TIPO_ENVIO ? "Envío" : "Solicitud")
                 .codtiOrigen(t.getTiendaOrigen().getCodti())
@@ -854,6 +891,11 @@ public class TraspasoService {
                 .comentarioRecepcion(t.getComentarioRecepcion())
                 .lineas(new ArrayList<>(lineas.values()))
                 .build();
+    }
+
+    /** El folio de un traspaso: el de la solicitud de la que viene (si la hubo) o el suyo. */
+    static Integer folioDe(Traspaso t) {
+        return t.getIdtraspasoRef() != null ? t.getIdtraspasoRef() : t.getIdtraspaso();
     }
 
     private String estadoDisplay(Byte estado) {

@@ -12,6 +12,8 @@ import java.util.List;
 public class FaltanteResponseDto {
     private Integer iddetalle;
     private Integer idtraspaso;
+    /** El folio que ven las personas (el de la solicitud que originó el envío, si la hubo). */
+    private Integer folio;
     private Integer codtiOrigen;
     private String nombreTiendaOrigen;
     private Integer codtiDestino;

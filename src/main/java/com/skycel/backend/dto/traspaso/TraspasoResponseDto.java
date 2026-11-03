@@ -10,6 +10,11 @@ import java.util.List;
 @Builder
 public class TraspasoResponseDto {
     private Integer idtraspaso;
+    /**
+     * El número que ven las personas. Una solicitud y el envío que genera al aceptarse comparten folio (el de la solicitud), para que
+     * sea un solo traspaso a la vista; {@code idtraspaso} sigue siendo el identificador interno de cada registro.
+     */
+    private Integer folio;
     /** 1 = Envío, 2 = Solicitud */
     private Byte tipo;
     private String tipoDisplay;

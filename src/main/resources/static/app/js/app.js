@@ -1496,9 +1496,12 @@ async function pantallaOrdenDetalle(id) {
 
   const tarjetaFotos = () => `<div class="tarjeta"><h2>${ic('camera')} Fotos del equipo <span id="fo-cuenta" class="ayuda"></span></h2>
     <div id="fo-galeria" class="galeria"><span class="ayuda">Cargando...</span></div>
-    ${puedeEditar ? `<label class="btn btn-azul btn-chico" style="margin-top:10px;display:inline-flex;gap:6px;cursor:pointer;">${ic('camera')} Agregar foto
-      <input type="file" id="fo-archivo" accept="image/*" capture="environment" hidden></label>
-      <p class="ayuda">Toma fotos de golpes, rayones o pantalla antes de trabajar el equipo (hasta 8). Se borran solas 90 días después de entregarlo.</p>` : ''}</div>`;
+    ${puedeEditar ? `<div class="grupo-botones" style="margin-top:10px;">
+      <label class="btn btn-azul btn-chico" style="display:inline-flex;gap:6px;cursor:pointer;">${ic('camera')} Tomar foto
+        <input type="file" id="fo-archivo" accept="image/*" capture="environment" hidden></label>
+      <label class="btn btn-azul btn-chico" style="display:inline-flex;gap:6px;cursor:pointer;">${ic('images')} Elegir de la galería
+        <input type="file" id="fo-galeria-sel" accept="image/*" multiple hidden></label></div>
+      <p class="ayuda">Toma fotos de golpes, rayones o pantalla antes de trabajar el equipo, o elige las que ya tienes en la galería (hasta 8 en total). Se borran solas 90 días después de entregarlo.</p>` : ''}</div>`;
 
   root.innerHTML = `
     <button class="enlace" onclick="history.length > 1 ? history.back() : navegar('#/taller')" style="margin-bottom:6px;">${ic('arrow-left')} Volver</button>
@@ -1660,19 +1663,27 @@ async function pantallaOrdenDetalle(id) {
       });
     } catch (err) { galeria.innerHTML = `<span class="ayuda">${escapar(err.network ? 'Sin conexión: las fotos solo se ven en línea.' : err.message)}</span>`; }
   };
-  const archivo = document.getElementById('fo-archivo');
-  if (archivo) archivo.onchange = async () => {
-    const f = archivo.files[0];
-    if (!f) return;
-    const desc = (prompt('¿Qué muestra la foto? (opcional)', '') || '').trim();
-    galeria.insertAdjacentHTML('beforeend', '<span class="ayuda">Subiendo...</span>');
-    try {
-      const blob = await reducirFoto(f);
-      await apiSubirImagen(`/api/ordenes-servicio/${id}/fotos${desc ? '?descripcion=' + encodeURIComponent(desc) : ''}`, blob);
-    } catch (err) { fallo(err); }
-    archivo.value = '';
+  // Sube una o varias fotos (cámara o galería): la descripción se pregunta solo cuando es una; se reduce cada una antes de enviarla
+  const subirFotos = async (entrada) => {
+    const archivos = [...entrada.files];
+    if (!archivos.length) return;
+    const desc = archivos.length === 1 ? (prompt('¿Qué muestra la foto? (opcional)', '') || '').trim() : '';
+    let hechas = 0;
+    for (const f of archivos) {
+      galeria.insertAdjacentHTML('beforeend', `<span class="ayuda">Subiendo ${hechas + 1} de ${archivos.length}...</span>`);
+      try {
+        const blob = await reducirFoto(f);
+        await apiSubirImagen(`/api/ordenes-servicio/${id}/fotos${desc ? '?descripcion=' + encodeURIComponent(desc) : ''}`, blob);
+        hechas++;
+      } catch (err) { fallo(err); break; }   // el límite de 8 u otro error detiene el resto, con su aviso
+    }
+    entrada.value = '';
     pintarFotos();
   };
+  ['fo-archivo', 'fo-galeria-sel'].forEach(idEntrada => {
+    const entrada = document.getElementById(idEntrada);
+    if (entrada) entrada.onchange = () => subirFotos(entrada);
+  });
   pintarFotos();
 
   if (!puedeTrabajar && !esTecnicoLibre) return;
@@ -1745,13 +1756,16 @@ async function imprimirComprobanteOrden(o) {
   const fila = (k, v) => v ? `<div class="f"><span>${k}</span><b>${escapar(v)}</b></div>` : '';
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Comprobante ${escapar(o.folio)}</title>
     <style>
-      @page { size: 80mm auto; margin: 3mm; }
-      body { font: 12px/1.35 "Segoe UI", Arial, sans-serif; color:#000; width: 74mm; margin: 0 auto; }
+      body { font: 12px/1.35 "Segoe UI", Arial, sans-serif; color:#000; margin: 0 auto; }
+      .barra { display:flex; gap:6px; justify-content:center; align-items:center; padding:6px; background:#eef2f7; font:13px Arial,sans-serif; }
+      .barra button { padding:6px 10px; border:1px solid #475569; border-radius:6px; background:#fff; cursor:pointer; } .barra button.sel { background:#1e3a8a; color:#fff; }
+      @media print { .barra { display:none; } }
       h1 { font-size:15px; text-align:center; margin:4px 0 0; } .c { text-align:center; } .folio { font-size:22px; font-weight:800; text-align:center; margin:4px 0; letter-spacing:1px; }
       .f { display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px dotted #999; } .f span { color:#444; } .f b { text-align:right; }
       .caja { border:1px solid #000; padding:5px; margin:6px 0; } .qr { display:block; margin:6px auto 2px; width:34mm; height:34mm; image-rendering: pixelated; }
       ol { margin:4px 0 0; padding-left:15px; font-size:10px; } .firma { margin-top:22px; border-top:1px solid #000; text-align:center; font-size:10px; padding-top:2px; }
-    </style></head><body>
+    </style><style id="papel"></style></head><body>
+    <div class="barra">Papel: <button data-mm="58">58 mm</button><button data-mm="80">80 mm</button><button id="reimprimir">Imprimir otra vez</button></div>
     <h1>${escapar(negocio)}</h1><div class="c">${escapar(o.nombreTienda || '')}</div>
     <div class="c"><b>COMPROBANTE DE RECEPCIÓN</b></div>
     <div class="folio">${escapar(o.folio)}</div>
@@ -1768,7 +1782,23 @@ async function imprimirComprobanteOrden(o) {
     ${qr}<div class="c" style="font-size:10px;">Sigue tu reparación escaneando el código<br>o en ${escapar(location.host)}/seguimiento<br>(folio y últimos 4 dígitos de tu teléfono)</div>
     <ol>${CONDICIONES_ORDEN.map(c => `<li>${escapar(c)}</li>`).join('')}</ol>
     <div class="firma">Firma del cliente</div>
-    <script>window.addEventListener('load', () => setTimeout(() => { window.print(); }, 350));<\/script>
+    <script>
+      // El ancho del papel (58 u 80 mm) se recuerda en este equipo; con 58 mm el ticket se estrecha para que no se corte del lado derecho
+      let mm = 80; try { mm = Number(localStorage.getItem('skycel-papel-mm')) === 58 ? 58 : 80; } catch (e) { /* sin almacenamiento: 80 mm */ }
+      function aplicar(nuevo) {
+        mm = nuevo === 58 ? 58 : 80; try { localStorage.setItem('skycel-papel-mm', String(mm)); } catch (e) { /* no se recuerda */ }
+        const e = mm === 58;
+        document.getElementById('papel').textContent =
+          '@page { size: ' + mm + 'mm auto; margin: ' + (e ? 2 : 3) + 'mm; } body { width: ' + (e ? 50 : 74) + 'mm; font-size: ' + (e ? 11 : 12) + 'px; } .folio { font-size: ' + (e ? 18 : 22) + 'px; } .qr { width: ' + (e ? 30 : 34) + 'mm; height: ' + (e ? 30 : 34) + 'mm; } ol { font-size: ' + (e ? 9 : 10) + 'px; } .f { gap: 4px; }';
+        document.querySelectorAll('.barra button[data-mm]').forEach(b => b.classList.toggle('sel', Number(b.dataset.mm) === mm));
+      }
+      // Imprime hasta que el QR terminó de cargar: si se imprime antes, sale sin él y el ticket queda cortado
+      function cuandoCarguen() { return Promise.all([...document.images].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))); }
+      aplicar(mm);
+      document.querySelectorAll('.barra button[data-mm]').forEach(b => b.onclick = () => { aplicar(Number(b.dataset.mm)); setTimeout(() => window.print(), 200); });
+      document.getElementById('reimprimir').onclick = () => window.print();
+      window.addEventListener('load', () => cuandoCarguen().then(() => setTimeout(() => window.print(), 350)));
+    <\/script>
     </body></html>`;
   const w = window.open('', '_blank');
   if (!w) { mostrarMensaje(root, 'El navegador bloqueó la ventana de impresión: permite las ventanas emergentes para este sitio.', 'error'); return; }
@@ -3727,7 +3757,7 @@ async function pantallaInventario() {
           b.disabled = true;
           try {
             const t = await api('POST', '/api/traspasos/solicitudes', { codtiOrigen: codti, codtiDestino: x.codti, lineas: [x.esEquipo ? { idprodmaster: x.idprodmaster, cantidad } : { codpro: x.codpro, cantidad }] });
-            mostrarMensaje(root, `Solicitud #${t.idtraspaso} enviada a ${x.tienda}. La ves en Traspasos.`, 'ok');
+            mostrarMensaje(root, `Solicitud #${t.folio || t.idtraspaso} enviada a ${x.tienda}. La ves en Traspasos.`, 'ok');
           } catch (err) { mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
           b.disabled = false;
         });
@@ -6224,7 +6254,9 @@ async function pantallaTraspasos() {
         api('GET', `/api/traspasos/tienda/${codti}/pendientes`),
         api('GET', `/api/traspasos/tienda/${codti}`),
       ]);
-      const lista = soloPendientes ? pendientes : todos;
+      // Una solicitud aceptada y el envío que generó son un solo traspaso (mismo folio): se ve el envío
+      const conEnvio = new Set((todos || []).filter(x => x.idtraspasoRef != null).map(x => x.idtraspasoRef));
+      const lista = (soloPendientes ? pendientes : todos).filter(x => !(x.tipo === 2 && x.estado === 4 && conEnvio.has(x.idtraspaso)));
       const ponerK = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
       ponerK('tr-k-pend', pendientes.length);
       if (todos) ponerK('tr-k-total', todos.length);
@@ -6239,7 +6271,7 @@ async function pantallaTraspasos() {
             <thead><tr><th>Traspaso</th><th>Fecha</th><th>Origen</th><th>Destino</th><th>Productos</th><th>Pendiente</th><th>Estado</th></tr></thead>
             <tbody>${lista.map(t => `
               <tr data-id="${t.idtraspaso}">
-                <td>#${t.idtraspaso} · ${escapar(t.tipoDisplay)}</td><td>${formatoFecha(t.fechaCreacion)}</td>
+                <td>#${t.folio || t.idtraspaso} · ${escapar(t.tipoDisplay)}</td><td>${formatoFecha(t.fechaCreacion)}</td>
                 <td>${escapar(t.nombreTiendaOrigen)}</td><td>${escapar(t.nombreTiendaDestino)}</td>
                 <td>${(t.lineas || []).length}</td><td><strong>${porMiDe(t)}</strong></td><td>${pastillaTraspaso(t)}</td>
               </tr>`).join('')}</tbody>
@@ -6249,7 +6281,7 @@ async function pantallaTraspasos() {
             return `
             <div class="orden-item" data-id="${t.idtraspaso}">
               <div class="orden-cab">
-                <span class="orden-folio">#${t.idtraspaso} · ${escapar(t.tipoDisplay)}</span>
+                <span class="orden-folio">#${t.folio || t.idtraspaso} · ${escapar(t.tipoDisplay)}</span>
                 ${pastillaTraspaso(t)}
               </div>
               <div class="orden-equipo">${escapar(t.nombreTiendaOrigen)} → ${escapar(t.nombreTiendaDestino)}</div>
@@ -6298,7 +6330,7 @@ async function pantallaTraspasoDetalle(id) {
   const lineas = t.lineas || [];
 
   root.innerHTML = `
-    ${cabeceraPantalla(ic('truck') + ' Traspaso #' + t.idtraspaso, 'Mercancía que se mueve entre sucursales')}
+    ${cabeceraPantalla(ic('truck') + ' Traspaso #' + (t.folio || t.idtraspaso), 'Mercancía que se mueve entre sucursales')}
     <div class="tarjeta">
       <div class="orden-cab">${pastillaTraspaso(t)}<span class="ayuda">${escapar(t.tipoDisplay)}</span></div>
       <div class="ayuda" style="margin-top:6px;">${escapar(t.nombreTiendaOrigen)} → ${escapar(t.nombreTiendaDestino)}</div>
@@ -6313,7 +6345,7 @@ async function pantallaTraspasoDetalle(id) {
       ${t.nombreValida ? `<div class="ayuda">Lo resolvió ${escapar(t.nombreValida)} · ${formatoFecha(t.fechaActualizacion)}</div>` : ''}
       ${t.motivoRechazo ? `<div class="mensaje error" style="margin-top:8px;">Motivo del rechazo: ${escapar(t.motivoRechazo)}</div>` : ''}
       ${t.comentarioRecepcion ? `<div class="ayuda">Comentario de la recepción: ${escapar(t.comentarioRecepcion)}</div>` : ''}
-      ${t.idtraspasoRef ? `<div class="ayuda">Ligado al traspaso <span class="enlace" onclick="navegar('#/traspaso/${t.idtraspasoRef}')">#${t.idtraspasoRef}</span></div>` : ''}
+      ${t.idtraspasoRef ? `<div class="ayuda">Viene de la solicitud <span class="enlace" onclick="navegar('#/traspaso/${t.idtraspasoRef}')">#${t.idtraspasoRef}</span> (mismo folio)</div>` : ''}
       ${esEnvio && t.conFaltantes ? `<button class="btn btn-ambar btn-chico" onclick="navegar('#/faltantes')" style="margin-top:8px;">${ic('triangle-alert')} Ver faltantes</button>` : ''}
     </div>
     <div id="tr-acciones"></div>
@@ -6414,7 +6446,7 @@ async function pantallaTraspasoDetalle(id) {
       e.target.disabled = true;
       try {
         const envio = await api('POST', `/api/traspasos/${id}/aceptar`, { equipos: elegidos });
-        mostrarMensaje(root, `Solicitud aceptada. Se creó el envío #${envio.idtraspaso}.`, 'ok');
+        mostrarMensaje(root, `Solicitud aceptada. Se creó el envío #${envio.folio || envio.idtraspaso}.`, 'ok');
         setTimeout(() => navegar('#/traspaso/' + envio.idtraspaso), 1000);
       } catch (err) { fallo(err, e.target); }
     };
@@ -6571,7 +6603,7 @@ async function pantallaTraspasoNuevo(tipo) {
     e.target.innerHTML = '<span class="spinner"></span> Enviando...';
     try {
       const t = await api('POST', esEnvio ? '/api/traspasos/envios' : '/api/traspasos/solicitudes', payload);
-      mostrarMensaje(root, `${esEnvio ? 'Envío' : 'Solicitud'} #${t.idtraspaso} creado.`, 'ok');
+      mostrarMensaje(root, `${esEnvio ? 'Envío' : 'Solicitud'} #${t.folio || t.idtraspaso} creado.`, 'ok');
       setTimeout(() => navegar('#/traspaso/' + t.idtraspaso), 900);
     } catch (err) {
       mostrarMensaje(root, err.network ? 'Sin conexión con el servidor: no se guardó.' : err.message, 'error');
@@ -6612,7 +6644,7 @@ async function pantallaFaltantes() {
           <span class="orden-folio">${escapar(f.nombreProducto)}</span>
           <span class="pastilla error">Faltan ${Number(f.pendiente)}</span>
         </div>
-        <div class="ayuda">${escapar(f.codpro)}${f.imei ? ' · IMEI ' + escapar(f.imei) : ''} · Traspaso <span class="enlace" onclick="navegar('#/traspaso/${f.idtraspaso}')">#${f.idtraspaso}</span></div>
+        <div class="ayuda">${escapar(f.codpro)}${f.imei ? ' · IMEI ' + escapar(f.imei) : ''} · Traspaso <span class="enlace" onclick="navegar('#/traspaso/${f.idtraspaso}')">#${f.folio || f.idtraspaso}</span></div>
         <div class="ayuda">${escapar(f.nombreTiendaOrigen)} → ${escapar(f.nombreTiendaDestino)} · Enviadas ${Number(f.cantidadEnviada)}, recibidas ${Number(f.cantidadRecibida)}</div>
         ${f.comentarioRecepcion ? `<div class="ayuda">Comentario: ${escapar(f.comentarioRecepcion)}</div>` : ''}
         ${(f.historial || []).map(h => `<div class="historial-meta">${escapar(h.accion)}${h.cantidad ? ' ×' + Number(h.cantidad) : ''} · ${escapar(h.usuario || '')} · ${formatoFecha(h.fecha)}${h.nota ? ' — ' + escapar(h.nota) : ''}</div>`).join('')}

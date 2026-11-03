@@ -46,6 +46,17 @@ public class TraspasoController {
         return ResponseEntityBuilder.created(traspasoService.crearSolicitud(request, user.getUsername()), "solicitud");
     }
 
+    @Operation(summary = "Editar una solicitud que aún no se atiende",
+            description = "Quien pidió cambia lo que pide (productos y cantidades) o a quién se lo pide, mientras la otra tienda no la haya " +
+                    "aceptado ni rechazado. La solicitud vuelve a quedar como nueva para quien surte.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PutMapping("/{id}/solicitud")
+    @PreAuthorize("@permisos.tiene('TRASPASOS')")
+    public ResponseEntity<StandardApiResponse<TraspasoResponseDto>> editarSolicitud(
+            @PathVariable Integer id, @Valid @RequestBody SolicitudRequestDto request, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(traspasoService.editarSolicitud(id, request, user.getUsername()), "solicitud");
+    }
+
     @Operation(summary = "Confirmar la recepción de un envío",
             description = "La tienda destino confirma que llegó la mercancía: el stock y las unidades pasan a su inventario. " +
                     "Sin cuerpo se recibe completo; si algo no llegó, se indica en 'faltantes' (con un comentario obligatorio) " +

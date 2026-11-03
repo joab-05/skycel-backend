@@ -725,6 +725,54 @@ class TraspasoServiceTest {
         }
 
         @Test
+        @DisplayName("editar: quien pidió cambia las cantidades y la solicitud vuelve a quedar como nueva para quien surte")
+        void editar() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            stock("ACC-000002", almacen, accesorio, "20", azul);
+            int id = pedir(linea("ACC-000001", "12"));
+            service.leer(id, "root");   // quien surte ya la había leído
+            lenient().doAnswer(inv -> { detalles.removeAll((java.util.Collection<?>) inv.getArgument(0)); return null; })
+                    .when(detalleRepository).deleteAll(org.mockito.ArgumentMatchers.<Iterable<TraspasoDetalle>>any());
+
+            TraspasoResponseDto r = service.editarSolicitud(id, solicitud(null, 1, linea("ACC-000001", "5"), linea("ACC-000002", "3")), "abigail");
+
+            assertThat(r.getEstadoDisplay()).isEqualTo("Enviado");   // otra vez por leer
+            assertThat(r.getLineas()).hasSize(2);
+            assertThat(r.getLineas()).extracting(l -> l.getCantidad().intValue()).containsExactlyInAnyOrder(5, 3);
+            assertThat(r.getFolio()).isEqualTo(id);
+        }
+
+        @Test
+        @DisplayName("editar: ya aceptada o rechazada no se edita (409); solo la edita quien pidió (403)")
+        void editarNoPuede() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            int aceptada = pedir(linea("ACC-000001", "2"));
+            service.aceptar(aceptada, null, "root");
+            int rechazada = pedir(linea("ACC-000001", "2"));
+            RechazoRequestDto motivo = new RechazoRequestDto();
+            motivo.setMotivo("No hay");
+            service.rechazar(rechazada, motivo, "root");
+            int vigente = pedir(linea("ACC-000001", "2"));
+
+            assertEstado(HttpStatus.CONFLICT, () -> service.editarSolicitud(aceptada, solicitud(null, 1, linea("ACC-000001", "1")), "abigail"));
+            assertEstado(HttpStatus.CONFLICT, () -> service.editarSolicitud(rechazada, solicitud(null, 1, linea("ACC-000001", "1")), "abigail"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.editarSolicitud(vigente, solicitud(null, 1, linea("ACC-000001", "1")), "guillermo"));
+        }
+
+        @Test
+        @DisplayName("la solicitud y el envío que genera al aceptarse comparten folio")
+        void folioUnico() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            int id = pedir(linea("ACC-000001", "2"));
+
+            TraspasoResponseDto envio = service.aceptar(id, null, "root");
+
+            assertThat(envio.getIdtraspaso()).isNotEqualTo(id);
+            assertThat(envio.getFolio()).isEqualTo(id);
+            assertThat(service.obtener(id, "root").getFolio()).isEqualTo(id);
+        }
+
+        @Test
         @DisplayName("crear: queda Enviada de la tienda que pide hacia la que surte, sin mover stock")
         void crear() {
             Producto funda = stock("ACC-000001", almacen, accesorio, "40", negro);
