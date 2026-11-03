@@ -924,9 +924,15 @@ public class TraspasoService {
     }
 
     /** ROOT/ADMIN operan cualquier tienda; un encargado, solo la suya. */
+    /**
+     * Los administradores operan cualquier tienda; un encargado de tienda, la suya; y el técnico encargado, el taller al que pertenece
+     * (para pedir y recibir refacciones). Un técnico que no es el encargado no opera traspasos.
+     */
     private boolean puedeOperar(Usuario u, Integer codti) {
         if (u.getRol() == Rol.ROOT || u.getRol() == Rol.ADMIN) return true;
-        return u.getRol() == Rol.ENCARGADO_TIENDA && u.getTienda() != null && u.getTienda().getCodti().equals(codti);
+        boolean encargadoDeSuTienda = u.getRol() == Rol.ENCARGADO_TIENDA
+                || (u.getRol() == Rol.TECNICO && Boolean.TRUE.equals(u.getTecnicoEncargado()));
+        return encargadoDeSuTienda && u.getTienda() != null && u.getTienda().getCodti().equals(codti);
     }
 
     private void validarOpera(Usuario u, Integer codti) {

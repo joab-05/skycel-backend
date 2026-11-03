@@ -185,7 +185,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (vendeOInventaria) items.push({ h: '#/equipos', i: ic('smartphone'), t: 'Equipos', grupo: 'Inventario' });
   if (tiene('INVENTARIO_FISICO', 'INVENTARIO_CONFIRMAR')) items.push({ h: '#/inventario-fisico', i: ic('scan-barcode'), t: 'Inventario físico', grupo: 'Inventario' });
   if (tiene('INVENTARIO_AJUSTAR')) items.push({ h: '#/mermas', i: ic('triangle-alert'), t: 'Control de mermas', grupo: 'Inventario' });
-  if (tiene('TRASPASOS')) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
+  if (tiene('TRASPASOS') && (s.rol !== 'TECNICO' || s.tecnicoEncargado)) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
   if (tiene('CATALOGOS_EDITAR')) items.push({ h: '#/catalogos', i: ic('list'), t: 'Catálogos', grupo: 'Inventario' });
   if (tiene('DESCUENTOS')) items.push({ h: '#/descuentos', i: ic('tags'), t: 'Descuentos', grupo: 'Finanzas' });
   if (tiene('CAJA_MOVIMIENTOS')) items.push({ h: '#/caja', i: ic('receipt'), t: 'Caja', grupo: 'Finanzas' });
@@ -432,6 +432,8 @@ async function pantallaMenu() {
   const bajoStock = await obtenerBajoStock(s.codti);
   const tarjetas = itemsMenu(s, pend, err, bajoStock);
   const gestor = Sesion.tiene('VENTA_HISTORIAL', 'REPORTES_GERENCIA', 'CAJA_MOVIMIENTOS');
+  // Un técnico solo usa traspasos si es el encargado del taller (el servidor tampoco se los permite a los demás)
+  const verTraspasos = Sesion.tiene('TRASPASOS') && (s.rol !== 'TECNICO' || s.tecnicoEncargado);
   const personal = Sesion.tiene('VENTA_CREAR');
   const enTaller = Sesion.tiene('TALLER_TRABAJAR');
   const fecha = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -443,7 +445,7 @@ async function pantallaMenu() {
   if (gestor) kpis.push({ id: 'ventas', c: 'c1', i: 'trending-up', t: 'Ventas de hoy', h: '#/reportes' });
   if (gestor) kpis.push({ id: 'tickets', c: 'c2', i: 'receipt', t: 'Tickets de hoy', h: '#/reportes' });
   kpis.push({ id: 'bajo', c: 'c4', i: 'triangle-alert', t: 'Bajo stock', h: '#/inventario', v: bajoStock == null ? '—' : String(bajoStock) });
-  if (gestor) kpis.push({ id: 'traspasos', c: 'c3', i: 'truck', t: 'Traspasos por atender', h: '#/traspasos' });
+  if (verTraspasos) kpis.push({ id: 'traspasos', c: 'c3', i: 'truck', t: 'Traspasos por atender', h: '#/traspasos' });
   if (gestor) kpis.push({ id: 'porpagar', c: 'c4', i: 'shopping-bag', t: 'Por pagar a proveedores', h: '#/compras' });
   if (enTaller) kpis.push({ id: 'taller', c: 'c5', i: 'wrench', t: 'Órdenes en taller', h: '#/taller' });
   if (pend + err > 0) kpis.push({ id: 'pend', c: 'c6', i: 'cloud-upload', t: 'Por enviar', h: '#/pendientes', v: String(pend + err) });
@@ -576,7 +578,7 @@ async function pantallaMenu() {
         }).join('') : '<div class="vacio">Todo en existencia suficiente.</div>';
       } catch { if (b) b.innerHTML = '<div class="vacio">Sin conexión.</div>'; }
     })();
-    api('GET', `/api/traspasos/tienda/${codti}/pendientes`).then(l => poner('dk-traspasos', String(l.length))).catch(() => poner('dk-traspasos', '—'));
+    if (verTraspasos) api('GET', `/api/traspasos/tienda/${codti}/pendientes`).then(l => poner('dk-traspasos', String(l.length))).catch(() => poner('dk-traspasos', '—'));
     api('GET', `/api/compras?codti=${codti}&soloActivas=true`)
       .then(l => poner('dk-porpagar', formatoDinero(l.reduce((sum, c) => sum + Number(c.saldoPendiente || 0), 0))))
       .catch(() => poner('dk-porpagar', '—'));

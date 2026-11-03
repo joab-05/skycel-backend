@@ -724,6 +724,29 @@ class TraspasoServiceTest {
             return service.crearSolicitud(solicitud(null, 1, lineas), "abigail").getIdtraspaso();
         }
 
+        @Test
+        @DisplayName("el técnico encargado opera los traspasos de su taller; los demás técnicos no (403), ni el encargado de otro taller")
+        void tecnicoEncargadoDelTaller() {
+            stock("ACC-000001", almacen, accesorio, "40", negro);
+            Usuario encargadoTaller = usuario(30, "alex", Rol.TECNICO, zocalo);
+            encargadoTaller.setTecnicoEncargado(true);
+            Usuario tecnicoComun = usuario(31, "mike", Rol.TECNICO, zocalo);
+            Usuario encargadoDeOtro = usuario(32, "oscar", Rol.TECNICO, corpo);
+            encargadoDeOtro.setTecnicoEncargado(true);
+            for (Usuario u : List.of(encargadoTaller, tecnicoComun, encargadoDeOtro))
+                lenient().when(usuarioRepository.findByUsername(u.getUsername())).thenReturn(Optional.of(u));
+
+            // el encargado del taller pide refacciones y ve lo pendiente de su taller
+            TraspasoResponseDto pedida = service.crearSolicitud(solicitud(null, 1, linea("ACC-000001", "3")), "alex");
+            assertThat(pedida.getCodtiOrigen()).isEqualTo(2);
+            assertThat(service.pendientes(2, "alex")).isNotNull();
+
+            // el técnico común y el encargado de otro taller no
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.crearSolicitud(solicitud(null, 1, linea("ACC-000001", "1")), "mike"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.pendientes(2, "mike"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.pendientes(2, "oscar"));
+        }
+
         /** El envío activo que salió de cada solicitud, como lo busca el servicio. */
         private void enlazarEnvios() {
             lenient().when(traspasoRepository.findFirstByIdtraspasoRefAndTipoAndActivoTrue(anyInt(), any())).thenAnswer(inv ->
