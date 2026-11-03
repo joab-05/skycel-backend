@@ -19,7 +19,10 @@ spring:
       minimum-idle: 5
       maximum-pool-size: 20
       idle-timeout: 30000
-      max-lifetime: 1800000
+      # MySQL cierra por su cuenta las conexiones inactivas (wait_timeout = 600 s en el servidor): el pool las renueva antes
+      # (9 min) y las mantiene vivas con un ping cada 4 min, para no encontrarse conexiones ya cerradas al usarlas.
+      max-lifetime: 540000
+      keepalive-time: 240000
       connection-timeout: 20000
 
   jpa:
