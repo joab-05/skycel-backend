@@ -149,12 +149,24 @@ class MovimientoCajaServiceTest {
         org.mockito.Mockito.when(sesionActual.actual()).thenReturn(sesion, (com.skycel.backend.domain.entity.UsuarioSesion) null);
 
         service.registrarManual(ID_CAJA, req(5, "10.00"), "abigail");
-        service.registrarManual(ID_CAJA, req(5, "10.00"), "abigail");
+        service.registrarManual(ID_CAJA, req(5, "11.00"), "abigail");
 
         ArgumentCaptor<MovimientoCaja> cap = ArgumentCaptor.forClass(MovimientoCaja.class);
         verify(movimientoCajaRepository, org.mockito.Mockito.times(2)).save(cap.capture());
         assertThat(cap.getAllValues().get(0).getSesion().getIdsesion()).isEqualTo(77);
         assertThat(cap.getAllValues().get(1).getSesion()).isNull();
+    }
+
+    @Test
+    @DisplayName("el mismo movimiento capturado dos veces en el mismo instante (doble clic) se registra una sola vez: 409")
+    void dobleClic() {
+        motivo(gasto);
+
+        service.registrarManual(ID_CAJA, req(5, "200.00"), "abigail");
+
+        assertThatThrownBy(() -> service.registrarManual(ID_CAJA, req(5, "200.00"), "abigail"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(movimientoCajaRepository, org.mockito.Mockito.times(1)).save(any(MovimientoCaja.class));
     }
 
     @Test

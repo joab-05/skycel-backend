@@ -16,6 +16,7 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -166,6 +167,28 @@ class VentaServiceTest {
     @Nested
     @DisplayName("crear — CELULAR")
     class CrearCelular {
+
+        @Test
+        @DisplayName("el mismo cobro enviado dos veces en el mismo instante (doble clic, claves distintas) se registra una sola vez: 409")
+        void dobleClicNoDuplicaLaVenta() {
+            ProductoMaster master = masterCelular();
+            productoCelular(master, BigDecimal.ONE);
+            ProductoImei pi = ProductoImei.builder().id(1L).productoMaster(master).tienda(tienda).precioVenta(new BigDecimal("199")).costo(new BigDecimal("100")).imei("123456789012345").estado("DISPONIBLE").build();
+            when(productoMasterRepository.findById(1)).thenReturn(Optional.of(master));
+            when(productoImeiRepository.findByImei("123456789012345")).thenReturn(Optional.of(pi));
+            VentaRequestDto primera = ventaBase(List.of(lineaCelular("123456789012345")));
+            primera.setClaveOffline("uno");
+            VentaRequestDto segunda = ventaBase(List.of(lineaCelular("123456789012345")));
+            segunda.setClaveOffline("dos");
+
+            ventaService.crear(primera, ID_VENDEDOR);
+
+            assertThatThrownBy(() -> ventaService.crear(segunda, ID_VENDEDOR))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                        assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                        assertThat(e.getReason()).contains("ya se registró");
+                    });
+        }
 
         @Test
         @DisplayName("con IMEI disponible: marca el IMEI como VENDIDO, deja constancia en el historial y calcula el total")

@@ -87,9 +87,30 @@ public class VentaService {
 
     // ── Crear venta ──────────────────────────────────────────────────────────
 
+    private final AntiDobleEnvio antiDoble = new AntiDobleEnvio();
+
     @Transactional
     public VentaResponseDto crear(VentaRequestDto dto, Integer idUsuarioVendedor) {
-        return crearVenta(dto, idUsuarioVendedor, false);
+        // Una venta hecha sin conexión ya ocurrió y se distingue por su clave: el candado es solo para el cobro en línea
+        String firma = Boolean.TRUE.equals(dto.getSinConexion()) ? null : firmaDeVenta(dto, idUsuarioVendedor);
+        if (firma != null) {
+            antiDoble.reservar(firma, dto.getClaveOffline(), "Esta venta ya se registró hace un momento: revisa el historial antes de cobrarla otra vez.");
+        }
+        try {
+            return crearVenta(dto, idUsuarioVendedor, false);
+        } catch (RuntimeException e) {
+            if (firma != null) antiDoble.liberar(firma);
+            throw e;
+        }
+    }
+
+    /** Quién vende, en qué caja y qué lleva el carrito (artículo, IMEI, cantidad y precio): dos cobros con la misma firma son el mismo clic. */
+    private static String firmaDeVenta(VentaRequestDto dto, Integer idUsuarioVendedor) {
+        if (dto.getDetalles() == null || dto.getDetalles().isEmpty()) return null;
+        String renglones = dto.getDetalles().stream()
+                .map(d -> d.getCodpro() + "|" + d.getIdprodmaster() + "|" + d.getImei() + "|" + d.getCantidad() + "|" + d.getPrecioUnitarioFinal())
+                .sorted().collect(Collectors.joining(";"));
+        return "venta:" + idUsuarioVendedor + ":" + dto.getIdCaja() + ":" + dto.getMetodoPago() + ":" + dto.getMontoAbonado() + ":" + renglones;
     }
 
     /**

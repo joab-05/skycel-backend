@@ -90,8 +90,23 @@ public class MovimientoCajaService {
 
     // ── Movimientos manuales ─────────────────────────────────────────────────
 
+    private final AntiDobleEnvio antiDoble = new AntiDobleEnvio();
+
     @Transactional
     public MovimientoCajaResponseDto registrarManual(Integer idCaja, MovimientoCajaRequestDto dto, String username) {
+        // El candado es solo para lo capturado en línea; lo que viene de la cola sin conexión se distingue por su clave
+        if (dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank()) return registrarManualUnico(idCaja, dto, username);
+        String firma = "mov:" + username + ":" + idCaja + ":" + dto.getIdmotivo() + ":" + dto.getMonto() + ":" + dto.getObservaciones();
+        antiDoble.reservar(firma, null, "Este movimiento ya se registró hace un momento: revisa la lista antes de capturarlo otra vez.");
+        try {
+            return registrarManualUnico(idCaja, dto, username);
+        } catch (RuntimeException e) {
+            antiDoble.liberar(firma);
+            throw e;
+        }
+    }
+
+    private MovimientoCajaResponseDto registrarManualUnico(Integer idCaja, MovimientoCajaRequestDto dto, String username) {
         // Un movimiento capturado sin conexión que ya se había enviado: se devuelve el mismo, no se duplica
         if (dto.getClaveOffline() != null && !dto.getClaveOffline().isBlank()) {
             var existente = movimientoCajaRepository.findFirstByClaveOffline(dto.getClaveOffline().trim());

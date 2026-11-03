@@ -512,6 +512,10 @@ public class OrdenServicioService {
         BigDecimal pagado = anticipoRepository.findByOrden_IdordenOrderByIdanticipo(id).stream()
                 .map(OrdenServicioAnticipo::getMonto).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal saldo = total.subtract(pagado).max(BigDecimal.ZERO);
+        if ((tipo == OrdenAvisos.Tipo.COTIZACION || tipo == OrdenAvisos.Tipo.PRECIO_CAMBIO) && total.signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La orden no tiene servicios ni refacciones: agrégalos antes de avisarle la cotización al cliente.");
+        }
         String negocio = negocioRepository.findAll().stream().findFirst().map(ConfiguracionNegocio::getNombreComercial).orElse("Skycel");
         String base = urlPublica != null ? urlPublica : "https://skycelsys.ddns.net";
         OrdenAvisos.Datos datos = new OrdenAvisos.Datos(negocio, orden.getTienda().getNombre(), orden.getTienda().getTelefono(),

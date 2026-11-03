@@ -558,6 +558,20 @@ class OrdenServicioServiceTest {
         }
 
         @Test
+        @DisplayName("sin renglones no hay cotización que avisar: 400 (con renglones sí)")
+        void avisoDeCotizacionSinRenglones() {
+            int o = orden();
+            service.agregarLinea(o, linea("SRV-000001", 1, null, null), "juan.perez");
+            service.eliminarLinea(o, detalles.get(0).getIddetalle(), "juan.perez");
+
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.avisoWhatsapp(o, "COTIZACION", "juan.perez"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.avisoWhatsapp(o, "PRECIO_CAMBIO", "juan.perez"));
+
+            service.agregarLinea(o, linea("SRV-000001", 1, null, null), "juan.perez");
+            assertThat(service.avisoWhatsapp(o, "COTIZACION", "juan.perez").get("tipo")).isEqualTo("COTIZACION");
+        }
+
+        @Test
         @DisplayName("un servicio de la tienda (E-SIM, registro de línea...) se cobra en caja: no se agrega a una orden (400)")
         void servicioDeLaTienda() {
             int o = orden();
