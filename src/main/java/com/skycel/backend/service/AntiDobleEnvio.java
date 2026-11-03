@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Va en memoria y se decide al entrar, antes de tocar la base: dos peticiones que llegan con milisegundos de diferencia
  * todavía no se ven entre sí en la base, pero sí aquí. Un reintento con la misma clave de envío (si trae una) no cuenta como duplicado.
  */
-final class AntiDobleEnvio {
+public final class AntiDobleEnvio {
 
     static final long VENTANA_MS = 3_000;
 
@@ -19,7 +19,12 @@ final class AntiDobleEnvio {
     private final ConcurrentHashMap<String, Marca> marcas = new ConcurrentHashMap<>();
 
     /** Reserva la firma; si otra igual (de otra clave) se reservó hace menos de la ventana, rechaza con 409. */
-    void reservar(String firma, String clave, String mensaje) {
+    public void reservar(String firma, String clave, String mensaje) {
+        if (!intentar(firma, clave)) throw new ResponseStatusException(HttpStatus.CONFLICT, mensaje);
+    }
+
+    /** Igual que {@link #reservar} pero sin lanzar: devuelve false si la firma ya estaba reservada. */
+    public boolean intentar(String firma, String clave) {
         long ahora = System.currentTimeMillis();
         marcas.values().removeIf(m -> ahora - m.cuando() > VENTANA_MS);
         boolean[] repetida = {false};
@@ -30,11 +35,11 @@ final class AntiDobleEnvio {
             }
             return new Marca(clave, ahora);
         });
-        if (repetida[0]) throw new ResponseStatusException(HttpStatus.CONFLICT, mensaje);
+        return !repetida[0];
     }
 
     /** La operación falló: se libera la firma para poder reintentarla enseguida. */
-    void liberar(String firma) {
+    public void liberar(String firma) {
         marcas.remove(firma);
     }
 }

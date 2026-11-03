@@ -2,6 +2,7 @@ package com.skycel.backend.config;
 
 import com.skycel.backend.security.AuthEntryPointJwt;
 import com.skycel.backend.security.JwtAuthenticationFilter;
+import com.skycel.backend.security.AntiDobleClicFilter;
 import com.skycel.backend.security.RateLimitingFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,7 +74,9 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            // Después de saber quién es el usuario; no es un @Component para que Spring no lo registre también antes de la seguridad
+            .addFilterAfter(new AntiDobleClicFilter(), JwtAuthenticationFilter.class);
 
         return http.build();
     }
