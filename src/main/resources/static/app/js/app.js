@@ -1701,12 +1701,16 @@ async function pantallaOrdenDetalle(id) {
   if (esTecnicoLibre) acciones.push({ t: ic('hand') + ' Recibir en el taller', color: 'btn-azul', fn: () => accionSimple(id, 'tomar', 'POST') });
   if (o.estado === 3 && o.regresoPendiente) acciones.push({ t: ic('truck') + ' Regresó a la tienda', color: 'btn-azul', fn: () => accionSimple(id, 'regreso', 'POST') });
   if (puedeTrabajar && o.estado === 1 && o.idTecnico && !o.esperaMotivo) acciones.push({ t: '▶️ Iniciar reparación', color: 'btn-verde', fn: () => accionSimple(id, 'iniciar', 'POST') });
-  if (puedeTrabajar && o.estado === 2 && !o.esperaMotivo) acciones.push({ t: ic('circle-check') + ' Marcar lista', color: 'btn-verde', fn: () => accionSimple(id, 'lista', 'POST') });
+  if (puedeTrabajar && o.estado === 2 && !o.esperaMotivo) {
+    // Sin servicios ni refacciones el servidor la rechaza: el botón avisa de entrada en vez de fallar al tocarlo
+    const sinRenglones = !(o.lineas || []).length;
+    acciones.push({ t: ic('circle-check') + ' Marcar lista', color: 'btn-verde', sinRenglones, fn: () => accionSimple(id, 'lista', 'POST') });
+  }
   if (puedeTrabajar && viva && !o.esperaMotivo) acciones.push({ t: ic('hourglass') + ' Esperar refacción', color: 'btn-gris', fn: () => document.getElementById('dt-espera-cont').classList.toggle('oculto') });
   if (puedeTrabajar) acciones.push({ t: ic('clipboard-pen') + ' Agregar observación', color: 'btn-gris', fn: () => document.getElementById('dt-nota-cont').classList.toggle('oculto') });
 
   if (acciones.length === 0) { contAcc.classList.add('oculto'); return; }
-  botones.innerHTML = acciones.map((a, i) => `<button class="btn ${a.color}" data-i="${i}">${a.t}</button>`).join('');
+  botones.innerHTML = acciones.map((a, i) => `<button class="btn ${a.color}" data-i="${i}"${a.sinRenglones ? ' disabled title="Agrega al menos un servicio o refacción antes de marcarla como lista"' : ''}>${a.t}</button>`).join('');
   botones.querySelectorAll('button').forEach((b, i) => b.onclick = acciones[i].fn);
 
   document.getElementById('dt-espera-enviar').onclick = async () => {
