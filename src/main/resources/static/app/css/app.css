@@ -990,3 +990,19 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
   border-radius: 12px; padding: 12px 14px; box-shadow: 0 8px 24px rgba(15,23,42,.22); display: flex; flex-direction: column; gap: 2px; cursor: pointer; font-size: 13px; }
 .aviso-vivo span { color: var(--gris, #64748b); }
 @media (min-width: 720px) { .aviso-vivo { left: auto; right: 20px; bottom: 20px; width: 340px; } }
+
+/* Montos: el signo de pesos va dentro del campo */
+input.moneda { padding-left: 28px; background-repeat: no-repeat; background-position: 11px center; background-size: 10px 16px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='16'><text x='0' y='13' font-size='14' font-weight='700' fill='%2364748b' font-family='Arial,sans-serif'>$</text></svg>"); }
+
+/* Cierre de caja por pasos */
+.cierre .paso { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--borde, #e2e8f0); border-radius: 12px; }
+.cierre .paso-t { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 4px; }
+.cierre .paso-n { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #1e293b; color: #fff; font-size: 13px; }
+.cierre .campo-grande { font-size: 22px; font-weight: 700; padding: 10px 12px; margin-top: 6px; }
+.cierre .resumen-cierre { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; padding: 12px; border-radius: 12px; background: rgba(100,116,139,.12); }
+.cierre .resumen-cierre .k { display: block; font-size: 12px; opacity: .75; }
+.cierre .resumen-cierre strong { font-size: 22px; }
+.cierre .v-retira { color: #0f766e; }
+.error-texto { color: #dc2626; font-weight: 700; }
+.cierre .campo-grande.moneda { padding-left: 32px; background-size: 12px 18px; }

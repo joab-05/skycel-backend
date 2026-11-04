@@ -256,6 +256,40 @@ document.getElementById('btn-notificaciones').onclick = () => navegar('#/notific
 
 // ── Router ────────────────────────────────────────────────────────────────
 
+/**
+ * Formato de los campos de captura: los montos llevan «$» y solo dos decimales (y se completan a «0.00» al salir del campo), y los
+ * teléfonos solo aceptan 10 dígitos. Se aplica solo a cada campo nuevo que aparece en pantalla.
+ */
+const SELECTOR_MONEDA = '[data-moneda], #tc-sig, #tc-fondo, #tc-contado, #rc-anticipo-monto, #pe-preventa, #pe-precompra, #pc-monto, #np-precio-venta, #np-precio-compra, '
+  + '#ef-sueldo, #df-minimo, #cn-monto, #cj-monto, #ab-monto, .ue-precio, .ue-costo, #nmd-p-monto, #nmd-d-monto, #ep-monto, #cc-umbral';
+function mejorarCampos(raiz) {
+  if (!raiz || !raiz.querySelectorAll) return;
+  raiz.querySelectorAll(SELECTOR_MONEDA).forEach(el => {
+    if (el.tagName !== 'INPUT' || el.dataset.formato) return;
+    el.dataset.formato = '1';
+    el.classList.add('moneda');
+    el.addEventListener('keydown', (e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); });
+    el.addEventListener('input', () => {
+      const recortado = el.value.replace(/(\.\d{2})\d+$/, '$1');
+      if (recortado !== el.value) el.value = recortado;
+    });
+    el.addEventListener('blur', () => { if (el.value !== '' && !isNaN(Number(el.value))) el.value = Number(el.value).toFixed(2); });
+  });
+  raiz.querySelectorAll('input[inputmode="tel"]').forEach(el => {
+    if (el.dataset.formato) return;
+    el.dataset.formato = '1';
+    el.maxLength = 10;
+    el.addEventListener('input', () => {
+      const digitos = el.value.replace(/\D/g, '').slice(0, 10);
+      if (digitos !== el.value) el.value = digitos;
+    });
+    if (el.value) el.value = el.value.replace(/\D/g, '').slice(-10);
+  });
+}
+new MutationObserver((cambios) => {
+  for (const c of cambios) c.addedNodes.forEach(n => { if (n.nodeType === 1) mejorarCampos(n); });
+}).observe(document.body, { childList: true, subtree: true });
+
 async function render() {
   const s = Sesion.obtener();
   const hash = location.hash || (s ? '#/menu' : '#/login');
@@ -674,32 +708,52 @@ function formularioAbrirCaja(cont, idCaja, nombreCaja, fondoSugerido, alAbrir) {
 
 /** Formulario para cerrar la caja: se cuenta el efectivo, se ve la diferencia y se genera el corte. */
 function formularioCerrarCaja(cont, idCaja, sesion, alCerrar) {
+  const fondoAnterior = Number(sesion.fondoInicial || 0);
   cont.innerHTML = `
-    <div class="tarjeta">
+    <div class="tarjeta cierre">
       <h2 class="h2-ic">${ic('lock')} Cerrar ${escapar(sesion.nombreCaja)}</h2>
-      <div class="ayuda">Cuenta el efectivo del cajón (billetes y monedas) y escríbelo. El sistema no te dice cuánto debería haber hasta que cierres: así el conteo es honesto.</div>
-      <label class="obligatorio">Efectivo contado</label>
-      <input id="tc-contado" type="number" inputmode="decimal" min="0" step="0.01">
-      <label>Se deja en el cajón para mañana</label>
-      <input id="tc-sig" type="number" inputmode="decimal" min="0" step="0.01" value="${Number(sesion.fondoInicial || 0).toFixed(2)}">
-      <div id="tc-retiro" class="ayuda"></div>
-      <label>Observaciones</label>
-      <input id="tc-obs" placeholder="Opcional">
+      <div class="ayuda">Son tres pasos y al final se genera el corte.</div>
+      <div class="paso">
+        <div class="paso-t"><span class="paso-n">1</span> Cuenta el efectivo del cajón</div>
+        <div class="ayuda">Cuenta todos los billetes y monedas y escribe el total. El sistema no te dice cuánto debería haber hasta que cierres: así el conteo es honesto.</div>
+        <input id="tc-contado" class="campo-grande" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="paso">
+        <div class="paso-t"><span class="paso-n">2</span> ¿Cuánto se queda en el cajón para mañana?</div>
+        <div class="ayuda">Es el fondo con el que abrirá el siguiente turno. Lo demás se retira.</div>
+        <input id="tc-sig" class="campo-grande" type="number" inputmode="decimal" min="0" step="0.01" value="${fondoAnterior.toFixed(2)}">
+        ${fondoAnterior > 0 ? `<button type="button" id="tc-mismo" class="enlace">Dejar el mismo fondo de hoy (${formatoDinero(fondoAnterior)})</button>` : ''}
+      </div>
+      <div class="resumen-cierre">
+        <div><span class="k">Se retira del cajón</span><strong id="tc-retira" class="v-retira">—</strong></div>
+        <div><span class="k">Se queda para mañana</span><strong id="tc-queda">—</strong></div>
+      </div>
+      <div id="tc-retiro" class="ayuda">Escribe lo que contaste para ver cuánto se retira.</div>
+      <div class="paso">
+        <div class="paso-t"><span class="paso-n">3</span> Observaciones</div>
+        <input id="tc-obs" placeholder="Opcional: por ejemplo, un billete roto o un retiro que no se anotó">
+      </div>
       <div class="grupo-botones">
-        <button id="tc-cerrar" class="btn btn-azul">${ic('circle-check')} Cerrar caja y generar corte</button>
+        <button id="tc-cerrar" class="btn btn-azul" disabled>${ic('circle-check')} Cerrar caja y generar corte</button>
       </div>
     </div>`;
   const contado = document.getElementById('tc-contado');
   const sig = document.getElementById('tc-sig');
   const calcular = () => {
     const ret = document.getElementById('tc-retiro');
-    if (contado.value === '') { ret.textContent = ''; return; }
-    const f = Number(sig.value || 0);
-    ret.textContent = f > Number(contado.value) ? 'El fondo para mañana no puede ser mayor a lo contado.'
-      : `Se retiran ${formatoDinero(Number(contado.value) - f)} del cajón y quedan ${formatoDinero(f)} para mañana.`;
+    const hay = contado.value !== '';
+    const f = Number(sig.value || 0), c = Number(contado.value || 0);
+    const excede = hay && f > c;
+    document.getElementById('tc-retira').textContent = hay && !excede ? formatoDinero(c - f) : '—';
+    document.getElementById('tc-queda').textContent = hay && !excede ? formatoDinero(f) : '—';
+    ret.textContent = excede ? `El fondo para mañana (${formatoDinero(f)}) no puede ser mayor a lo que contaste (${formatoDinero(c)}).` : (hay ? '' : 'Escribe lo que contaste para ver cuánto se retira.');
+    ret.classList.toggle('error-texto', excede);
+    document.getElementById('tc-cerrar').disabled = !hay || excede;
   };
   contado.addEventListener('input', calcular);
   sig.addEventListener('input', calcular);
+  const mismo = document.getElementById('tc-mismo');
+  if (mismo) mismo.onclick = () => { sig.value = fondoAnterior.toFixed(2); calcular(); };
   contado.focus();
   document.getElementById('tc-cerrar').onclick = async (e) => {
     if (contado.value === '') { mostrarMensaje(root, 'Cuenta el efectivo del cajón y escríbelo.', 'error'); return; }
