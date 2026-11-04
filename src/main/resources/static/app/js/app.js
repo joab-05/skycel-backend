@@ -301,6 +301,13 @@ async function render() {
   // Una vez por carga de la página se traen los permisos del rol (root los puede haber cambiado): si cambiaron, se redibuja
   if (s && !s.permisos) await Sesion.cargarPermisos(true);
   else if (s) Sesion.cargarPermisos().then(cambio => { if (cambio) render(); });
+  if (s && !window.__revisorDeSesion) {
+    // Cada par de minutos (y al volver a la pestaña) se revisa si le cambiaron la sucursal, el rol o los permisos
+    window.__revisorDeSesion = true;
+    const revisar = () => Sesion.cargarPermisos(true).then(cambio => { if (cambio && Sesion.activa()) render(); });
+    setInterval(revisar, 120000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && Sesion.activa()) revisar(); });
+  }
   await actualizarEncabezado();
   actualizarBarraConexion();
 

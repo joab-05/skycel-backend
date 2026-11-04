@@ -37,8 +37,18 @@ const Sesion = (() => {
       permisosPedidos = true;
       const actual = obtener();
       if (!actual) return false;
-      const cambio = JSON.stringify(actual.permisos || null) !== JSON.stringify(r.permisos || []);
+      let cambio = JSON.stringify(actual.permisos || null) !== JSON.stringify(r.permisos || []);
       actual.permisos = r.permisos || [];
+      // Si un administrador le cambió la sucursal o el rol, la sesión abierta se pone al día (un vendedor y un administrador
+      // eligen su sucursal de trabajo ellos mismos, así que a ellos no se les mueve)
+      if (r.rol && r.codti != null && r.rol !== 'VENDEDOR' && r.rol !== 'ROOT' && r.rol !== 'ADMIN'
+          && (actual.codti !== r.codti || actual.rol !== r.rol || !!actual.tecnicoEncargado !== !!r.tecnicoEncargado)) {
+        actual.codti = r.codti;
+        actual.nombreTienda = r.nombreTienda;
+        actual.rol = r.rol;
+        actual.tecnicoEncargado = !!r.tecnicoEncargado;
+        cambio = true;
+      }
       guardar(actual);
       return cambio;
     } catch { return false; }

@@ -49,6 +49,13 @@ public class PermisoController {
         r.put("rol", rol != null ? rol.name() : null);
         r.put("permisos", usuarioRepository.findByUsername(user.getUsername())
                 .map(permisoService::deUsuario).orElseGet(() -> rol != null ? permisoService.deRol(rol) : List.of()));
+        // Lo que dice hoy la base: si un administrador le cambió la sucursal o el rol, la sesión abierta lo detecta y se actualiza
+        usuarioRepository.findByUsername(user.getUsername()).ifPresent(u -> {
+            r.put("rol", u.getRol() != null ? u.getRol().name() : r.get("rol"));
+            r.put("codti", u.getTienda() != null ? u.getTienda().getCodti() : null);
+            r.put("nombreTienda", u.getTienda() != null ? u.getTienda().getNombre() : null);
+            r.put("tecnicoEncargado", Boolean.TRUE.equals(u.getTecnicoEncargado()));
+        });
         return ResponseEntityBuilder.ok(r, "permisos");
     }
 
