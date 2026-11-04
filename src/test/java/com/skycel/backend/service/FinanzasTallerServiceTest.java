@@ -152,6 +152,30 @@ class FinanzasTallerServiceTest {
     }
 
     @Test
+    @DisplayName("la nómina pagada desde el sistema cuenta solo la de los técnicos: la del personal de tiendas no es del taller")
+    void nominaSoloDeTecnicos() {
+        lenient().when(ordenRepository.lineasEntregadas(any(), any())).thenReturn(lineas(linea(alex, 1, "20000", 1, "0")));
+        Usuario oscar = Usuario.builder().idusuario(30).username("oscar").nombreCompleto("Oscar").rol(Rol.VENDEDOR).activo(true).build();
+        lenient().when(nominaDetalleRepository.findByEstadoAndFechaPagoBetweenOrderByFechaPagoAsc(any(), any(), any())).thenReturn(List.of(
+                pago(alex, "8000"), pago(oscar, "6000")));
+
+        Map<String, Object> r = service.mensual(2026, 10, "root");
+
+        assertThat((BigDecimal) r.get("nominaSistema")).isEqualByComparingTo("8000");
+        assertThat((BigDecimal) r.get("gastosFijos")).isEqualByComparingTo("8000");
+        assertThat((BigDecimal) r.get("gananciaNeta")).isEqualByComparingTo("12000");
+        @SuppressWarnings("unchecked") List<Map<String, Object>> filas = (List<Map<String, Object>>) r.get("nomina");
+        assertThat(filas).hasSize(1);
+        assertThat(filas.get(0).get("empleado")).isEqualTo("Alex");
+    }
+
+    private com.skycel.backend.domain.entity.NominaDetalle pago(Usuario u, String neto) {
+        return com.skycel.backend.domain.entity.NominaDetalle.builder()
+                .empleado(com.skycel.backend.domain.entity.EmpleadoPerfil.builder().usuario(u).build())
+                .totalNeto(new BigDecimal(neto)).build();
+    }
+
+    @Test
     @DisplayName("solo la administración; categoría y mes válidos")
     void validaciones() {
         assertThatThrownBy(() -> service.mensual(2026, 10, "vendedor"))

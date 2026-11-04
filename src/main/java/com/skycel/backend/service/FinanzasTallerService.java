@@ -86,11 +86,13 @@ public class FinanzasTallerService {
             else operativos = operativos.add(g.getMonto());
         }
 
-        // la nómina que ya se pagó desde el sistema (no se vuelve a capturar como gasto)
+        // la nómina de los técnicos que ya se pagó desde el sistema (no se vuelve a capturar como gasto); la del personal de
+        // las tiendas no es del taller y no entra en este reporte
         List<Map<String, Object>> nomina = new ArrayList<>();
         BigDecimal nominaSistema = BigDecimal.ZERO;
         for (NominaDetalle d : nominaDetalleRepository.findByEstadoAndFechaPagoBetweenOrderByFechaPagoAsc(
                 NOMINA_PAGADA, primero.atStartOfDay(), ultimo.atTime(LocalTime.MAX))) {
+            if (d.getEmpleado() == null || d.getEmpleado().getUsuario() == null || d.getEmpleado().getUsuario().getRol() != Rol.TECNICO) continue;
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("empleado", d.getEmpleado() != null && d.getEmpleado().getUsuario() != null ? d.getEmpleado().getUsuario().getNombreCompleto() : "—");
             m.put("monto", d.getTotalNeto());

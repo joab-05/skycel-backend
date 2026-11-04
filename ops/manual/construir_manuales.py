@@ -703,7 +703,7 @@ Aquí está lo que antes se llevaba en la libreta cada mes: cuánto dejaron las 
 3. Si es algo que se paga **cada mes** (la renta, el internet), marca **Se repite cada mes**: cuenta solo en todos los meses siguientes. Si un día deja de pagarse, edítalo y escribe en qué mes **deja de contar**.
 4. Pulsa **Guardar gasto**. Para corregirlo o quitarlo, elígelo en la tabla y usa **Editar** o **Quitar**.
 
-Los **sueldos** cuentan como gasto fijo; todo lo demás, como operativo. La **nómina que se paga desde el sistema** (Nómina) aparece sola en la tabla de gastos y no se vuelve a capturar; los sueldos que se pagan por fuera sí se capturan, con la categoría **Sueldos**.
+Los **sueldos** cuentan como gasto fijo; todo lo demás, como operativo. La **nómina de los técnicos que se paga desde el sistema** (Nómina) aparece sola en la tabla de gastos y no se vuelve a capturar. Esas filas no se editan aquí: si algo está mal, elige la fila y pulsa **Abrir Nómina** para corregirlo allá. La nómina del personal de las tiendas no entra en este reporte. Los sueldos que se pagan por fuera sí se capturan, con la categoría **Sueldos**.
 
 ### Comisiones de los técnicos
 Cada técnico gana un **porcentaje de la ganancia neta** del mes (por ejemplo, el técnico encargado 10 % y los auxiliares 4 %).
