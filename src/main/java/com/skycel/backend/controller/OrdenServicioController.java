@@ -68,6 +68,18 @@ public class OrdenServicioController {
         return ResponseEntityBuilder.ok(ordenService.listar(codti, estado, idTecnico, user.getUsername()), "órdenes de servicio");
     }
 
+    @Operation(summary = "Órdenes de todas las sucursales (cualquier estado)",
+            description = "Para la administración y el técnico encargado. Filtros opcionales: estado y técnico.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/todas")
+    @PreAuthorize("@permisos.tiene('ORDEN_CONSULTAR')")
+    public ResponseEntity<StandardApiResponse<List<OrdenServicioResponseDto>>> listarTodas(
+            @RequestParam(required = false) Byte estado,
+            @RequestParam(required = false) Integer idTecnico,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(ordenService.listarTodas(estado, idTecnico, user.getUsername()), "órdenes de servicio");
+    }
+
     @Operation(summary = "Mis órdenes abiertas (para un técnico)")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/mis-ordenes")

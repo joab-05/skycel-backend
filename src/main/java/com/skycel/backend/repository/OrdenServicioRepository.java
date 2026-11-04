@@ -20,8 +20,8 @@ public interface OrdenServicioRepository extends JpaRepository<OrdenServicio, In
     /** ¿Esta venta salió de una orden de servicio? (esa venta no se cancela por separado) */
     boolean existsByVenta_Idventa(Integer idventa);
 
-    /** Órdenes de una tienda, más recientes primero. Filtros opcionales por estado y técnico. */
-    @Query("SELECT o FROM OrdenServicio o WHERE o.tienda.codti = :codti " +
+    /** Órdenes de una tienda (de todas si codti es null), más recientes primero. Filtros opcionales por estado y técnico. */
+    @Query("SELECT o FROM OrdenServicio o WHERE (:codti IS NULL OR o.tienda.codti = :codti) " +
            "AND (:estado IS NULL OR o.estado = :estado) " +
            "AND (:idTecnico IS NULL OR o.tecnico.idusuario = :idTecnico) " +
            "ORDER BY o.fechaIngreso DESC, o.idorden DESC")

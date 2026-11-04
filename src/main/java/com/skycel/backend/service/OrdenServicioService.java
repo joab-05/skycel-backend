@@ -921,6 +921,16 @@ public class OrdenServicioService {
         return toDto(orden);
     }
 
+    /** Las órdenes de todas las sucursales (cualquier estado): el personal administrativo y el técnico encargado. */
+    @Transactional(readOnly = true)
+    public List<OrdenServicioResponseDto> listarTodas(Byte estado, Integer idTecnico, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        if (usuario.getRol() != Rol.ROOT && usuario.getRol() != Rol.ADMIN && !esTecnicoEncargado(usuario)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo la administración o el técnico encargado ven las órdenes de todas las sucursales.");
+        }
+        return ordenRepository.buscar(null, estado, idTecnico).stream().map(this::resumen).collect(Collectors.toList());
+    }
+
     /** Órdenes de una tienda (para el personal). Un técnico usa misOrdenes. */
     @Transactional(readOnly = true)
     public List<OrdenServicioResponseDto> listar(Integer codti, Byte estado, Integer idTecnico, String username) {

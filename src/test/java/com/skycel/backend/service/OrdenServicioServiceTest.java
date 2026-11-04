@@ -849,6 +849,17 @@ class OrdenServicioServiceTest {
         }
 
         @Test
+        @DisplayName("todas las sucursales: la administración y el técnico encargado sí; un técnico, un vendedor y un encargado de tienda no")
+        void todasLasSucursales() {
+            int o = orden(linea("SRV-000001", null, null, null));
+            when(ordenRepository.buscar(null, null, null)).thenReturn(List.of(viva(o)));
+            assertThat(service.listarTodas(null, null, "root")).hasSize(1);
+            assertThat(service.listarTodas(null, null, "luis.tecnico")).hasSize(1);
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.listarTodas(null, null, "juan.perez"));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.listarTodas(null, null, "guillermo"));
+        }
+
+        @Test
         @DisplayName("consultas: un técnico no lista por tienda (403); mis-ordenes es solo de técnicos")
         void consultas() {
             assertEstado(HttpStatus.FORBIDDEN, () -> service.listar(2, null, null, "juan.perez"));

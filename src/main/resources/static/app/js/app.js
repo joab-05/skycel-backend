@@ -1366,10 +1366,10 @@ function tablaOrdenes(ordenes, s) {
   const estado = pastillaOrden;
   return `
     <div class="tabla-cont"><table class="tabla">
-      <thead><tr><th>Folio</th><th>Ingreso</th><th>Cliente</th><th>Equipo</th><th>Falla reportada</th><th>Técnico</th><th>Promesa</th><th>Estado</th></tr></thead>
+      <thead><tr><th>Folio</th><th>Ingreso</th>${SUPERIOR.includes(s.rol) ? '<th>Sucursal</th>' : ''}<th>Cliente</th><th>Equipo</th><th>Falla reportada</th><th>Técnico</th><th>Promesa</th><th>Estado</th></tr></thead>
       <tbody>${ordenes.map(o => `
         <tr data-id="${o.idorden}">
-          <td>${escapar(o.folio)}</td><td>${formatoFecha(o.fechaIngreso)}</td>
+          <td>${escapar(o.folio)}</td><td>${formatoFecha(o.fechaIngreso)}</td>${SUPERIOR.includes(s.rol) ? `<td>${escapar(o.nombreTienda || '')}</td>` : ''}
           <td class="tabla-nombre">${escapar(o.nombreCliente)}</td>
           <td>${escapar(o.marca)} ${escapar(o.modelo)}</td>
           <td class="celda-corta" title="${escapar(o.fallaReportada || '')}">${escapar(o.fallaReportada || '')}</td>
@@ -1409,7 +1409,7 @@ async function pantallaConsultar() {
       <div id="co-resultado"></div>
     </div>
     <div class="tarjeta">
-      <h2>${SUPERIOR.includes(s.rol) ? 'Órdenes de tu sucursal' : 'Órdenes recientes'}</h2>
+      <h2>${SUPERIOR.includes(s.rol) ? 'Órdenes recientes de todas las sucursales' : 'Órdenes recientes'}</h2>
       <div id="co-lista"><div class="vacio">Cargando...</div></div>
     </div>`;
 
@@ -1431,12 +1431,12 @@ async function pantallaConsultar() {
 
   const cont = document.getElementById('co-lista');
   try {
-    // v1: solo la propia sucursal (un ROOT/ADMIN sin sucursal fija debe buscar por folio arriba)
+    // la administración ve las de todas las sucursales; los demás, las de la propia
     const codti = s.codti;
-    if (!codti) { cont.innerHTML = '<div class="vacio">Indica un folio para buscar.</div>'; return; }
-    const ordenes = await api('GET', '/api/ordenes-servicio/tienda/' + codti);
+    if (!SUPERIOR.includes(s.rol) && !codti) { cont.innerHTML = '<div class="vacio">Indica un folio para buscar.</div>'; return; }
+    const ordenes = await api('GET', SUPERIOR.includes(s.rol) ? '/api/ordenes-servicio/todas' : '/api/ordenes-servicio/tienda/' + codti);
     if (ordenes.length === 0) { cont.innerHTML = '<div class="vacio">No hay órdenes.</div>'; return; }
-    cont.innerHTML = tablaOrdenes(ordenes.slice(0, 25), s);
+    cont.innerHTML = tablaOrdenes(ordenes.slice(0, 40), s);
     cont.querySelectorAll('[data-id]').forEach(el => el.onclick = () => navegar('#/orden/' + el.dataset.id));
   } catch (err) {
     cont.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>`;

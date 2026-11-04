@@ -384,6 +384,9 @@ Si el técnico revisa el equipo y la reparación **no es posible** (no se consig
 - Si fue un error, **Reabrir** deja la orden otra vez en reparación y borra el reporte.
 - El **reporte de tiempos del taller** cuenta cuántas **no quedaron** y por qué motivo.
 
+### Ver las órdenes de todas las sucursales
+El **administrador** ve por omisión las órdenes de **todas las sucursales**; con el selector de sucursal puede quedarse con una sola. Para ver, por ejemplo, **lo que se recibió hoy**, deja el estado en **Todas** y elige **Recibidas hoy** en el filtro de fecha (también hay **Últimos 7 días** y **Este mes**). Cada orden indica en qué sucursal se recibió.
+
 ### Equipos listos que nadie recoge
 Entra a **Equipos por recoger**: muestra las reparaciones **listas que esperan al cliente**, las más viejas primero, con **dónde está** el equipo (en el taller o ya en la tienda), los **días sin recoger** (cuentan desde que regresó a la tienda), cuándo fue el último recordatorio y cuánto queda por pagar. Con **Avisar / recordar por WhatsApp** mandas el mensaje ya escrito.
 - A los **7 días** conviene recordárselo al cliente; a los **30 días** vence el plazo que dice su comprobante.
