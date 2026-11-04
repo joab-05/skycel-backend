@@ -17,6 +17,12 @@ Todo lo que se captura (ventas, inventario, caja) se guarda en un **servidor** e
 
 > No compartas tu contraseña. Si la olvidas, un administrador la cambia en **Empleados**.
 
+### Escribir montos y teléfonos
+Los campos de dinero ponen solos el signo **$** y las comas: escribes `1299.5` y se ve **$1,299.50**. Solo aceptan números y **dos decimales**. Los teléfonos son de **10 dígitos** y no dejan escribir más. El signo $ aparece dentro del campo y el monto se completa a dos decimales al salir de él.
+
+### Si te cambian de sucursal
+Solo el **encargado** y el **técnico** están ligados a una tienda; los vendedores (apoyos) y los administradores trabajan en la que se necesite. En la web, la sesión se pone al día sola (cada par de minutos y al volver a la pestaña). Un vendedor elige arriba la sucursal donde trabaja ese día.
+
 ### Moverse por el programa
 - El **menú de la izquierda** tiene todas las secciones: Ventas, Inventario, Finanzas, Clientes, Taller y Administración.
 - En el celular hay un acceso rápido abajo: **Inicio, Vender, Inventario y Caja**.
@@ -40,15 +46,21 @@ Cada persona tiene un rol, y el sistema solo le muestra lo que le corresponde.
 | Garantías | Sí | Sí | Sí | No |
 | Clientes: ver | Sí | Sí | Sí | No |
 | Clientes: crear y editar | No | Sí | Sí | No |
-| Cuentas por cobrar, compras y cuentas por pagar | No | Sí | Sí | No |
-| Traspasos, inventario físico y reportes | No | Sí | Sí | No |
+| Cuentas por cobrar | No | Sí | Sí | No |
+| Compras y cuentas por pagar | No | No | Sí | No |
+| Traspasos | No | Sí | Sí | Solo el **técnico encargado**, de su taller |
+| Inventario físico | No | Sí | Sí | No |
+| Reportes de ventas (por ticket y por artículo) | No | Sí | Sí | No |
+| Reportes de Gerencia (resultados, utilidad, inventario valorizado) | No | No | Sí | No |
+| Ver cuánto costó la mercancía y a qué proveedor se compró | No | No | Sí | No |
 | Ajustar las existencias de accesorios | No | Sí | Sí | No |
 | Registrar y editar productos y precios | No | No | Sí | No |
 | Descuentos, nómina y comisiones | No | No | Sí | No |
 | Configuración de la computadora (servidor, impresora, ticket) | No | Sí | Sí | No |
 | Empleados | No | No | Sí | No |
 
-> Un **encargado** solo ve la información de su tienda. Un **administrador** puede cambiar de sucursal o ver todas. Un **técnico** solo ve las órdenes del taller.
+> Un **encargado** solo ve la información de su tienda, y de fábrica **no ve costos ni proveedores** (eso es solo del administrador); el **técnico encargado** sí ve el costo de las refacciones de las órdenes que trabaja.
+> Un **encargado** ve solo su tienda. Un **administrador** puede cambiar de sucursal o ver todas. Un **técnico** solo ve las órdenes del taller.
 > El usuario **root** (y quien root autorice) puede cambiar lo que puede hacer cada rol en **Permisos** (sección Administración). La tabla de arriba es lo que trae el sistema de fábrica.
 
 ## Punto de Venta
@@ -63,7 +75,7 @@ La caja de tu tienda debe estar **abierta**. Si está cerrada, aparece el formul
 2. Toca el producto para agregarlo al carrito. Si tocas el mismo accesorio otra vez, sube la cantidad (sin pasar de las piezas que hay).
 3. Elige la **forma de pago**: **Efectivo**, **Transferencia** o **Mixto**. La tarjeta aparece solo si el administrador la habilita en **Ajustes**.
 4. En efectivo escribe lo que **recibes**; el sistema calcula el **cambio**.
-5. Pulsa **Cobrar**.
+5. Pulsa **Cobrar**. Si tocas dos veces por error, el sistema cobra **una sola vez**.
 
 Con pago **Mixto**, el cliente paga una parte de cada forma: escribe cuánto va en efectivo y cuánto en transferencia. El sistema te dice cuánto falta o cuánto se pasa y solo deja cobrar cuando **cuadra** con el total. En el cajón entra únicamente lo que se pagó en efectivo.
 
@@ -101,8 +113,9 @@ La caja es tu **turno de trabajo**: se **abre** al empezar el día con un fondo,
 
 ### Abrir la caja
 1. Entra a **Caja** y pulsa **Abrir caja** (el punto de venta también lo ofrece si está cerrada).
-2. Cuenta el efectivo del cajón y captúralo como **fondo inicial**. El sistema sugiere lo que se dejó al cerrar ayer.
+2. Cuenta el efectivo del cajón y captúralo como **fondo inicial**. El sistema sugiere lo que se dejó al cerrar ayer (con un enlace para usarlo).
 3. Si lo que contaste no coincide con lo que esperaba el sistema, la diferencia queda como **ajuste de apertura**.
+
 
 ### Durante el turno
 Con la caja abierta, arriba ves la cuenta del cajón: **fondo inicial + ventas en efectivo + entradas − salidas = efectivo esperado** (lo que debe haber en el cajón ahora).
@@ -111,10 +124,11 @@ Con la caja abierta, arriba ves la cuenta del cajón: **fondo inicial + ventas e
 - Las ventas con tarjeta o transferencia, y la parte financiada por PayJoy, **no** meten dinero al cajón.
 
 ### Cerrar la caja (corte)
-1. Cuenta el efectivo del cajón (billetes y monedas) y pulsa **Cerrar caja (corte)**.
-2. Captura el **efectivo contado**. El sistema **no te dice cuánto debería haber** antes de que lo captures: así el conteo es honesto.
-3. Escribe cuánto **se deja en el cajón para mañana** (por omisión, el fondo con que abriste). El resto se registra como retiro del cierre.
-4. Agrega observaciones si hace falta y confirma.
+La ventana de cierre te guía con **tres cuadros numerados** y un resumen:
+1. **Cuenta el efectivo del cajón** (billetes y monedas) y escribe el total en el primer campo. El sistema **no te dice cuánto debería haber** antes de que lo captures: así el conteo es honesto.
+2. **¿Cuánto se queda para mañana?** Es el fondo del siguiente turno (por omisión, el fondo con que abriste; el enlace **Dejar el mismo fondo de hoy** lo vuelve a poner). Lo demás se retira del cajón.
+3. **Observaciones** (opcional): por ejemplo, un billete roto o un retiro que no se anotó.
+4. Mientras escribes, el cuadro de abajo te dice **cuánto se retira del cajón** y **cuánto se queda**. Si el fondo es mayor a lo que contaste, avisa en rojo y el botón **Cerrar caja y generar corte** no se activa. Antes de cerrar te pregunta una última vez con las cifras.
 5. Se abre el **corte**: ahí ves el efectivo esperado, lo contado y si **cuadra**, hay **faltante** o hay **sobrante**.
 
 ### Cortes anteriores
@@ -157,7 +171,7 @@ Un **encargado** o **administrador** revisa la solicitud y pulsa **Aprobar y eje
 Muestra los productos de **tu tienda**: existencia, precio y el mínimo que conviene tener.
 
 ### Qué muestra
-Cada producto con su nombre, código, existencia y precios. Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay; con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
+Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞**. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay; con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
@@ -166,6 +180,7 @@ Cada producto con su nombre, código, existencia y precios. Los de **poca existe
 
 ### Cambiar precios y existencia
 - Solo un **administrador** edita los datos y los precios de un producto.
+- **Los precios son generales**: al guardar los precios, la casilla **Aplicar el precio de venta en todas las sucursales y en la bodega** viene marcada, así que el cambio llega a todas las tiendas (accesorios y servicios). Si la quitas, solo cambia en esa sucursal. El costo solo se cambia en las demás sucursales si tú lo modificaste.
 - Un **encargado** o administrador puede ajustar la existencia de un **accesorio**. **Siempre se pide el motivo** (robo, daño, error de captura…). Si lo hace un encargado, a los administradores les llega un aviso.
 - Los **equipos** no se ajustan por cantidad: cada uno tiene su IMEI, y su existencia cambia con una compra, venta, traspaso o inventario físico.
 - Un encargado o administrador puede marcar un producto como **rezagado** si no se mueve.
@@ -230,11 +245,13 @@ Junta en un solo lugar todo lo que **cambió las existencias fuera de una venta,
 
 ## Traspasos
 
-Mueven mercancía entre sucursales (y la bodega). Los manejan encargados y administradores.
+Mueven mercancía entre sucursales (y la bodega). Los manejan encargados y administradores; en el taller, también el **técnico encargado** (para pedir y recibir refacciones). Un técnico que no es el encargado no ve este módulo.
+
+Cada traspaso tiene **un solo folio**: cuando una solicitud se acepta y se genera su envío, los dos llevan el mismo número, así que se siguen como uno solo.
 
 ### Enviar mercancía
 1. Entra a **Traspasos** y pulsa **Nuevo envío**.
-2. Elige la tienda destino y agrega los productos. Escribe la cantidad o, en equipos, elige los **IMEI** que viajan.
+2. Elige la tienda destino y agrega los productos. Escribe la cantidad o, en equipos, elige los **IMEI** que viajan. Si **escaneas** (o escribes completo) el IMEI de un equipo, se **agrega solo** a la lista: ya no hay que buscarlo entre los IMEI disponibles.
 3. Al confirmar, la mercancía **sale del inventario** de tu tienda y queda «en tránsito».
 4. Si te equivocas antes de que la reciban, puedes **Anular** el envío.
 
@@ -309,12 +326,12 @@ Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en e
 2. Busca o captura al **cliente** (nombre y teléfono).
 3. Captura marca, modelo, IMEI, **accesorios que deja**, **estado físico** y la **falla reportada**.
    - **Revisión rápida:** marca en cada punto (enciende, pantalla y táctil, botones, cámaras, bocina y micrófono, carga, señal y Wi-Fi, humedad) si está **Bien**, **Falla** o **No se pudo probar**. Es tu constancia de cómo llegó el equipo y sale impresa en el comprobante.
-   - **Código de desbloqueo:** si el cliente te da su PIN, contraseña o patrón para poder probarlo, anótalo aquí. **Solo lo ve el taller**: no se imprime, no se manda por WhatsApp y se **borra solo** al entregar o cancelar la orden.
+   - **Código de desbloqueo:** si el cliente te da su PIN o contraseña para poder probarlo, anótalo aquí. Si es un **patrón** de puntos, pulsa **Dibujar patrón** (en JSystem, el botón **Patrón**): toca el primer punto y arrastra sin soltar por los demás (mínimo 4); queda guardado como «Patrón: 1-5-9-8» y, al consultarlo, se ve **dibujado**. **Solo lo ve el taller**: no se imprime, no se manda por WhatsApp y se **borra solo** al entregar o cancelar la orden.
 4. Escribe el **tiempo estimado**, en horas o días (por omisión, 3 horas; máximo 30 días). El sistema dice «Se le promete para el…» con día y hora.
 5. Si el cliente deja un **anticipo**, regístralo con su forma de pago. En efectivo entra a la caja del turno.
 6. Pulsa **Recibir equipo**. Se genera el folio **OS-…** que se le entrega al cliente.
-7. **Imprime el comprobante** y entrégaselo al cliente (el programa te lo ofrece al terminar; también está en el botón **Comprobante** o **Imprimir comprobante** de la orden). Lleva el folio, el equipo, la falla, el anticipo, la fecha prometida, un **código QR** para seguir la reparación desde su celular y las condiciones del servicio. Que el cliente lo **firme**.
-8. **Toma fotos del equipo** en la misma orden (sección **Fotos del equipo**): golpes, rayones o la pantalla, antes de trabajarlo. Puedes subir hasta 8; en el celular el botón abre la cámara. Se borran solas 90 días después de que la orden se entrega o cancela.
+7. **Imprime el comprobante** y entrégaselo al cliente (el programa te lo ofrece al terminar; también está en el botón **Comprobante** o **Imprimir comprobante** de la orden). Lleva el folio, el equipo, la falla, el anticipo, la fecha prometida, un **código QR** para seguir la reparación desde su celular y las condiciones del servicio. Que el cliente lo **firme**. Sale bien en impresoras de **58 mm** y de **80 mm**: en la web elige el papel arriba del comprobante (se recuerda en esa computadora); si el ticket es largo, JSystem lo reparte en varias hojas sin cortar el QR.
+8. **Toma fotos del equipo** en la misma orden (sección **Fotos del equipo**): golpes, rayones o la pantalla, antes de trabajarlo. Puedes subir hasta 8; en el celular hay un botón para **tomar la foto** y otro para **elegirla de la galería**. Se borran solas 90 días después de que la orden se entrega o cancela.
 
 La recepción también funciona **sin conexión** en JSystem: el comprobante sale con un folio provisional y sin QR; el definitivo (OS-…) se le da cuando se envíe al servidor.
 
@@ -348,9 +365,9 @@ Si el equipo se repara en la misma sucursal que lo recibió, no hay viaje y este
 Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las tiendas**.
 1. Un técnico **recibe en el taller** una orden libre (el equipo ya llegó de la tienda) o el técnico encargado se la **asigna**.
 2. **Iniciar reparación** cambia la orden a «En reparación».
-3. Agrega **renglones** (refacciones y servicios con su precio) y **observaciones**, que quedan en el historial. Las **refacciones salen del inventario del taller** (la sucursal del técnico), no del de la sucursal que recibió el equipo; cada renglón dice de dónde sale.
+3. Agrega **renglones** (refacciones y servicios con su precio) y **observaciones**, que quedan en el historial. El **técnico encargado** ve el **costo** de cada refacción; los demás ven solo el precio. Las **refacciones salen del inventario del taller** (la sucursal del técnico), no del de la sucursal que recibió el equipo; cada renglón dice de dónde sale.
 4. **Pedir autorización** al cliente cuando el costo esté listo (ver arriba).
-5. **Marcar lista** avisa a la sucursal que el equipo ya está listo en el taller y debe regresar. Si hace falta corregir algo, **Reabrir** (el equipo vuelve a quedar en reparación).
+5. **Marcar lista** avisa a la sucursal que el equipo ya está listo en el taller y debe regresar. El botón **no se puede pulsar mientras la orden no tenga servicios ni refacciones**: agrega al menos un renglón. Si hace falta corregir algo, **Reabrir** (el equipo vuelve a quedar en reparación).
 
 ### Cuando falta una refacción
 Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Esperar refacción** y escribe cuál es (por ejemplo, «pantalla original, llega el jueves»).
@@ -411,7 +428,9 @@ Esta sección la usan encargados y administradores.
 
 ## Descuentos
 
-El administrador define **reglas de descuento**. Cada regla puede limitarse a una **categoría** (una principal, que vale también para sus subcategorías, o solo una subcategoría), a un **tipo de producto**, a un **producto** o a una **tienda**. También puede pedir un **monto mínimo** de compra, descontar un **porcentaje** o una **cantidad fija**, y valer solo ciertos **días de la semana** o entre dos **fechas**. El sistema las **aplica solo al cobrar**; el vendedor no captura descuentos a mano. Una regla se puede **activar o desactivar** sin borrarla.
+El administrador define **reglas de descuento**. Cada regla puede limitarse a una **categoría** (una principal, que vale también para sus subcategorías, o solo una subcategoría), a un **tipo de producto**, a un **artículo específico** (un modelo de celular, un accesorio o un servicio) o a una **tienda**. También puede pedir un **monto mínimo** de compra, descontar un **porcentaje** o una **cantidad fija**, y valer solo ciertos **días de la semana** o entre dos **fechas**. El sistema las **aplica solo al cobrar**; el vendedor no captura descuentos a mano. Una regla se puede **activar o desactivar** sin borrarla.
+
+La regla por artículo específico se arma desde JSystem. Para cambiar el **precio** de algo, usa Inventario: los precios son generales.
 
 ### Solicitudes de descuento (administrador)
 Arriba de la pantalla aparecen las **solicitudes** que piden vendedores y encargados desde el punto de venta: sucursal, quién la pidió, el artículo, su precio, cuánto piden y el motivo. Puedes **aprobar** lo pedido, **aprobar con otro monto** o **rechazar** (con un motivo opcional). La lista se actualiza sola y también llega un aviso.
@@ -432,7 +451,7 @@ En el punto de venta se aplica sola: el renglón muestra **🎁 Promoción de eq
 
 ## Reportes
 
-Para encargados (su tienda) y administradores (todas o la que elijan).
+**Ventas** es para encargados (su tienda) y administradores. Los demás reportes (Resultados, Gerencial, Rezagados y Caja) son **solo para administradores**.
 
 | Reporte | Para qué sirve |
 |---|---|
@@ -456,7 +475,7 @@ Elige la **sucursal** (si eres administrador) y el **periodo** (Hoy, Ayer, 7 dí
 
 Sección de administración (los descansos también los ve el encargado).
 
-- **Empleados**: personal, sucursal y **rol**. Aquí se da de alta a quien va a usar el sistema y se cambia su contraseña si la olvidó. Los técnicos se marcan con su rol; uno de ellos puede ser el **técnico encargado**, que reparte las órdenes del taller.
+- **Empleados**: personal, sucursal y **rol**. Aquí se da de alta a quien va a usar el sistema y se cambia su contraseña si la olvidó. La sucursal solo **liga** al encargado (y al técnico); para un vendedor o un administrador es su «sucursal base» y pueden trabajar en cualquiera. Los técnicos se marcan con su rol; uno de ellos puede ser el **técnico encargado**, que reparte las órdenes del taller.
 - **Nómina**: períodos de pago con las **percepciones** y **deducciones** de cada empleado y su pago. **Historial de nómina** guarda los períodos anteriores. Los **faltantes de caja** se descuentan solos: el sistema agrega como deducción el faltante de cada corte cerrado en el período, a quien cerró el turno. **Traer faltantes de caja** los actualiza. Si quitas esa deducción, el faltante queda **perdonado**. Los sobrantes no se compensan.
 - **Comisiones**: comisiones por ventas del periodo y su pago.
 - **Descansos**: descansos y vacaciones del personal, con su saldo.
@@ -517,7 +536,10 @@ Si fue hace poco y no tiene devoluciones ni abonos, un encargado o administrador
 Avisa a un administrador: un IMEI registrado no se edita desde el punto de venta. Con un inventario físico o un ajuste se corrige.
 
 ### Olvidé mi contraseña
-Un administrador la cambia en **Empleados**.
+Un administrador la cambia en **Empleados**. Si te la sabes y quieres cambiarla, usa **Cambiar mi contraseña** (en JSystem, la llave de arriba a la derecha; en la web, **Ajustes**).
+
+### Me aparece otra sucursal de la que debería
+Si te cambiaron de sucursal hace poco, **cierra sesión y vuelve a entrar**. Un encargado siempre trabaja con la tienda de su usuario; un vendedor o un administrador, con la sucursal que tenga configurada la computadora (JSystem) o la que elija arriba (web).
 
 ### ¿Cómo sé si estoy en línea?
 La barra de conexión de arriba lo indica. Si dice que hay pendientes, se envían solos al reconectar.
