@@ -338,6 +338,19 @@ public class OrdenServicioController {
                 ordenService.entregar(id, request != null ? request : new EntregaRequestDto(), user.getUsername()), "orden de servicio");
     }
 
+    @Operation(summary = "Solo entregar un equipo que no se pudo reparar",
+            description = "Sin cobro y sin generar una venta. Solo para órdenes reportadas como «no quedó» y sin nada que cobrar; devuelve el anticipo en efectivo.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/entregar-sin-reparar")
+    @PreAuthorize("@permisos.tiene('ORDEN_RECIBIR')")
+    public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> entregarSinReparar(
+            @PathVariable Integer id,
+            @Valid @RequestBody(required = false) com.skycel.backend.dto.ordenservicio.SoloEntregarRequestDto request,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(ordenService.entregarSinReparar(id,
+                request != null ? request : new com.skycel.backend.dto.ordenservicio.SoloEntregarRequestDto(), user.getUsername()), "orden de servicio");
+    }
+
     @Operation(summary = "Cancelar la orden", description = "Opcionalmente devuelve los anticipos en efectivo.")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/cancelar")

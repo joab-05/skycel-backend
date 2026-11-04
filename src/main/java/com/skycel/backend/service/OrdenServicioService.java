@@ -827,6 +827,10 @@ public class OrdenServicioService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Los anticipos ($" + pagado + ") superan el total de la orden ($"
                     + total + "). Ajuste los renglones o cancele la orden devolviendo el anticipo.");
         }
+        if (orden.getNoQuedoMotivo() != null && total.signum() == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La reparación de la orden " + orden.getFolio()
+                    + " no quedó y no tiene nada que cobrar: usa «Solo entregar», que no genera una venta en $0.");
+        }
         BigDecimal saldo = total.subtract(pagado);
         Caja caja = movimientoCajaService.cajaParaTienda(dto.getIdCaja(), orden.getTienda());
 
@@ -866,6 +870,57 @@ public class OrdenServicioService {
                 + (dias > 0 ? ". Garantía hasta " + orden.getFechaGarantiaHasta() : ""));
         OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
         notificarCambioOrden(orden, "El equipo fue entregado");
+        return resultado;
+    }
+
+    /**
+     * Solo entregar: devolverle al cliente el equipo que no se pudo reparar, sin cobrar y sin generar una venta (una venta en $0
+     * solo ensucia los reportes). Es para las órdenes que el técnico reportó como «no quedó» y no tienen nada que cobrar; si se
+     * acordó cobrar algo (la revisión), se deja como renglón y se usa «Entregar y cobrar». Un anticipo en efectivo se devuelve.
+     */
+    @Transactional
+    public OrdenServicioResponseDto entregarSinReparar(Integer id, SoloEntregarRequestDto dto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirGestiona(usuario, orden);
+        exigirEstado(orden, "entregar", LISTA);
+        if (orden.getNoQuedoMotivo() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Solo se entrega sin cobrar una orden que el técnico reportó como «no quedó». "
+                    + "Para una reparación hecha, usa «Entregar y cobrar».");
+        }
+        if (regresoPendiente(orden)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El equipo de la orden " + orden.getFolio() + " sigue en " + tallerDe(orden).getNombre()
+                    + ". Cuando llegue a " + orden.getTienda().getNombre() + ", pulsa «Regresó a la tienda» y entonces se puede entregar.");
+        }
+        BigDecimal total = total(detalleRepository.findByOrden_IdordenOrderByIddetalle(id));
+        if (total.signum() > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La orden tiene servicios o refacciones por $" + total
+                    + ": cóbralos con «Entregar y cobrar» o quítalos si no se van a cobrar.");
+        }
+        List<OrdenServicioAnticipo> anticipos = anticipoRepository.findByOrden_IdordenOrderByIdanticipo(id);
+        BigDecimal pagado = anticipos.stream().map(OrdenServicioAnticipo::getMonto).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal devuelto = BigDecimal.ZERO;
+        if (pagado.signum() > 0) {
+            if (!Boolean.TRUE.equals(dto.getDevolverAnticipo())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "La orden tiene anticipos por $" + pagado
+                        + " y no se va a cobrar nada: hay que devolvérselos al cliente.");
+            }
+            for (OrdenServicioAnticipo a : anticipos) {
+                if (a.getMetodoPago() == METODO_EFECTIVO && a.getIdmovimientoCaja() != null) {
+                    movimientoCajaService.registrarDevolucionAnticipo(orden, a, usuario);
+                    devuelto = devuelto.add(a.getMonto());
+                }
+            }
+        }
+        orden.setEstado(ENTREGADA);
+        orden.setFechaEntrega(LocalDateTime.now());
+        orden.setCodigoDesbloqueo(null);   // ya no hace falta y no se debe quedar guardado
+        registrar(orden, usuario, "Equipo entregado SIN REPARAR y sin cobro (no se generó venta)"
+                + (devuelto.signum() > 0 ? ". Anticipo devuelto en efectivo: $" + devuelto : "")
+                + (pagado.subtract(devuelto).signum() > 0 ? ". Anticipo no efectivo por $" + pagado.subtract(devuelto) + ": devolverlo por el mismo medio" : "")
+                + (trimOrNull(dto.getObservaciones()) != null ? ". " + dto.getObservaciones().trim() : ""));
+        OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
+        notificarCambioOrden(orden, "El equipo se entregó sin reparar");
         return resultado;
     }
 
@@ -970,6 +1025,7 @@ public class OrdenServicioService {
                         : o.getEstado() == LISTA && o.getNoQuedoMotivo() != null
                                 ? "No fue posible reparar tu equipo (" + MOTIVOS_NO_QUEDO.getOrDefault(o.getNoQuedoMotivo(), "ver detalles")
                                         + "). " + (regresoPendiente(o) ? "Va de regreso a la sucursal; te avisamos cuando puedas recogerlo." : "Pasa a recogerlo a la sucursal: ahí te dan los detalles.")
+                        : o.getEstado() == ENTREGADA && o.getNoQuedoMotivo() != null ? "Tu equipo se te entregó sin reparación."
                         : regresoPendiente(o) ? "Tu equipo ya está reparado y va de regreso a la sucursal. Te avisamos en cuanto puedas recogerlo."
                         : mensajeParaElCliente(o.getEstado()))
                 .fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).fechaPromesaHora(o.getFechaPromesaHora())
@@ -1410,7 +1466,8 @@ public class OrdenServicioService {
                 .marca(o.getMarca()).modelo(o.getModelo()).imei(o.getImei())
                 .accesoriosDejados(o.getAccesoriosDejados()).estadoFisico(o.getEstadoFisico())
                 .fallaReportada(o.getFallaReportada()).diagnostico(o.getDiagnostico())
-                .estado(o.getEstado()).estadoDisplay(o.getEstado() == LISTA && o.getNoQuedoMotivo() != null ? "Sin reparación" : estadoDisplay(o.getEstado()))
+                .estado(o.getEstado()).estadoDisplay(o.getNoQuedoMotivo() != null && o.getEstado() == LISTA ? "Sin reparación"
+                        : o.getNoQuedoMotivo() != null && o.getEstado() == ENTREGADA ? "Entregada sin reparar" : estadoDisplay(o.getEstado()))
                 .noQuedoMotivo(o.getNoQuedoMotivo()).noQuedoMotivoDisplay(o.getNoQuedoMotivo() == null ? null : MOTIVOS_NO_QUEDO.getOrDefault(o.getNoQuedoMotivo(), o.getNoQuedoMotivo()))
                 .noQuedoDetalle(o.getNoQuedoDetalle()).noQuedoFecha(o.getNoQuedoFecha()).noQuedoPor(o.getNoQuedoPor())
                 .folioLocal(o.getFolioLocal()).fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).horasEstimadas(o.getHorasEstimadas()).fechaPromesaHora(o.getFechaPromesaHora())

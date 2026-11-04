@@ -380,7 +380,7 @@ Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Espe
 Si el técnico revisa el equipo y la reparación **no es posible** (no se consigue la pieza, daño en la placa, humedad, no conviene repararlo, el cliente desistió…), pulsa **No quedó**, elige el **motivo** de la lista y, si quiere, cuenta qué pasó (si elige «otro motivo», es obligatorio). Solo se puede reportar mientras la orden está recibida o en reparación.
 - La orden pasa a **Sin reparación** (aparece en rojo en las listas): el equipo regresa a la sucursal igual que uno reparado, la sucursal recibe un aviso con el motivo y todo queda en la bitácora.
 - Al llegar a la tienda se pulsa **Regresó a la tienda**. Desde **Avisar por WhatsApp** se manda al cliente el aviso **No se pudo reparar**, ya escrito con el motivo.
-- Para entregarlo **sin cobrar**, quita los renglones o **cancela** la orden devolviendo el anticipo. Si se acuerda cobrar algo (por ejemplo la revisión), déjalo como renglón y usa **Entregar y cobrar**.
+- Para devolverle el equipo **sin cobrar**, pulsa **Solo entregar**: la orden queda como «Entregada sin reparar» y **no se genera ninguna venta** (una venta en $0 solo ensucia los reportes). Si la orden tiene un anticipo, el de **efectivo** se devuelve en ese momento de la caja; uno con tarjeta o transferencia se devuelve por el mismo medio. Si se acuerda cobrar algo (por ejemplo la revisión), déjalo como renglón y usa **Entregar y cobrar**.
 - Si fue un error, **Reabrir** deja la orden otra vez en reparación y borra el reporte.
 - El **reporte de tiempos del taller** cuenta cuántas **no quedaron** y por qué motivo.
 

@@ -1445,6 +1445,102 @@ class OrdenServicioServiceTest {
     }
 
     @Nested
+    @DisplayName("solo entregar un equipo que no se pudo reparar")
+    class SoloEntregar {
+
+        private NoQuedoRequestDto reporte() {
+            NoQuedoRequestDto d = new NoQuedoRequestDto();
+            d.setMotivo("HUMEDAD");
+            return d;
+        }
+
+        private SoloEntregarRequestDto soloEntregar(boolean devolver) {
+            SoloEntregarRequestDto d = new SoloEntregarRequestDto();
+            d.setDevolverAnticipo(devolver);
+            return d;
+        }
+
+        /** Una orden sin nada que cobrar, ya reportada como «no quedó». */
+        private int sinReparar() {
+            int o = orden();
+            service.iniciar(o, "juan.perez");
+            service.noQuedo(o, reporte(), "juan.perez");
+            return o;
+        }
+
+        @Test
+        @DisplayName("la orden queda «Entregada sin reparar» y NO se genera ninguna venta (ni en $0)")
+        void sinVenta() {
+            int o = sinReparar();
+
+            OrdenServicioResponseDto r = service.entregarSinReparar(o, soloEntregar(false), "abigail");
+
+            assertThat(r.getEstado()).isEqualTo(OrdenServicioService.ENTREGADA);
+            assertThat(r.getEstadoDisplay()).isEqualTo("Entregada sin reparar");
+            assertThat(r.getIdventa()).isNull();
+            assertThat(r.getFechaEntrega()).isNotNull();
+            verify(ventaService, never()).crearDesdeOrdenServicio(any(), anyInt());
+            assertThat(historial.stream().map(OrdenServicioHistorial::getComentario)).anyMatch(c -> c.contains("SIN REPARAR"));
+            assertThat(service.consultaPublica(viva(o).getFolio(), "0001").getMensaje()).contains("sin reparación");
+        }
+
+        @Test
+        @DisplayName("«Entregar y cobrar» de una orden que no quedó y no tiene nada que cobrar se rechaza (409): no se crea una venta en $0")
+        void entregarYCobrarNo() {
+            int o = sinReparar();
+            assertEstado(HttpStatus.CONFLICT, () -> service.entregar(o, new EntregaRequestDto(), "abigail"));
+            verify(ventaService, never()).crearDesdeOrdenServicio(any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("si se acordó cobrar algo (la revisión), se cobra con «Entregar y cobrar» y «Solo entregar» no aplica")
+        void conRenglones() {
+            int o = orden(linea("SRV-000001", 1, "150", false));
+            service.iniciar(o, "juan.perez");
+            service.noQuedo(o, reporte(), "juan.perez");
+
+            assertEstado(HttpStatus.CONFLICT, () -> service.entregarSinReparar(o, soloEntregar(false), "abigail"));
+            EntregaRequestDto cobro = new EntregaRequestDto();
+            cobro.setMetodoPago((byte) 1);
+            assertThat(service.entregar(o, cobro, "abigail").getEstado()).isEqualTo(OrdenServicioService.ENTREGADA);
+            verify(ventaService).crearDesdeOrdenServicio(any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("una reparación que sí quedó no se entrega sin cobrar")
+        void soloLasQueNoQuedaron() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.iniciar(o, "juan.perez");
+            service.marcarLista(o, "juan.perez");
+            assertEstado(HttpStatus.CONFLICT, () -> service.entregarSinReparar(o, soloEntregar(false), "abigail"));
+        }
+
+        @Test
+        @DisplayName("con anticipo hay que devolverlo: sin marcar la devolución, 409; marcada, se devuelve el efectivo de la caja")
+        void conAnticipo() {
+            int o = orden();
+            service.registrarAnticipo(o, anticipo("300", 1), "abigail");
+            service.iniciar(o, "juan.perez");
+            service.noQuedo(o, reporte(), "juan.perez");
+
+            assertEstado(HttpStatus.CONFLICT, () -> service.entregarSinReparar(o, soloEntregar(false), "abigail"));
+            verify(movimientoCajaService, never()).registrarDevolucionAnticipo(any(), any(), any());
+
+            service.entregarSinReparar(o, soloEntregar(true), "abigail");
+
+            verify(movimientoCajaService).registrarDevolucionAnticipo(any(OrdenServicio.class), any(OrdenServicioAnticipo.class), any(Usuario.class));
+            verify(ventaService, never()).crearDesdeOrdenServicio(any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("el técnico no entrega: es del personal de la tienda")
+        void soloLaTienda() {
+            int o = sinReparar();
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.entregarSinReparar(o, soloEntregar(false), "juan.perez"));
+        }
+    }
+
+    @Nested
     @DisplayName("espera de refacción")
     class Espera {
 

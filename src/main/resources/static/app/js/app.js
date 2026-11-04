@@ -1618,7 +1618,7 @@ async function pantallaOrdenDetalle(id) {
   const cuadroNoQuedo = () => !o.noQuedoMotivo ? '' : `<div class="tarjeta" style="border-left:5px solid #dc2626;">
     <h2>${ic('circle-x')} La reparación no quedó: ${escapar(o.noQuedoMotivoDisplay || '')}</h2>
     <p>${o.noQuedoDetalle ? escapar(o.noQuedoDetalle) + '<br>' : ''}<span class="ayuda">Lo reportó ${escapar(o.noQuedoPor || '')} · ${formatoFecha(o.noQuedoFecha)}</span></p>
-    ${o.estado === 3 ? `<p class="ayuda">${o.regresoPendiente ? 'El equipo debe regresar a ' + escapar(o.nombreTienda || 'la sucursal') + '; al llegar, toca «Regresó a la tienda». ' : ''}Avísale al cliente con «Avisar por WhatsApp» → «No se pudo reparar». Para entregarlo sin cobrar, quita los renglones o cancela la orden devolviendo el anticipo; si se acuerda cobrar algo (por ejemplo la revisión), déjalo como renglón y usa «Entregar y cobrar».</p>` : ''}</div>`;
+    ${o.estado === 3 ? `<p class="ayuda">${o.regresoPendiente ? 'El equipo debe regresar a ' + escapar(o.nombreTienda || 'la sucursal') + '; al llegar, toca «Regresó a la tienda». ' : ''}Avísale al cliente con «Avisar por WhatsApp» → «No se pudo reparar». Para devolverle el equipo sin cobrar usa «Solo entregar» en JSystem (no genera una venta en $0); si se acuerda cobrar algo (por ejemplo la revisión), déjalo como renglón y usa «Entregar y cobrar».</p>` : ''}</div>`;
 
   /** La reparación detenida porque falta una pieza. */
   const cuadroEspera = () => !o.esperaMotivo ? '' : `<div class="tarjeta" style="border-left:5px solid #c2410c;">
