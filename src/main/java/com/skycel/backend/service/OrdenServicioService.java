@@ -76,6 +76,21 @@ public class OrdenServicioService {
     private String urlPublica;
 
     /** Autorización del cliente a la cotización (orden_servicio.autorizacion_estado). */
+    /** Por qué una reparación no quedó (código → texto que ven el cliente y la tienda). Los códigos se guardan; los textos se pueden afinar. */
+    public static final Map<String, String> MOTIVOS_NO_QUEDO;
+    static {
+        Map<String, String> m = new LinkedHashMap<>();
+        m.put("SIN_REFACCION", "no se consiguió la refacción");
+        m.put("PLACA_DANADA", "daño en la tarjeta madre (placa)");
+        m.put("HUMEDAD", "daño por humedad");
+        m.put("PANTALLA_DANADA", "daño mayor en pantalla o carcasa");
+        m.put("SOFTWARE", "falla de software que no se pudo resolver");
+        m.put("NO_CONVIENE", "no conviene repararlo (costo mayor al valor del equipo)");
+        m.put("CLIENTE_DESISTE", "el cliente decidió no repararlo");
+        m.put("OTRO", "otro motivo");
+        MOTIVOS_NO_QUEDO = java.util.Collections.unmodifiableMap(m);
+    }
+
     public static final byte AUT_PENDIENTE  = 1;
     public static final byte AUT_AUTORIZADA = 2;
     public static final byte AUT_RECHAZADA  = 3;
@@ -498,7 +513,7 @@ public class OrdenServicioService {
             try { tipo = OrdenAvisos.Tipo.valueOf(tipoPedido.trim().toUpperCase()); }
             catch (IllegalArgumentException ex) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de aviso no válido: " + tipoPedido); }
         }
-        if (regresoPendiente(orden) && (tipo == OrdenAvisos.Tipo.LISTA || tipo == OrdenAvisos.Tipo.RECORDATORIO)) {
+        if (regresoPendiente(orden) && (tipo == OrdenAvisos.Tipo.LISTA || tipo == OrdenAvisos.Tipo.RECORDATORIO || tipo == OrdenAvisos.Tipo.SIN_REPARACION)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "El equipo aún no regresa de " + tallerDe(orden).getNombre() + " a " + orden.getTienda().getNombre()
                     + ": avísale al cliente que ya puede recogerlo cuando llegue (pulsa «Regresó a la tienda»).");
         }
@@ -512,6 +527,12 @@ public class OrdenServicioService {
         BigDecimal pagado = anticipoRepository.findByOrden_IdordenOrderByIdanticipo(id).stream()
                 .map(OrdenServicioAnticipo::getMonto).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal saldo = total.subtract(pagado).max(BigDecimal.ZERO);
+        if (tipo == OrdenAvisos.Tipo.SIN_REPARACION && orden.getNoQuedoMotivo() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta orden no tiene reportado que no quedó: el técnico lo reporta primero.");
+        }
+        if ((tipo == OrdenAvisos.Tipo.LISTA || tipo == OrdenAvisos.Tipo.RECORDATORIO) && orden.getNoQuedoMotivo() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La reparación no quedó: avísale con «No se pudo reparar», no con «Equipo listo».");
+        }
         if ((tipo == OrdenAvisos.Tipo.COTIZACION || tipo == OrdenAvisos.Tipo.PRECIO_CAMBIO) && total.signum() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "La orden no tiene servicios ni refacciones: agrégalos antes de avisarle la cotización al cliente.");
@@ -522,7 +543,7 @@ public class OrdenServicioService {
                 orden.getTienda().getUbicacion(), orden.getCliente().getNombreCompleto(), orden.getMarca() + " " + orden.getModelo(),
                 orden.getFolio(), orden.getDiagnostico(), total, orden.getAutorizacionTotalPrevio(), pagado, saldo,
                 orden.getFechaPromesaHora(), orden.getFechaPromesa(), orden.getFechaLista(), orden.getDiasGarantia(), orden.getFechaGarantiaHasta(),
-                base + "/seguimiento/?f=" + orden.getFolio(), orden.getEsperaMotivo());
+                base + "/seguimiento/?f=" + orden.getFolio(), orden.getEsperaMotivo(), motivoNoQuedo(orden));
         String texto = OrdenAvisos.texto(tipo, datos);
         registrar(orden, usuario, "Aviso por WhatsApp al cliente: " + tipo.etiqueta());
         if (tipo == OrdenAvisos.Tipo.RECORDATORIO) {
@@ -538,8 +559,16 @@ public class OrdenServicioService {
         return r;
     }
 
+    /** «Daño en la placa: ya no enciende»: el motivo y, si lo hay, lo que contó el técnico. null si sí se reparó. */
+    private static String motivoNoQuedo(OrdenServicio o) {
+        if (o.getNoQuedoMotivo() == null) return null;
+        String base = MOTIVOS_NO_QUEDO.getOrDefault(o.getNoQuedoMotivo(), o.getNoQuedoMotivo());
+        return o.getNoQuedoDetalle() != null ? base + " (" + o.getNoQuedoDetalle() + ")" : base;
+    }
+
     private OrdenAvisos.Tipo tipoSugerido(OrdenServicio o) {
         if (o.getEstado() == ENTREGADA) return OrdenAvisos.Tipo.ENTREGADA;
+        if (o.getEstado() == LISTA && o.getNoQuedoMotivo() != null) return OrdenAvisos.Tipo.SIN_REPARACION;
         if (o.getEstado() == LISTA) {
             return o.getUltimoRecordatorio() == null && diasSinRecoger(o) < DIAS_PARA_RECORDAR ? OrdenAvisos.Tipo.LISTA : OrdenAvisos.Tipo.RECORDATORIO;
         }
@@ -649,6 +678,48 @@ public class OrdenServicioService {
         return toDto(ordenRepository.save(orden));
     }
 
+    /**
+     * El técnico reporta que la reparación <b>no quedó</b> y por qué. La orden pasa a «lista» sin reparación: el equipo regresa a la
+     * sucursal (si se trabajó en otra) y ahí se le avisa al cliente y se le entrega; el motivo queda en la orden, en la bitácora y en el reporte.
+     */
+    @Transactional
+    public OrdenServicioResponseDto noQuedo(Integer id, NoQuedoRequestDto dto, String username) {
+        Usuario usuario = usuarioPorUsername(username);
+        OrdenServicio orden = orden(id);
+        exigirTaller(usuario, orden);
+        exigirEstado(orden, "reportar que no quedó", RECIBIDA, EN_REPARACION);
+        String codigo = dto.getMotivo() == null ? "" : dto.getMotivo().trim().toUpperCase();
+        if (!MOTIVOS_NO_QUEDO.containsKey(codigo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Motivo no válido: " + dto.getMotivo() + ". Elige uno de la lista.");
+        }
+        String detalle = trimOrNull(dto.getDetalle());
+        if ("OTRO".equals(codigo) && (detalle == null || detalle.length() < 5)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Si el motivo es «otro», cuenta qué pasó (al menos unas palabras).");
+        }
+        cerrarEspera(orden);
+        orden.setNoQuedoMotivo(codigo);
+        orden.setNoQuedoDetalle(detalle);
+        orden.setNoQuedoFecha(LocalDateTime.now());
+        orden.setNoQuedoPor(usuario.getNombreCompleto());
+        orden.setEstado(LISTA);
+        orden.setFechaLista(LocalDateTime.now());
+        boolean enElTaller = requiereRegreso(orden);
+        orden.setFechaRegresoTienda(enElTaller ? null : LocalDateTime.now());
+        String resumen = MOTIVOS_NO_QUEDO.get(codigo) + (detalle != null ? " — " + detalle : "");
+        registrar(orden, usuario, "NO QUEDÓ la reparación: " + resumen
+                + (enElTaller ? ". El equipo debe regresar a " + orden.getTienda().getNombre() : ". Listo para devolverlo al cliente sin reparación"));
+        OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
+        notificarCambioOrden(orden, "No se pudo reparar (" + resumen + ")" + (enElTaller ? ": el equipo debe regresar a " + orden.getTienda().getNombre() : ": avísale al cliente"));
+        return resultado;
+    }
+
+    private void limpiarNoQuedo(OrdenServicio orden) {
+        orden.setNoQuedoMotivo(null);
+        orden.setNoQuedoDetalle(null);
+        orden.setNoQuedoFecha(null);
+        orden.setNoQuedoPor(null);
+    }
+
     /** Vuelve a reparación una orden ya marcada como lista (p. ej. el cliente detectó otra falla). */
     @Transactional
     public OrdenServicioResponseDto reabrir(Integer id, ComentarioRequestDto dto, String username) {
@@ -659,6 +730,7 @@ public class OrdenServicioService {
         orden.setEstado(EN_REPARACION);
         orden.setFechaLista(null);
         orden.setFechaRegresoTienda(null);
+        limpiarNoQuedo(orden);   // si se había reportado que no quedó, se vuelve a intentar
         registrar(orden, usuario, "Reabierta: " + dto.getComentario().trim());
         OrdenServicioResponseDto resultado = toDto(ordenRepository.save(orden));
         notificarCambioOrden(orden, "Se reabrió la reparación: " + dto.getComentario().trim());
@@ -885,6 +957,9 @@ public class OrdenServicioService {
                 .sucursal(o.getTienda().getNombre())
                 .estado(estadoDisplay(o.getEstado())).mensaje(o.getEsperaDesde() != null && o.getEstado() != LISTA && o.getEstado() != ENTREGADA && o.getEstado() != CANCELADA
                         ? "Estamos esperando una refacción para terminar la reparación de tu equipo. En cuanto llegue seguimos y te avisamos."
+                        : o.getEstado() == LISTA && o.getNoQuedoMotivo() != null
+                                ? "No fue posible reparar tu equipo (" + MOTIVOS_NO_QUEDO.getOrDefault(o.getNoQuedoMotivo(), "ver detalles")
+                                        + "). " + (regresoPendiente(o) ? "Va de regreso a la sucursal; te avisamos cuando puedas recogerlo." : "Pasa a recogerlo a la sucursal: ahí te dan los detalles.")
                         : regresoPendiente(o) ? "Tu equipo ya está reparado y va de regreso a la sucursal. Te avisamos en cuanto puedas recogerlo."
                         : mensajeParaElCliente(o.getEstado()))
                 .fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).fechaPromesaHora(o.getFechaPromesaHora())
@@ -1006,6 +1081,20 @@ public class OrdenServicioService {
         Map<String, Object> r = OrdenReporte.calcular(ordenes, LocalDateTime.now());
         // Los equipos que esperan hoy en la tienda, sin importar cuándo se recibieron
         List<OrdenServicio> listas = ordenRepository.listasSinRecoger(codti);
+        // Las que no quedaron: cuántas y por qué (y quién las reportó)
+        List<OrdenServicio> noQuedaron = ordenes.stream().filter(o -> o.getNoQuedoMotivo() != null).collect(java.util.stream.Collectors.toList());
+        r.put("noQuedaron", noQuedaron.size());
+        List<Map<String, Object>> porMotivo = new ArrayList<>();
+        noQuedaron.stream().collect(java.util.stream.Collectors.groupingBy(OrdenServicio::getNoQuedoMotivo, LinkedHashMap::new, java.util.stream.Collectors.counting()))
+                .forEach((codigo, n) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("motivo", codigo);
+                    m.put("etiqueta", MOTIVOS_NO_QUEDO.getOrDefault(codigo, codigo));
+                    m.put("cantidad", n);
+                    porMotivo.add(m);
+                });
+        porMotivo.sort((a, b) -> Long.compare((Long) b.get("cantidad"), (Long) a.get("cantidad")));
+        r.put("noQuedaronPorMotivo", porMotivo);
         r.put("listasSinRecoger", listas.size());
         r.put("listasMasDe30Dias", listas.stream().filter(o -> diasSinRecoger(o) >= DIAS_PLAZO_RECOGER).count());
         r.put("desde", ini);
@@ -1311,7 +1400,9 @@ public class OrdenServicioService {
                 .marca(o.getMarca()).modelo(o.getModelo()).imei(o.getImei())
                 .accesoriosDejados(o.getAccesoriosDejados()).estadoFisico(o.getEstadoFisico())
                 .fallaReportada(o.getFallaReportada()).diagnostico(o.getDiagnostico())
-                .estado(o.getEstado()).estadoDisplay(estadoDisplay(o.getEstado()))
+                .estado(o.getEstado()).estadoDisplay(o.getEstado() == LISTA && o.getNoQuedoMotivo() != null ? "Sin reparación" : estadoDisplay(o.getEstado()))
+                .noQuedoMotivo(o.getNoQuedoMotivo()).noQuedoMotivoDisplay(o.getNoQuedoMotivo() == null ? null : MOTIVOS_NO_QUEDO.getOrDefault(o.getNoQuedoMotivo(), o.getNoQuedoMotivo()))
+                .noQuedoDetalle(o.getNoQuedoDetalle()).noQuedoFecha(o.getNoQuedoFecha()).noQuedoPor(o.getNoQuedoPor())
                 .folioLocal(o.getFolioLocal()).fechaIngreso(o.getFechaIngreso()).fechaPromesa(o.getFechaPromesa()).horasEstimadas(o.getHorasEstimadas()).fechaPromesaHora(o.getFechaPromesaHora())
                 .fechaLista(o.getFechaLista()).fechaRegresoTienda(o.getFechaRegresoTienda()).regresoPendiente(regresoPendiente(o)).fechaEntrega(o.getFechaEntrega())
                 .diasGarantia(o.getDiasGarantia()).fechaGarantiaHasta(o.getFechaGarantiaHasta())

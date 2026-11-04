@@ -342,6 +342,7 @@ En cualquier orden pulsa **Avisar por WhatsApp**. El sistema escribe el mensaje 
 - **Cambio de precio:** de cuánto a cuánto cambió, pidiendo su autorización.
 - **Equipo listo:** cuánto queda por pagar y dónde recogerlo.
 - **Esperando una refacción:** le explica que la reparación espera una pieza y que le avisarás cuando llegue.
+- **No se pudo reparar:** le explica con el motivo que el equipo no tuvo reparación y que pase a recogerlo.
 - **Recordatorio de recoger** y **Gracias y garantía** al entregar.
 
 Cada aviso queda anotado en la **bitácora** de la orden (qué se avisó y quién lo hizo). El teléfono del cliente debe tener 10 dígitos; si no, corrígelo en **Clientes**. El cliente también puede seguir su reparación solo, con el QR del comprobante o en la página de seguimiento, con su folio y los últimos 4 dígitos de su teléfono.
@@ -374,6 +375,14 @@ Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Espe
 - La orden se ve como **Esperando refacción** en el taller y en las listas, y al cliente le aparece en su seguimiento que se espera una pieza. Desde **Avisar por WhatsApp** puedes mandarle el aviso ya escrito.
 - Mientras espera, no se puede iniciar ni marcar lista.
 - Cuando llega la pieza, pulsa **Llegó la refacción**: la reparación continúa. El sistema anota cuánto esperó para **no contarlo como tardanza del taller** en el reporte.
+
+### Cuando la reparación no queda
+Si el técnico revisa el equipo y la reparación **no es posible** (no se consigue la pieza, daño en la placa, humedad, no conviene repararlo, el cliente desistió…), pulsa **No quedó**, elige el **motivo** de la lista y, si quiere, cuenta qué pasó (si elige «otro motivo», es obligatorio). Solo se puede reportar mientras la orden está recibida o en reparación.
+- La orden pasa a **Sin reparación** (aparece en rojo en las listas): el equipo regresa a la sucursal igual que uno reparado, la sucursal recibe un aviso con el motivo y todo queda en la bitácora.
+- Al llegar a la tienda se pulsa **Regresó a la tienda**. Desde **Avisar por WhatsApp** se manda al cliente el aviso **No se pudo reparar**, ya escrito con el motivo.
+- Para entregarlo **sin cobrar**, quita los renglones o **cancela** la orden devolviendo el anticipo. Si se acuerda cobrar algo (por ejemplo la revisión), déjalo como renglón y usa **Entregar y cobrar**.
+- Si fue un error, **Reabrir** deja la orden otra vez en reparación y borra el reporte.
+- El **reporte de tiempos del taller** cuenta cuántas **no quedaron** y por qué motivo.
 
 ### Equipos listos que nadie recoge
 Entra a **Equipos por recoger**: muestra las reparaciones **listas que esperan al cliente**, las más viejas primero, con **dónde está** el equipo (en el taller o ya en la tienda), los **días sin recoger** (cuentan desde que regresó a la tienda), cuándo fue el último recordatorio y cuánto queda por pagar. Con **Avisar / recordar por WhatsApp** mandas el mensaje ya escrito.

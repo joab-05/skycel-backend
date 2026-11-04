@@ -95,6 +95,13 @@ public class OrdenServicioResponseDto {
     private java.util.Map<String, String> checklist;
     /** Solo en el detalle: en listados va null para no exponerlo. */
     private String        codigoDesbloqueo;
+
+    /** La reparación no quedó: motivo (código y texto), lo que pasó, cuándo y quién lo reportó. null si sí se reparó. */
+    private String        noQuedoMotivo;
+    private String        noQuedoMotivoDisplay;
+    private String        noQuedoDetalle;
+    private LocalDateTime noQuedoFecha;
+    private String        noQuedoPor;
     private Integer       totalFotos;
 
     private List<OrdenLineaResponseDto> lineas;

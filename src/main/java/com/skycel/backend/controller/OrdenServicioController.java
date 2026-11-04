@@ -208,6 +208,15 @@ public class OrdenServicioController {
         return ResponseEntityBuilder.ok(ordenService.avisoWhatsapp(id, tipo, user.getUsername()), "aviso");
     }
 
+    @Operation(summary = "Reportar que la reparación no quedó y por qué", description = "El equipo regresa a la sucursal (sin reparación); el motivo queda en la orden, la bitácora y el reporte.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{id}/no-quedo")
+    @PreAuthorize("@permisos.tiene('TALLER_TRABAJAR')")
+    public ResponseEntity<StandardApiResponse<OrdenServicioResponseDto>> noQuedo(
+            @PathVariable Integer id, @Valid @RequestBody com.skycel.backend.dto.ordenservicio.NoQuedoRequestDto request, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.updated(ordenService.noQuedo(id, request, user.getUsername()), "orden de servicio");
+    }
+
     @Operation(summary = "Detener la reparación mientras llega una refacción", description = "El comentario dice qué se espera. El cliente lo ve como «esperando una refacción».")
     @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{id}/espera")

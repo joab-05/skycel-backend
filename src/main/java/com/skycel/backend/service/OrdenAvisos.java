@@ -20,7 +20,7 @@ public final class OrdenAvisos {
     public enum Tipo {
         RECIBIDA("Equipo recibido"), COTIZACION("Cotización para autorizar"), PRECIO_CAMBIO("Cambio de precio"),
         LISTA("Equipo listo"), RECORDATORIO("Recordatorio de recoger"), ENTREGADA("Gracias y garantía"),
-        ESPERA_REFACCION("Esperando una refacción");
+        ESPERA_REFACCION("Esperando una refacción"), SIN_REPARACION("No se pudo reparar");
 
         private final String etiqueta;
         Tipo(String etiqueta) { this.etiqueta = etiqueta; }
@@ -32,7 +32,7 @@ public final class OrdenAvisos {
                         String nombreCliente, String equipo, String folio, String diagnostico,
                         BigDecimal total, BigDecimal totalAnterior, BigDecimal anticipos, BigDecimal saldo,
                         LocalDateTime fechaPromesaHora, LocalDate fechaPromesa, LocalDateTime fechaLista,
-                        Integer diasGarantia, LocalDate garantiaHasta, String enlace, String esperaMotivo) {}
+                        Integer diasGarantia, LocalDate garantiaHasta, String enlace, String esperaMotivo, String noQuedoMotivo) {}
 
     private static final Locale MX = Locale.forLanguageTag("es-MX");
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", MX);
@@ -73,6 +73,11 @@ public final class OrdenAvisos {
                 if (positivo(d.saldo())) t.append(" Queda por pagar ").append(dinero(d.saldo())).append(".");
                 else if (positivo(d.total())) t.append(" Ya está todo pagado.");
                 t.append(" Te esperamos en ").append(lugar(d)).append(".");
+            }
+            case SIN_REPARACION -> {
+                t.append("Revisamos tu ").append(d.equipo()).append(" (folio ").append(d.folio()).append(") y lamentablemente *no fue posible repararlo*");
+                if (d.noQuedoMotivo() != null && !d.noQuedoMotivo().isBlank()) t.append(": ").append(d.noQuedoMotivo());
+                t.append(". Pasa a recogerlo a ").append(lugar(d)).append(" y ahí te damos los detalles.");
             }
             case RECORDATORIO -> {
                 t.append("Te recordamos que tu ").append(d.equipo()).append(" (folio ").append(d.folio()).append(") sigue listo para recoger");

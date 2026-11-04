@@ -203,6 +203,19 @@ public class OrdenServicio {
     @Column(name = "codigo_desbloqueo", length = 80)
     private String codigoDesbloqueo;
 
+    /** Si el técnico reportó que la reparación no quedó: el motivo (un código de la lista), lo que pasó, cuándo y quién. */
+    @Column(name = "no_quedo_motivo", length = 30)
+    private String noQuedoMotivo;
+
+    @Column(name = "no_quedo_detalle", length = 255)
+    private String noQuedoDetalle;
+
+    @Column(name = "no_quedo_fecha")
+    private LocalDateTime noQuedoFecha;
+
+    @Column(name = "no_quedo_por", length = 150)
+    private String noQuedoPor;
+
     @UpdateTimestamp
     @Column(name = "fecha_actualizacion")
     private LocalDateTime fechaActualizacion;

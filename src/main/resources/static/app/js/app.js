@@ -53,7 +53,7 @@ function uuid() {
   });
 }
 function pastillaEstado(estadoDisplay) {
-  const claves = { 'Recibida': 'recibida', 'En reparación': 'reparacion', 'Lista para entrega': 'lista', 'Entregada': 'entregada', 'Cancelada': 'cancelada' };
+  const claves = { 'Recibida': 'recibida', 'En reparación': 'reparacion', 'Lista para entrega': 'lista', 'Entregada': 'entregada', 'Cancelada': 'cancelada', 'Sin reparación': 'cancelada' };
   const c = claves[estadoDisplay] || 'recibida';
   return `<span class="pastilla ${c}">${escapar(estadoDisplay)}</span>`;
 }
@@ -1325,6 +1325,7 @@ function textoRevision(checklist) {
 /** La pastilla de estado de una orden: una reparación detenida por una pieza se ve distinta. */
 function pastillaOrden(o) {
   if (o.estado === 1 && !o.idTecnico) return '<span class="pastilla por-tomar">' + ic('hourglass') + ' Por tomar</span>';
+  if (o.noQuedoMotivo && o.estado === 3) return '<span class="pastilla cancelada" title="' + escapar(o.noQuedoMotivoDisplay || '') + '">' + ic('circle-x') + ' Sin reparación</span>';
   if (o.regresoPendiente) return '<span class="pastilla espera" title="Está reparado y sigue en el taller: falta que regrese a la sucursal">' + ic('truck') + ' Lista · en el taller</span>';
   if (o.esperaMotivo) return '<span class="pastilla espera" title="' + escapar(o.esperaMotivo) + '">' + ic('hourglass') + ' Esperando refacción</span>';
   return pastillaEstado(o.estadoDisplay);
@@ -1613,6 +1614,12 @@ async function pantallaOrdenDetalle(id) {
   /** Quien atiende al cliente o trabaja el taller puede corregir la revisión, el código y las fotos mientras la orden siga abierta. */
   const puedeEditar = o.estado <= 3 && (puedeTrabajar || puedeResponder);
 
+  /** El técnico reportó que la reparación no quedó: por qué y qué sigue. */
+  const cuadroNoQuedo = () => !o.noQuedoMotivo ? '' : `<div class="tarjeta" style="border-left:5px solid #dc2626;">
+    <h2>${ic('circle-x')} La reparación no quedó: ${escapar(o.noQuedoMotivoDisplay || '')}</h2>
+    <p>${o.noQuedoDetalle ? escapar(o.noQuedoDetalle) + '<br>' : ''}<span class="ayuda">Lo reportó ${escapar(o.noQuedoPor || '')} · ${formatoFecha(o.noQuedoFecha)}</span></p>
+    ${o.estado === 3 ? `<p class="ayuda">${o.regresoPendiente ? 'El equipo debe regresar a ' + escapar(o.nombreTienda || 'la sucursal') + '; al llegar, toca «Regresó a la tienda». ' : ''}Avísale al cliente con «Avisar por WhatsApp» → «No se pudo reparar». Para entregarlo sin cobrar, quita los renglones o cancela la orden devolviendo el anticipo; si se acuerda cobrar algo (por ejemplo la revisión), déjalo como renglón y usa «Entregar y cobrar».</p>` : ''}</div>`;
+
   /** La reparación detenida porque falta una pieza. */
   const cuadroEspera = () => !o.esperaMotivo ? '' : `<div class="tarjeta" style="border-left:5px solid #c2410c;">
     <h2>${ic('hourglass')} Esperando una refacción</h2>
@@ -1653,6 +1660,7 @@ async function pantallaOrdenDetalle(id) {
       ${kpiH('c4', 'clock', formatoDinero(o.saldo), 'Saldo por cobrar')}
     </div>
     ${cuadroAutorizacion()}
+    ${cuadroNoQuedo()}
     ${cuadroEspera()}
     ${o.estado === 3 && o.diasListaSinRecoger >= 7 ? `<div class="tarjeta" style="border-left:5px solid ${o.diasListaSinRecoger >= 30 ? '#dc2626' : '#d97706'};">
       <h2>${ic('package-check')} Lleva ${o.diasListaSinRecoger} días lista sin que la recojan</h2>
@@ -1668,6 +1676,7 @@ async function pantallaOrdenDetalle(id) {
           <option value="PRECIO_CAMBIO">Cambio de precio</option>
           <option value="LISTA">Equipo listo</option>
           <option value="ESPERA_REFACCION">Esperando una refacción</option>
+          <option value="SIN_REPARACION">No se pudo reparar</option>
           <option value="RECORDATORIO">Recordatorio de recoger</option>
           <option value="ENTREGADA">Gracias y garantía</option>
         </select>
@@ -1705,6 +1714,23 @@ async function pantallaOrdenDetalle(id) {
         <label>¿Qué refacción se espera?</label>
         <input id="dt-espera-texto" maxlength="200" placeholder="Pantalla original del proveedor, llega el jueves">
         <button id="dt-espera-enviar" class="btn btn-azul">Dejar en espera</button>
+      </div>
+      <div id="dt-noquedo-cont" class="oculto" style="margin-top:10px;">
+        <label class="obligatorio">¿Por qué no quedó la reparación?</label>
+        <select id="dt-noquedo-motivo">
+          <option value="">Elige el motivo</option>
+          <option value="SIN_REFACCION">No se consiguió la refacción</option>
+          <option value="PLACA_DANADA">Daño en la tarjeta madre (placa)</option>
+          <option value="HUMEDAD">Daño por humedad</option>
+          <option value="PANTALLA_DANADA">Daño mayor en pantalla o carcasa</option>
+          <option value="SOFTWARE">Falla de software que no se pudo resolver</option>
+          <option value="NO_CONVIENE">No conviene repararlo (cuesta más que el equipo)</option>
+          <option value="CLIENTE_DESISTE">El cliente decidió no repararlo</option>
+          <option value="OTRO">Otro motivo</option>
+        </select>
+        <label>Cuenta qué pasó (obligatorio si el motivo es «otro»)</label>
+        <textarea id="dt-noquedo-detalle" maxlength="255"></textarea>
+        <button id="dt-noquedo-enviar" class="btn btn-rojo">Reportar que no quedó</button>
       </div>
       <div id="dt-nota-cont" class="oculto" style="margin-top:10px;">
         <label>Observación</label>
@@ -1849,11 +1875,24 @@ async function pantallaOrdenDetalle(id) {
     acciones.push({ t: ic('circle-check') + ' Marcar lista', color: 'btn-verde', sinRenglones, fn: () => accionSimple(id, 'lista', 'POST') });
   }
   if (puedeTrabajar && viva && !o.esperaMotivo) acciones.push({ t: ic('hourglass') + ' Esperar refacción', color: 'btn-gris', fn: () => document.getElementById('dt-espera-cont').classList.toggle('oculto') });
+  if (puedeTrabajar && viva && o.estado <= 2) acciones.push({ t: ic('circle-x') + ' No quedó', color: 'btn-gris', fn: () => document.getElementById('dt-noquedo-cont').classList.toggle('oculto') });
   if (puedeTrabajar) acciones.push({ t: ic('clipboard-pen') + ' Agregar observación', color: 'btn-gris', fn: () => document.getElementById('dt-nota-cont').classList.toggle('oculto') });
 
   if (acciones.length === 0) { contAcc.classList.add('oculto'); return; }
   botones.innerHTML = acciones.map((a, i) => `<button class="btn ${a.color}" data-i="${i}"${a.sinRenglones ? ' disabled title="Agrega al menos un servicio o refacción antes de marcarla como lista"' : ''}>${a.t}</button>`).join('');
   botones.querySelectorAll('button').forEach((b, i) => b.onclick = acciones[i].fn);
+
+  document.getElementById('dt-noquedo-enviar').onclick = async () => {
+    const motivo = document.getElementById('dt-noquedo-motivo').value;
+    const detalle = document.getElementById('dt-noquedo-detalle').value.trim();
+    if (!motivo) { mostrarMensaje(root, 'Elige por qué no quedó.', 'error'); return; }
+    if (motivo === 'OTRO' && detalle.length < 5) { mostrarMensaje(root, 'Si el motivo es «otro», cuenta qué pasó.', 'error'); return; }
+    if (!confirm('La orden pasa a «Sin reparación» y el equipo regresa a la sucursal. ¿Reportarlo?')) return;
+    try {
+      await api('POST', `/api/ordenes-servicio/${id}/no-quedo`, { motivo, detalle: detalle || null });
+      pantallaOrdenDetalle(id);
+    } catch (err) { fallo(err); }
+  };
 
   document.getElementById('dt-espera-enviar').onclick = async () => {
     const texto = document.getElementById('dt-espera-texto').value.trim();

@@ -1378,6 +1378,62 @@ class OrdenServicioServiceTest {
     }
 
     @Nested
+    @DisplayName("la reparación no quedó")
+    class NoQuedo {
+
+        private NoQuedoRequestDto reporte(String motivo, String detalle) {
+            NoQuedoRequestDto d = new NoQuedoRequestDto();
+            d.setMotivo(motivo);
+            d.setDetalle(detalle);
+            return d;
+        }
+
+        @Test
+        @DisplayName("el técnico lo reporta con su motivo: la orden pasa a lista sin reparación, queda en la bitácora y el aviso al cliente cambia")
+        void reporta() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.iniciar(o, "juan.perez");
+
+            OrdenServicioResponseDto r = service.noQuedo(o, reporte("placa_danada", "ya no enciende ni con el cargador"), "juan.perez");
+
+            assertThat(r.getEstado()).isEqualTo(OrdenServicioService.LISTA);
+            assertThat(r.getEstadoDisplay()).isEqualTo("Sin reparación");
+            assertThat(r.getNoQuedoMotivo()).isEqualTo("PLACA_DANADA");
+            assertThat(r.getNoQuedoMotivoDisplay()).contains("placa");
+            assertThat(r.getNoQuedoPor()).isNotBlank();
+            assertThat(historial.stream().map(OrdenServicioHistorial::getComentario)).anyMatch(c -> c.startsWith("NO QUEDÓ la reparación"));
+            assertThat(service.avisoWhatsapp(o, null, "abigail").get("tipo")).isEqualTo("SIN_REPARACION");
+            assertThat(service.consultaPublica(viva(o).getFolio(), "0001").getMensaje()).contains("No fue posible reparar");
+            assertEstado(HttpStatus.CONFLICT, () -> service.avisoWhatsapp(o, "LISTA", "abigail"));
+        }
+
+        @Test
+        @DisplayName("el motivo debe ser de la lista, «otro» pide contar qué pasó, y solo el taller lo reporta")
+        void validaciones() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.noQuedo(o, reporte("HUMEDAD", null), "yamilet"));
+            service.iniciar(o, "juan.perez");
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.noQuedo(o, reporte("INVENTADO", null), "juan.perez"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.noQuedo(o, reporte("OTRO", "  "), "juan.perez"));
+        }
+
+        @Test
+        @DisplayName("si se reabre, el reporte se borra y la reparación se vuelve a intentar")
+        void reabrirLoBorra() {
+            int o = orden(linea("SRV-000001", 1, "1200", false));
+            service.iniciar(o, "juan.perez");
+            service.noQuedo(o, reporte("HUMEDAD", null), "juan.perez");
+
+            ComentarioRequestDto c = new ComentarioRequestDto();
+            c.setComentario("el cliente trae otra pieza");
+            OrdenServicioResponseDto r = service.reabrir(o, c, "juan.perez");
+
+            assertThat(r.getEstado()).isEqualTo(OrdenServicioService.EN_REPARACION);
+            assertThat(r.getNoQuedoMotivo()).isNull();
+        }
+    }
+
+    @Nested
     @DisplayName("espera de refacción")
     class Espera {
 

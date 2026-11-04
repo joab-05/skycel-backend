@@ -16,7 +16,7 @@ class OrdenAvisosTest {
         return new OrdenAvisos.Datos("Skycel", "Zócalo", "7571234567", "Calle Hidalgo 12", "SOFIA RAMIREZ", "Samsung A54", "OS-000123",
                 "pantalla rota y batería hinchada", new BigDecimal("1450"), new BigDecimal("1200"), new BigDecimal("300"), new BigDecimal("1150"),
                 LocalDateTime.of(2026, 11, 3, 17, 30), null, LocalDateTime.of(2026, 11, 2, 12, 0), 30, LocalDate.of(2026, 12, 2),
-                "https://skycelsys.ddns.net/seguimiento/?f=OS-000123", "pantalla original del proveedor");
+                "https://skycelsys.ddns.net/seguimiento/?f=OS-000123", "pantalla original del proveedor", "daño en la placa: ya no enciende");
     }
 
     @Test
@@ -51,5 +51,14 @@ class OrdenAvisosTest {
     void enlace() {
         String url = OrdenAvisos.enlaceWhatsApp("527571200001", "Hola, ¿qué tal?");
         assertThat(url).isEqualTo("https://wa.me/527571200001?text=Hola%2C%20%C2%BFqu%C3%A9%20tal%3F");
+    }
+
+    @Test
+    @DisplayName("el aviso de que no se pudo reparar dice el motivo y a dónde pasar por el equipo, sin hablar de listo ni de cobros")
+    void sinReparacion() {
+        String texto = OrdenAvisos.texto(OrdenAvisos.Tipo.SIN_REPARACION, datos());
+
+        assertThat(texto).contains("no fue posible repararlo").contains("daño en la placa: ya no enciende").contains("OS-000123").contains("Zócalo");
+        assertThat(texto).doesNotContain("listo para recoger").doesNotContain("por pagar");
     }
 }
