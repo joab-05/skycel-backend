@@ -17,4 +17,7 @@ public interface NominaDetalleRepository extends JpaRepository<NominaDetalle, In
     List<NominaDetalle> findByEmpleado_IdempleadoOrderByPeriodo_FechaInicioDesc(Integer idempleado);
 
     long countByPeriodo_IdperiodoAndEstado(Integer idperiodo, Byte estado);
+
+    /** Los pagos de nómina ya hechos en un periodo (por la fecha en que se pagaron). */
+    List<NominaDetalle> findByEstadoAndFechaPagoBetweenOrderByFechaPagoAsc(Byte estado, java.time.LocalDateTime desde, java.time.LocalDateTime hasta);
 }

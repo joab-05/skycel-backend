@@ -686,6 +686,36 @@ DESCUENTOS_JS = DESCUENTOS.format(articulo="Para una regla de un artículo, en *
 DESCUENTOS_WEB = DESCUENTOS.format(articulo="La regla por artículo específico se arma desde JSystem. Para cambiar el **precio** de algo, usa Inventario: los precios son generales.", offline="")
 
 # ───────────────────────────── Reportes ─────────────────────────────
+FINANZAS_TALLER_JS = """## Finanzas del taller
+
+Aquí está lo que antes se llevaba en la libreta cada mes: cuánto dejaron las reparaciones, cuánto se gastó, cuánto queda y cuánto le toca a cada técnico. **Solo lo ve la administración.** Se abre en **Finanzas del taller** y se elige el mes arriba. Casi todo se calcula solo con lo que ya se capturó; lo único que se captura aquí son los **gastos** y los **descuentos** de los técnicos.
+
+### Qué muestra
+- **Ventas de reparaciones:** lo cobrado en las órdenes **entregadas** ese mes (cuenta por la fecha de entrega), con las del mes anterior para comparar.
+- **Inversión en piezas:** lo que costaron las refacciones usadas en esas órdenes.
+- **Ganancia bruta:** ventas menos piezas.
+- **Ganancia neta:** la ganancia bruta menos los gastos fijos (sueldos) y los operativos (renta, gasolina, herramienta…). Es la base de las comisiones.
+- **Lo que dejó cada sucursal:** órdenes, ventas, piezas y ganancia de cada tienda que recibió reparaciones.
+
+### Capturar un gasto
+1. Pulsa **Capturar gasto**.
+2. Escribe la **fecha**, el **concepto**, elige la **categoría** y el **monto**. La sucursal es opcional (si no eliges, es un gasto general).
+3. Si es algo que se paga **cada mes** (la renta, el internet), marca **Se repite cada mes**: cuenta solo en todos los meses siguientes. Si un día deja de pagarse, edítalo y escribe en qué mes **deja de contar**.
+4. Pulsa **Guardar gasto**. Para corregirlo o quitarlo, elígelo en la tabla y usa **Editar** o **Quitar**.
+
+Los **sueldos** cuentan como gasto fijo; todo lo demás, como operativo. La **nómina que se paga desde el sistema** (Nómina) aparece sola en la tabla de gastos y no se vuelve a capturar; los sueldos que se pagan por fuera sí se capturan, con la categoría **Sueldos**.
+
+### Comisiones de los técnicos
+Cada técnico gana un **porcentaje de la ganancia neta** del mes (por ejemplo, el técnico encargado 10 % y los auxiliares 4 %).
+1. Elige al técnico en la tabla y pulsa **Porcentaje** para fijar el suyo.
+2. Para **descontarle** algo de su comisión (una cuenta pendiente, algo que compró), pulsa **Descuentos del mes**, escribe el concepto y el monto y pulsa **Agregar descuento**. Puedes quitar los que te equivoques.
+3. La tabla muestra para cada uno la **comisión**, sus **descuentos** y **lo que se le paga**. Si los descuentos son mayores que la comisión, queda en rojo: es lo que el técnico todavía debe.
+
+**Generado** es lo que dejaron las reparaciones de ese técnico (lo cobrado menos las piezas); sirve para ver cómo trabajan, pero la comisión no depende de él sino de la ganancia neta de todo el taller. Si el mes termina en pérdida, no hay comisión.
+
+> El reporte se calcula en vivo: si corriges una venta, un gasto o un porcentaje, las cifras cambian al actualizar. Cambiar el porcentaje de un técnico afecta también a los meses pasados cuando los consultes.
+"""
+
 REPORTES_JS = """## Reportes
 
 En JSystem hay **dos** pantallas: **Reportes** (para encargados y administradores) y **Reportes de Gerencia** (solo administradores).
@@ -939,7 +969,7 @@ def armar(*partes):
 
 
 JS = armar(INTRO, PRIMEROS_JS, ROLES, POS_JS, CAJA_JS, DEVOLUCIONES, INVENTARIO_JS, EQUIPOS_JS, INVFIS_JS, MERMAS, TRASPASOS_JS,
-           CLIENTES, GARANTIAS_JS, ORDENES_JS, SERV_JS, COMPRAS_JS, DESCUENTOS_JS, REPORTES_JS, EMPLEADOS_JS, CONFIG_JS, AVISOS_JS,
+           CLIENTES, GARANTIAS_JS, ORDENES_JS, SERV_JS, COMPRAS_JS, DESCUENTOS_JS, REPORTES_JS, FINANZAS_TALLER_JS, EMPLEADOS_JS, CONFIG_JS, AVISOS_JS,
            OFFLINE_JS, ATAJOS_JS, RUTINA, FAQ_JS)
 WEB = armar(INTRO, PRIMEROS_WEB, ROLES, POS_WEB, CAJA_WEB, DEVOLUCIONES, INVENTARIO_WEB, EQUIPOS_WEB, INVFIS_WEB, MERMAS, TRASPASOS_WEB,
             CLIENTES, GARANTIAS_WEB, ORDENES_WEB, SERV_WEB, COMPRAS_WEB, DESCUENTOS_WEB, REPORTES_WEB, EMPLEADOS_WEB,
