@@ -36,6 +36,11 @@ public interface ProductoImeiRepository extends JpaRepository<ProductoImei, Long
     /** Las unidades de un artículo en ese estado, de todas las sucursales. */
     List<ProductoImei> findByProductoMaster_IdprodmasterAndEstado(Integer idprodmaster, String estado);
 
+    /** Por artículo (equipos): el precio más bajo y más alto de sus unidades disponibles, su costo más alto y cuántas unidades hay. */
+    @Query("SELECT pi.productoMaster.idprodmaster, MIN(pi.precioVenta), MAX(pi.precioVenta), MAX(pi.costo), COUNT(pi) FROM ProductoImei pi " +
+           "WHERE pi.estado = 'DISPONIBLE' GROUP BY pi.productoMaster.idprodmaster")
+    List<Object[]> resumenDePreciosEquipos();
+
     /** Pasa todos los equipos de una sección a otra. Devuelve cuántos movió. */
     @org.springframework.data.jpa.repository.Modifying
     @Query("UPDATE ProductoImei pi SET pi.seccion = :destino WHERE pi.seccion.idseccion = :origen")

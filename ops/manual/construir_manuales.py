@@ -300,6 +300,13 @@ Las **secciones** son los lugares donde se acomoda la mercancía (vitrina, mostr
 - Los **equipos** no se ajustan por cantidad: cada uno tiene su IMEI, y su existencia cambia con una compra, venta, traspaso o inventario físico.
 - Un encargado o administrador puede marcar un producto como **rezagado** si no se mueve.
 
+### Cambiar precios de varios artículos (Precios, administrador)
+En **Finanzas › Precios** el administrador ve **todos los artículos** (accesorios, servicios y equipos) con su precio actual, su costo y su existencia. Busca por nombre o categoría y filtra por tipo.
+1. Elige uno o varios artículos (con **Ctrl** o **Shift**).
+2. **Cambiar precio**: escribe un precio nuevo para todos, o sube o baja un **porcentaje** o una **cantidad en pesos**; puedes **redondear** (al peso, a $5 o a $10). Antes de aplicar ves cómo queda cada artículo y el sistema avisa si alguno quedaría **por debajo de su costo**.
+3. El precio llega a **todas las sucursales y a la bodega** (las existencias y los equipos disponibles). Las ventas ya hechas no cambian.
+4. **Descuento o liquidación**: pon un descuento (porcentaje o monto fijo) a los artículos elegidos, **hasta que lo quites**, **hasta una fecha** o **entre dos fechas**. Se aplica solo al cobrar y la columna **Descuento vigente** lo muestra. **Quitar descuento** lo desactiva.
+
 ### Movimientos
 **Movimientos** muestra el historial de cada cambio de existencia (ventas, devoluciones, traspasos, ajustes), con la fecha y quién lo hizo.
 
@@ -407,7 +414,7 @@ Cada traspaso tiene **un solo folio**: cuando una solicitud se acepta y se gener
 ### Enviar mercancía
 1. Entra a **Traspasos** y pulsa **Nuevo envío**.
 2. Elige la tienda destino y agrega los productos{buscar}. Escribe la cantidad o, en equipos, elige los **IMEI** que viajan. Si **escaneas** (o escribes completo) el IMEI de un equipo, se **agrega solo** a la lista: ya no hay que buscarlo entre los IMEI disponibles.
-3. Al confirmar, la mercancía **sale del inventario** de tu tienda y queda «en tránsito».
+3. Al confirmar, la mercancía **sale del inventario** de tu tienda y queda «en tránsito». En el detalle de un traspaso, cada equipo aparece en **su propio renglón con su IMEI completo**: quien recibe puede revisar uno por uno los que le llegan.
 4. Si te equivocas antes de que la reciban, puedes **Anular** el envío.
 
 ### Pedir mercancía

@@ -16,6 +16,11 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
     /** Un mismo artículo lleva el mismo código en todas las sucursales, así que un código puede dar varias filas. */
     List<Producto> findAllByCodpro(String codpro);
 
+    /** Por artículo: su precio de venta más bajo y más alto entre las sucursales, su costo más alto y en cuántas sucursales está. */
+    @Query("SELECT p.productoMaster.idprodmaster, MIN(p.preciopub), MAX(p.preciopub), MAX(p.preciopro), COUNT(p) FROM Producto p " +
+           "WHERE p.activo = true GROUP BY p.productoMaster.idprodmaster")
+    List<Object[]> resumenDePrecios();
+
     Optional<Producto> findByCodproAndTienda_Codti(String codpro, Integer codti);
 
     long countByColor_IdcolorAndActivoTrue(Short idcolor);

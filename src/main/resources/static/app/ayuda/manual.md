@@ -252,7 +252,7 @@ Cada traspaso tiene **un solo folio**: cuando una solicitud se acepta y se gener
 ### Enviar mercancía
 1. Entra a **Traspasos** y pulsa **Nuevo envío**.
 2. Elige la tienda destino y agrega los productos. Escribe la cantidad o, en equipos, elige los **IMEI** que viajan. Si **escaneas** (o escribes completo) el IMEI de un equipo, se **agrega solo** a la lista: ya no hay que buscarlo entre los IMEI disponibles.
-3. Al confirmar, la mercancía **sale del inventario** de tu tienda y queda «en tránsito».
+3. Al confirmar, la mercancía **sale del inventario** de tu tienda y queda «en tránsito». En el detalle de un traspaso, cada equipo aparece en **su propio renglón con su IMEI completo**: quien recibe puede revisar uno por uno los que le llegan.
 4. Si te equivocas antes de que la reciban, puedes **Anular** el envío.
 
 ### Pedir mercancía
