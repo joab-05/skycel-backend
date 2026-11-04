@@ -294,18 +294,29 @@ public class EquipoService {
         return toDto(imeiRepository.save(u), verCostos(usuario));
     }
 
-    /** Pone el mismo precio (y, si se pide, el mismo costo) a todas las unidades disponibles de un artículo en una sucursal. */
+    /**
+     * Pone el mismo precio (y, si se pide, el mismo costo) a todas las unidades disponibles de un artículo en una sucursal;
+     * sin {@code codti}, en todas las sucursales y en la bodega (los precios son generales; solo un administrador lo hace).
+     */
     @Transactional
     public int precioDelArticulo(Integer idprodmaster, Integer codti, PrecioArticuloDto dto, String username) {
         Usuario usuario = usuario(username);
-        exigirOperaTienda(usuario, codti);
+        if (codti == null) {
+            if (usuario.getRol() != Rol.ROOT && usuario.getRol() != Rol.ADMIN) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador cambia el precio en todas las sucursales.");
+            }
+        } else {
+            exigirOperaTienda(usuario, codti);
+        }
         if (dto.getPrecioVenta() == null || dto.getPrecioVenta().signum() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El precio debe ser mayor a $0.");
         }
         if (dto.getCosto() != null && dto.getCosto().signum() < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El costo no puede ser negativo.");
         }
-        List<ProductoImei> unidades = imeiRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndEstado(idprodmaster, codti, ProductoImei.DISPONIBLE);
+        List<ProductoImei> unidades = codti == null
+                ? imeiRepository.findByProductoMaster_IdprodmasterAndEstado(idprodmaster, ProductoImei.DISPONIBLE)
+                : imeiRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndEstado(idprodmaster, codti, ProductoImei.DISPONIBLE);
         for (ProductoImei u : unidades) {
             u.setPrecioVenta(dto.getPrecioVenta());
             if (dto.getCosto() != null) u.setCosto(dto.getCosto());

@@ -1060,6 +1060,8 @@ async function pantallaRecepcion() {
   pintarEntrega();
   selMetodo.onchange = () => document.getElementById('rc-anticipo-folio-cont').classList.toggle('oculto', selMetodo.value === '1');
 
+  montarPatron(document.getElementById('rc-codigo'));
+
   // Enviar
   const btn = document.getElementById('rc-btn');
   btn.onclick = async () => {
@@ -1151,6 +1153,81 @@ const REVISION_PUNTOS = [['enciende', 'Enciende'], ['pantalla', 'Pantalla y tác
 const REVISION_VALORES = { OK: 'Bien', FALLA: 'Falla', SIN_PROBAR: 'No se pudo probar' };
 
 /** Un selector por punto (en blanco = no se revisó). {@code prefijo} da los id: prefijo-enciende, prefijo-pantalla... */
+/**
+ * Patrón de desbloqueo de un celular: nueve puntos (1 al 9, de izquierda a derecha y de arriba abajo) que se unen con el dedo.
+ * Se guarda en el código de desbloqueo como «Patrón: 1-5-9-8».
+ */
+function leerPatron(codigo) {
+  const m = /^\s*patr[oó]n\s*:\s*(.+)$/i.exec(codigo || '');
+  if (!m) return [];
+  const pts = [];
+  for (const p of m[1].split(/[-\s,]+/)) {
+    const n = Number(p);
+    if (!Number.isInteger(n) || n < 1 || n > 9) return [];
+    if (!pts.includes(n)) pts.push(n);
+  }
+  return pts;
+}
+function dibujoPatron(pts, lado = 150) {
+  const x = (i) => 20 + 30 * ((i - 1) % 3), y = (i) => 20 + 30 * Math.floor((i - 1) / 3);
+  const lineas = pts.slice(1).map((p, k) => `<line x1="${x(pts[k])}" y1="${y(pts[k])}" x2="${x(p)}" y2="${y(p)}" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>`).join('');
+  const puntos = Array.from({ length: 9 }, (_, k) => k + 1).map(i => `<circle cx="${x(i)}" cy="${y(i)}" r="${pts[0] === i ? 6 : 4.5}" fill="${pts.includes(i) ? '#2563eb' : '#94a3b8'}"/>`
+    + `<text x="${x(i) + 7}" y="${y(i) - 5}" font-size="7" fill="#475569">${i}</text>`).join('');
+  return `<svg viewBox="0 0 100 100" width="${lado}" height="${lado}" style="background:#f1f5f9;border-radius:12px;">${lineas}${puntos}</svg>`;
+}
+/** Pone debajo del campo un botón que abre el tablero para dibujar el patrón; al soltar escribe «Patrón: …» en el campo. */
+function montarPatron(input) {
+  const cont = document.createElement('div');
+  cont.innerHTML = `<button type="button" class="enlace pt-abrir">Dibujar patrón</button>
+    <div class="pt-tablero oculto" style="margin-top:6px;">
+      <svg class="pt-svg" viewBox="0 0 100 100" width="220" height="220" style="background:#f1f5f9;border-radius:12px;touch-action:none;display:block;"></svg>
+      <p class="ayuda">Toca el primer punto y arrastra sin soltar por los demás (mínimo 4).</p>
+      <button type="button" class="enlace pt-borrar">Borrar patrón</button>
+    </div>`;
+  input.insertAdjacentElement('afterend', cont);
+  const svg = cont.querySelector('.pt-svg');
+  const x = (i) => 20 + 30 * ((i - 1) % 3), y = (i) => 20 + 30 * Math.floor((i - 1) / 3);
+  let pts = [], trazando = false;
+  const pintar = (cursor) => {
+    const lineas = pts.slice(1).map((p, k) => `<line x1="${x(pts[k])}" y1="${y(pts[k])}" x2="${x(p)}" y2="${y(p)}" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>`).join('');
+    const elastico = trazando && cursor && pts.length ? `<line x1="${x(pts[pts.length - 1])}" y1="${y(pts[pts.length - 1])}" x2="${cursor.x}" y2="${cursor.y}" stroke="#93c5fd" stroke-width="2.5" stroke-linecap="round"/>` : '';
+    const puntos = Array.from({ length: 9 }, (_, k) => k + 1).map(i => `<circle cx="${x(i)}" cy="${y(i)}" r="${pts[0] === i ? 6 : 4.5}" fill="${pts.includes(i) ? '#2563eb' : '#94a3b8'}"/>`).join('');
+    svg.innerHTML = lineas + elastico + puntos;
+  };
+  const mcd = (a, b) => b === 0 ? a : mcd(b, a % b);
+  const tocar = (c) => {
+    for (let i = 1; i <= 9; i++) {
+      if (pts.includes(i) || Math.hypot(c.x - x(i), c.y - y(i)) > 10) continue;
+      if (pts.length) {
+        const a = pts[pts.length - 1] - 1, b = i - 1;
+        const dr = Math.floor(b / 3) - Math.floor(a / 3), dc = (b % 3) - (a % 3), g = mcd(Math.abs(dr), Math.abs(dc));
+        for (let k = 1; k < g; k++) {   // los puntos por los que pasa la línea recta también cuentan, como en el celular
+          const medio = (Math.floor(a / 3) + dr / g * k) * 3 + (a % 3) + dc / g * k + 1;
+          if (!pts.includes(medio)) pts.push(medio);
+        }
+      }
+      pts.push(i);
+      return;
+    }
+  };
+  const punto = (e) => { const r = svg.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * 100, y: (e.clientY - r.top) / r.height * 100 }; };
+  svg.onpointerdown = (e) => { e.preventDefault(); svg.setPointerCapture(e.pointerId); pts = []; trazando = true; tocar(punto(e)); pintar(punto(e)); };
+  svg.onpointermove = (e) => { if (!trazando) return; tocar(punto(e)); pintar(punto(e)); };
+  svg.onpointerup = () => {
+    trazando = false;
+    pintar();
+    if (pts.length >= 4) input.value = 'Patrón: ' + pts.join('-');
+    else if (pts.length) { pts = []; pintar(); }
+  };
+  cont.querySelector('.pt-abrir').onclick = () => {
+    const t = cont.querySelector('.pt-tablero');
+    t.classList.toggle('oculto');
+    if (!t.classList.contains('oculto')) { pts = leerPatron(input.value); pintar(); }
+  };
+  cont.querySelector('.pt-borrar').onclick = () => { pts = []; pintar(); input.value = ''; };
+  pintar();
+}
+
 function selectoresRevision(prefijo, valores) {
   const v = valores || {};
   return `<div class="revision-grid">${REVISION_PUNTOS.map(([k, t]) => `
@@ -1488,6 +1565,7 @@ async function pantallaOrdenDetalle(id) {
       <div id="rv-ver">${etiquetas || '<p class="ayuda">No se hizo la revisión rápida al recibir este equipo.</p>'}
         <div class="detalle-fila"><span class="k">Código de desbloqueo</span><span class="v">${o.codigoDesbloqueo
           ? `<span id="rv-codigo" data-codigo="${escapar(o.codigoDesbloqueo)}">******</span> <button class="enlace" id="rv-mostrar" type="button">Mostrar</button>` : '—'}</span></div>
+        ${leerPatron(o.codigoDesbloqueo).length ? `<div id="rv-patron" class="oculto" style="margin:6px 0;">${dibujoPatron(leerPatron(o.codigoDesbloqueo))}</div>` : ''}
         ${puedeEditar ? `<div class="grupo-botones" style="margin-top:8px;"><button id="rv-editar" class="btn btn-gris btn-chico">${ic('clipboard-pen')} Editar revisión y código</button></div>` : ''}
       </div>
       ${puedeEditar ? `<div id="rv-form" class="oculto">${selectoresRevision('rv', o.checklist)}
@@ -1620,8 +1698,11 @@ async function pantallaOrdenDetalle(id) {
     const oculto = el.textContent === '******';
     el.textContent = oculto ? el.dataset.codigo : '******';
     rvMostrar.textContent = oculto ? 'Ocultar' : 'Mostrar';
+    const dib = document.getElementById('rv-patron');
+    if (dib) dib.classList.toggle('oculto', !oculto);   // un patrón se ve dibujado, no solo como números
   };
   if (document.getElementById('rv-editar')) {
+    montarPatron(document.getElementById('rv-codigo-nuevo'));
     const alternar = (editando) => {
       document.getElementById('rv-ver').classList.toggle('oculto', editando);
       document.getElementById('rv-form').classList.toggle('oculto', !editando);
@@ -4209,7 +4290,7 @@ function dibujarInventario(cont, productos, verCosto) {
             <td>${escapar(p.categoriaPrincipal || p.nombreCategoria || '')}</td>
             ${verCosto ? `<td>${formatoDinero(p.preciopro)}</td>` : ''}
             <td class="tabla-precio">${formatoDinero(p.preciopub)}</td>
-            <td>${p.tipo === 'SERVICIO' ? '—' : `<span class="stock-pill ${claveStock(p)}">${Number(p.stock)}</span>`}</td>
+            <td>${p.tipo === 'SERVICIO' ? '<span class="stock-pill infinito" title="Un servicio no se agota">∞</span>' : `<span class="stock-pill ${claveStock(p)}">${Number(p.stock)}</span>`}</td>
             <td>${escapar(p.proveedor?.nombreCorto || '—')}</td>
           </tr>`).join('')}
         </tbody>
@@ -4224,7 +4305,7 @@ function dibujarInventario(cont, productos, verCosto) {
       <div class="orden-cliente">${escapar(p.codpro)} · ${escapar(p.nombreCategoria || '')}</div>
       <div class="orden-meta">
         <span class="orden-fecha">${formatoDinero(p.preciopub)}</span>
-        <span style="font-weight:700;">${p.tipo === 'SERVICIO' ? '' : 'Stock: ' + Number(p.stock)}</span>
+        <span style="font-weight:700;">${p.tipo === 'SERVICIO' ? 'Stock: ∞' : 'Stock: ' + Number(p.stock)}</span>
       </div>
     </div>`).join('') + '</div>';
   cont.innerHTML = aviso + tabla + tarjetas;
@@ -4256,7 +4337,7 @@ async function pantallaProductoDetalle(param) {
       (p.bajoStock ? '<span class="pastilla error">' + ic('triangle-alert') + ' Bajo stock</span>' : '') +
       (puedeEditarDatos ? `<button id="pd-editar" class="btn btn-azul">${ic('pencil')} Editar producto</button>` : ''))}
     <div class="kp-h">
-      ${p.tipo !== 'SERVICIO' ? kpiH(p.bajoStock ? 'c4' : 'c3', 'package', String(Number(p.stock)), 'En existencia' + (Number(p.stockMinimo) > 0 ? ' (mínimo ' + Number(p.stockMinimo) + ')' : '')) : ''}
+      ${p.tipo !== 'SERVICIO' ? kpiH(p.bajoStock ? 'c4' : 'c3', 'package', String(Number(p.stock)), 'En existencia' + (Number(p.stockMinimo) > 0 ? ' (mínimo ' + Number(p.stockMinimo) + ')' : '')) : kpiH('c3', 'package', '∞', 'Existencias (un servicio no se agota)')}
       ${kpiH('c1', 'banknote', formatoDinero(p.preciopub), 'Precio de venta')}
       ${verCostoProducto ? kpiH('c5', 'tags', formatoDinero(p.preciopro), 'Precio de compra') : ''}
       ${p.diasGarantia ? kpiH('c2', 'shield-check', p.diasGarantia + ' días', 'Garantía') : ''}
@@ -4430,7 +4511,7 @@ async function pantallaProductoEditar(param) {
         <div><label class="obligatorio">Precio de venta</label><input id="pe-preventa" type="number" inputmode="decimal" step="0.01" min="0.01" value="${p.preciopub ?? ''}"></div>
       </div>
       ${esServicio ? '' : `<label>Stock mínimo (alerta)</label><input id="pe-stockmin" type="number" inputmode="decimal" step="1" min="0" value="${p.stockMinimo ?? 0}">`}
-      <label class="casilla"><input type="checkbox" id="pe-todas"> Aplicar el precio de venta en <strong>todas las sucursales</strong></label>
+      <label class="casilla"><input type="checkbox" id="pe-todas" checked> Aplicar el precio de venta en <strong>todas las sucursales y en la bodega</strong></label>
       <button id="pe-guardar-precios" class="btn btn-azul">Guardar precios</button>
     </div>
 
@@ -4539,7 +4620,10 @@ async function pantallaProductoEditar(param) {
     const venta = numero('pe-preventa');
     if (venta == null || venta <= 0) { mostrarMensaje(root, 'Indica un precio de venta mayor a cero.', 'error'); return; }
     const todas = document.getElementById('pe-todas').checked;
-    const cuerpo = { precioCompra: numero('pe-precompra'), precioVenta: venta };
+    // En todas las sucursales solo viaja el costo si se cambió: el de cada tienda no se pisa por tocar el precio
+    const compra = numero('pe-precompra');
+    const cuerpo = { precioVenta: venta };
+    if (compra != null && (!todas || compra !== Number(p.preciopro))) cuerpo.precioCompra = compra;
     const idProv = numero('pe-proveedor');
     if (idProv != null) cuerpo.idProveedor = idProv;
     if (!esServicio) cuerpo.stockMinimo = numero('pe-stockmin') ?? 0;
@@ -5237,8 +5321,9 @@ async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
       <input id="ef-nombre" value="${escapar(empleado?.nombreCompleto || '')}">
       <label class="obligatorio">Rol</label>
       <select id="ef-rol">${ROLES_STAFF.map(r => `<option value="${r}" ${empleado?.rol === r ? 'selected' : ''}>${ROL_ETIQUETA[r]}</option>`).join('')}</select>
-      <label class="obligatorio">Sucursal</label>
+      <label class="obligatorio" id="ef-tienda-et">Sucursal</label>
       <select id="ef-tienda">${tiendas.map(t => `<option value="${t.codti}" ${empleado?.codti === t.codti ? 'selected' : ''}>${escapar(t.nombre)}</option>`).join('')}</select>
+      <div class="ayuda oculto" id="ef-tienda-nota">Solo de referencia (nómina): puede trabajar en cualquier sucursal.</div>
       <div id="ef-tecnico-cont" class="oculto">
         <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
           <input type="checkbox" id="ef-tec-encargado" style="width:auto;" ${empleado?.tecnicoEncargado ? 'checked' : ''}> Técnico encargado
@@ -5257,7 +5342,13 @@ async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
 
   const selRol = document.getElementById('ef-rol');
   const contTec = document.getElementById('ef-tecnico-cont');
-  const actualizarTec = () => contTec.classList.toggle('oculto', selRol.value !== 'TECNICO');
+  // Solo el encargado (y el técnico, que trabaja en su taller) está ligado a su tienda; un apoyo (vendedor) o un administrador cubre la que se necesite
+  const actualizarTec = () => {
+    contTec.classList.toggle('oculto', selRol.value !== 'TECNICO');
+    const ligada = selRol.value === 'ENCARGADO_TIENDA' || selRol.value === 'TECNICO';
+    document.getElementById('ef-tienda-et').textContent = ligada ? (selRol.value === 'TECNICO' ? 'Taller' : 'Sucursal') : 'Sucursal base';
+    document.getElementById('ef-tienda-nota').classList.toggle('oculto', ligada);
+  };
   selRol.onchange = actualizarTec;
   actualizarTec();
 
@@ -5969,7 +6060,7 @@ async function pantallaDevoluciones() {
         <div class="orden-item pos-fila" data-codpro="${escapar(p.codpro)}">
           <div class="pos-fila-cuerpo">
             <div class="orden-folio">${escapar(p.nombreProductoMaster)}</div>
-            <div class="orden-cliente">${p.esEquipo ? Number(p.stock) + ' disponible' + (Number(p.stock) === 1 ? '' : 's') : escapar(p.codpro) + ' · Stock: ' + Number(p.stock)}</div>
+            <div class="orden-cliente">${p.esEquipo ? Number(p.stock) + ' disponible' + (Number(p.stock) === 1 ? '' : 's') : escapar(p.codpro) + ' · Stock: ' + (p.tipo === 'SERVICIO' ? '∞' : Number(p.stock))}</div>
           </div>
           ${p.esEquipo ? `<div class="grupo-botones pos-imeis">${p.imeisDisponibles.map(u => `<button type="button" class="btn btn-azul btn-chico dv-agregar-imei" data-imei="${escapar(u.imei)}">${escapar(u.imei)} · ${formatoDinero(u.precioVenta)}</button>`).join('')}</div>`
             : `<span class="pos-precio">${formatoDinero(p.preciopub)} <span class="pv-mas">${ic('plus')}</span></span>`}
@@ -6560,7 +6651,7 @@ async function pantallaTraspasoNuevo(tipo) {
     cont.innerHTML = encontrados.length === 0 ? '<div class="vacio">Sin resultados.</div>' : encontrados.map(p => `
       <div class="orden-item" data-codpro="${escapar(p.codpro)}">
         <div class="orden-cab"><span class="orden-folio">${TIPO_ICONO[p.tipo] || ''} ${escapar(p.nombreProductoMaster)}</span>
-          <span style="font-weight:700;">Stock: ${Number(p.stock)}</span></div>
+          <span style="font-weight:700;">Stock: ${p.tipo === 'SERVICIO' ? '∞' : Number(p.stock)}</span></div>
         <div class="orden-cliente">${p.esEquipo ? 'Equipos' : escapar(p.codpro)}</div>
       </div>`).join('');
     cont.querySelectorAll('.orden-item').forEach(el => el.onclick = () => {

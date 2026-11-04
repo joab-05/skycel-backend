@@ -804,6 +804,7 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
 .stock-pill.verde { background: #d1fae5; color: #047857; }
 .stock-pill.ambar { background: #fef3c7; color: #a16207; }
 .stock-pill.rojo { background: #fee2e2; color: #b91c1c; }
+.stock-pill.infinito { background: #e0e7ff; color: #4338ca; }
 
 /* Detalle y edición en dos columnas cuando hay ancho */
 .det-grid, .dos-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 14px; align-items: start; }

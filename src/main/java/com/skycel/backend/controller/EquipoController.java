@@ -107,12 +107,12 @@ public class EquipoController {
         return ResponseEntityBuilder.updated(equipoService.darDeBaja(imei, cuerpo.get("motivo"), user.getUsername()), "equipo");
     }
 
-    @Operation(summary = "Mismo precio (y costo) para todas las unidades disponibles de un artículo en una sucursal")
+    @Operation(summary = "Mismo precio (y costo) para todas las unidades disponibles de un artículo en una sucursal; sin codti, en todas las sucursales y la bodega")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/articulo/{idprodmaster}/precio")
     @PreAuthorize("@permisos.tiene('INVENTARIO_EDITAR')")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> precioDelArticulo(
-            @PathVariable Integer idprodmaster, @RequestParam Integer codti, @RequestBody PrecioArticuloDto request,
+            @PathVariable Integer idprodmaster, @RequestParam(required = false) Integer codti, @RequestBody PrecioArticuloDto request,
             @AuthenticationPrincipal UserDetails user) {
         int n = equipoService.precioDelArticulo(idprodmaster, codti, request, user.getUsername());
         return ResponseEntityBuilder.updated(Map.<String, Object>of("unidadesActualizadas", n), "precio");

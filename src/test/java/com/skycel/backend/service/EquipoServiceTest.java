@@ -366,6 +366,22 @@ class EquipoServiceTest {
         }
 
         @Test
+        @DisplayName("sin sucursal, el mismo precio a las unidades disponibles de todas las sucursales y la bodega; solo un administrador")
+        void precioDelArticuloEnTodasLasSucursales() {
+            ProductoImei enZocalo = existente(celular, zocalo, "350000000000011", "DISPONIBLE");
+            ProductoImei enBodega = existente(celular, corpo, "350000000000029", "DISPONIBLE");
+            when(imeiRepository.findByProductoMaster_IdprodmasterAndEstado(1, "DISPONIBLE")).thenReturn(List.of(enZocalo, enBodega));
+            PrecioArticuloDto dto = new PrecioArticuloDto();
+            dto.setPrecioVenta(new BigDecimal("2700"));
+
+            assertThat(service.precioDelArticulo(1, null, dto, "admin")).isEqualTo(2);
+            assertThat(enZocalo.getPrecioVenta()).isEqualByComparingTo("2700");
+            assertThat(enBodega.getPrecioVenta()).isEqualByComparingTo("2700");
+            assertThatThrownBy(() -> service.precioDelArticulo(1, null, dto, "yamilet"))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        }
+
+        @Test
         @DisplayName("sin el permiso de ver costos, el equipo no muestra su costo")
         void costoOculto() {
             existente(celular, zocalo, "350000000000011", "DISPONIBLE");
