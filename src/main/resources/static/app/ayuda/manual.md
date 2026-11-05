@@ -220,7 +220,7 @@ Al aperturar, el sistema pregunta qué cubre el inventario:
 
 ### El encargado cuenta
 1. Pulsa **Aperturar inventario** y elige qué se va a inventariar (ver arriba).
-2. **Escanea** o escribe el código de cada producto (cada lectura suma una pieza) y el **IMEI** de cada equipo, uno por uno. El lápiz corrige una cantidad; en un equipo, la lista de IMEI permite quitar el que escaneaste por error.
+2. **Escanea** o escribe el código de cada producto (cada lectura suma una pieza) y el **IMEI** de cada equipo, uno por uno. Puedes pasar el **mismo código** varias veces seguidas y a la velocidad que quieras: no hay que esperar la respuesta entre una lectura y otra, y cada una se cuenta en orden. El lápiz corrige una cantidad; en un equipo, la lista de IMEI permite quitar el que escaneaste por error.
 3. Pulsa **Enviar a revisión** cuando termines. Se genera el **resumen** y se avisa a los administradores.
 
 > Mientras cuentas, el sistema **no te dice cuántas piezas debería haber**: las diferencias se ven hasta que lo envías a revisión. Cuenta por zonas y evita vender o mover mercancía de esa zona mientras tanto.

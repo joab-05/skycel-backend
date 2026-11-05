@@ -68,6 +68,15 @@ class AntiDobleClicFilterTest {
     }
 
     @Test
+    @DisplayName("contar un inventario: el mismo código escaneado varias veces seguidas es normal y no se rechaza")
+    void escaneosDeInventario() throws Exception {
+        for (int i = 0; i < 5; i++) {
+            assertThat(manda("POST", "/api/inventario-fisico/7/escanear", "").getStatus()).isEqualTo(200);
+        }
+        assertThat(llegaron.get()).isEqualTo(5);
+    }
+
+    @Test
     @DisplayName("otro cuerpo, otra ruta u otro usuario no son un doble clic")
     void distintas() throws Exception {
         manda("POST", "/api/traspasos/4/recibir", "{\"a\":1}");

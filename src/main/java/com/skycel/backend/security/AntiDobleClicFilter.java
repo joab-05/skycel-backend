@@ -30,7 +30,7 @@ import java.util.Set;
  *
  * <p>Si la primera falla (4xx/5xx) la firma se libera para poder reintentar enseguida. No se aplica a lo que ya es idempotente por
  * su propia clave ({@code claveOffline}, que reenvía la cola sin conexión), a las lecturas, al inicio de sesión ni a las subidas de
- * archivos.
+ * archivos ni a los escaneos del inventario físico (cada lectura del mismo código suma una pieza y se necesitan seguidas).
  */
 public class AntiDobleClicFilter extends OncePerRequestFilter {
 
@@ -45,6 +45,9 @@ public class AntiDobleClicFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         if (!METODOS.contains(request.getMethod())) return true;
         if (path.startsWith("/api/auth/") || path.startsWith("/api/publico/")) return true;
+        // Contar un inventario es repetir la misma lectura una y otra vez (cada pieza del mismo código es un escaneo): no es un doble clic.
+        // Los equipos no se duplican por esto: el servicio rechaza un IMEI ya contado.
+        if (path.startsWith("/api/inventario-fisico/") && path.endsWith("/escanear")) return true;
         String tipo = request.getContentType();
         if (tipo != null && !tipo.toLowerCase().contains("json")) return true;
         return request.getContentLengthLong() > MAX_CUERPO;
