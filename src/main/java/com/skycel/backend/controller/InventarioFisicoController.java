@@ -123,6 +123,14 @@ public class InventarioFisicoController {
         return ResponseEntityBuilder.ok(service.corregirConteoRevision(idinventario, iddetalleInv, conteo, motivo, userDetails.getUsername()), "detalle");
     }
 
+    @PostMapping("/{idinventario}/detalle/{iddetalleInv}/revision/actualizar-sistema")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_CONFIRMAR')")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<StandardApiResponse<Map<String, Object>>> actualizarSistemaRevision(
+            @PathVariable Integer idinventario, @PathVariable Integer iddetalleInv, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.actualizarSistemaRevision(idinventario, iddetalleInv, userDetails.getUsername()), "detalle");
+    }
+
     @PutMapping("/{idinventario}/revision/equipo/{imei}")
     @PreAuthorize("@permisos.tiene('INVENTARIO_CONFIRMAR')")
     @SecurityRequirement(name = "Bearer Authentication")

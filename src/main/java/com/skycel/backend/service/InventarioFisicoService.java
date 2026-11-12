@@ -391,9 +391,40 @@ public class InventarioFisicoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esa ya es la cantidad contada.");
         anotarCorreccion(d, motivo, username);
         d.setConteo(conteo.shortValue());
+        // La cantidad corregida es lo que hay en físico ahora: se compara con lo que el sistema tiene ahora, no con lo que tenía al escanear
+        // (si mientras tanto se vendió algo, comparar contra el dato viejo cuenta dos veces esas ventas)
+        Producto vivo = productoRepository.findByCodproAndTienda_Codti(d.getCodpro(), a.getTienda().getCodti()).orElse(null);
+        if (vivo != null) d.setStockSistema(stockComoShort(vivo.getStock()));
         d = detalleRepository.save(d);
         recalcularTotales(a);
         return toMapDetalle(d, null);
+    }
+
+    /**
+     * Pone al día lo que dice el sistema de un accesorio cuya cantidad ya se corrigió al revisar: toma las existencias de hoy (lo que se
+     * vendió o se movió desde que se escaneó ya no cuenta como faltante). Solo para cantidades corregidas, que son lo que hay en físico
+     * ahora; un conteo hecho al escanear se compara con lo que había en ese momento. Su decisión anterior se borra, porque la diferencia cambia.
+     */
+    @Transactional
+    public Map<String, Object> actualizarSistemaRevision(Integer idinventario, Integer iddetalleInv, String username) {
+        InventarioAuditoria a = enRevisionParaCorregir(idinventario, username);
+        InventarioAuditoriaDetalle d = detalleDe(idinventario, iddetalleInv);
+        if (d.getProductoMaster() != null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los equipos no se actualizan así: se corrigen por IMEI.");
+        if (d.getConteoOriginal() == null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este conteo se hizo al escanear y se compara con lo que había en ese momento. "
+                    + "Si lo volviste a contar y la cantidad de hoy es otra, corrígela con «Corregir la cantidad contada».");
+        final String codpro = d.getCodpro();
+        Producto p = productoRepository.findByCodproAndTienda_Codti(codpro, a.getTienda().getCodti())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "El artículo '" + codpro + "' ya no existe en esta sucursal."));
+        d.setStockSistema(stockComoShort(p.getStock()));
+        d.setEstado(DETALLE_PENDIENTE);
+        d.setMotivo(null);
+        d = detalleRepository.save(d);
+        recalcularTotales(a);
+        Map<String, Object> m = toMapDetalle(d, p.getProductoMaster() != null ? p.getProductoMaster().getNombreBase() : d.getCodpro());
+        m.put("stockActual", d.getStockSistema());
+        return m;
     }
 
     /** Lo mismo para un equipo: marca que un IMEI sí estaba (de los que no se encontraron) o que no estaba (de los contados). */
@@ -639,6 +670,8 @@ public class InventarioFisicoService {
                 Producto p = productos.get(d.getCodpro());
                 m = toMapDetalle(d, p != null && p.getProductoMaster() != null ? p.getProductoMaster().getNombreBase() : d.getCodpro());
                 m.put("esEquipo", false);
+                // lo que el sistema tiene hoy: si cambió desde que se escaneó (ventas, traspasos), quien revisa lo ve junto a lo de entonces
+                if (p != null && a.getEstado() == ESTADO_EN_REVISION) m.put("stockActual", stockComoShort(p.getStock()));
                 BigDecimal costo = p != null && p.getPreciopro() != null ? p.getPreciopro() : BigDecimal.ZERO;
                 m.put("costoUnitario", verCostos ? costo : null);
                 valor = costo.multiply(BigDecimal.valueOf(dif));

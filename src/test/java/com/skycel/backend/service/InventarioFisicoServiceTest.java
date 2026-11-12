@@ -481,6 +481,49 @@ class InventarioFisicoServiceTest {
     }
 
     @Test
+    @DisplayName("corregirConteoRevision: la cantidad corregida es lo que hay ahora y se compara con las existencias de hoy (no se cuentan dos veces las ventas)")
+    void corregirConteoRevision_comparaConLoDeHoy() {
+        InventarioAuditoria a = auditoriaCatalogando();
+        // se escaneó con 5 en el sistema y se contaron 3; luego se vendieron 2 (hoy el sistema tiene 3) y en físico queda 1
+        InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder()
+                .iddetalleInv(500).inventarioAuditoria(a).codpro("ACC-001").conteo((short) 3).stockSistema((short) 5)
+                .estado(InventarioFisicoService.DETALLE_PENDIENTE).build();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findById(500)).thenReturn(Optional.of(d));
+        when(productoRepository.findByCodproAndTienda_Codti("ACC-001", 2)).thenReturn(Optional.of(accesorioDe("ACC-001", micas(), new BigDecimal("3"), null)));
+
+        Map<String, Object> r = service.corregirConteoRevision(10, 500, 1, "Se vendieron 2 y en físico queda 1", "admin");
+
+        assertThat(d.getStockSistema()).isEqualTo((short) 3);
+        assertThat(r.get("diferencia")).isEqualTo(-2);   // los 2 que faltaban, no -4
+    }
+
+    @Test
+    @DisplayName("actualizarSistemaRevision: una cantidad ya corregida toma las existencias de hoy y borra la decisión; un conteo sin corregir se rechaza")
+    void actualizarSistemaRevision() {
+        InventarioAuditoria a = auditoriaCatalogando();
+        InventarioAuditoriaDetalle corregido = InventarioAuditoriaDetalle.builder()
+                .iddetalleInv(500).inventarioAuditoria(a).codpro("ACC-001").conteo((short) 1).conteoOriginal((short) 3).stockSistema((short) 5)
+                .estado(InventarioFisicoService.DETALLE_AJUSTADO).build();
+        InventarioAuditoriaDetalle sinCorregir = InventarioAuditoriaDetalle.builder()
+                .iddetalleInv(501).inventarioAuditoria(a).codpro("ACC-002").conteo((short) 3).stockSistema((short) 5)
+                .estado(InventarioFisicoService.DETALLE_PENDIENTE).build();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findById(500)).thenReturn(Optional.of(corregido));
+        lenient().when(detalleRepository.findById(501)).thenReturn(Optional.of(sinCorregir));
+        lenient().when(productoRepository.findByCodproAndTienda_Codti("ACC-001", 2)).thenReturn(Optional.of(accesorioDe("ACC-001", micas(), new BigDecimal("3"), null)));
+
+        Map<String, Object> r = service.actualizarSistemaRevision(10, 500, "admin");
+
+        assertThat(corregido.getStockSistema()).isEqualTo((short) 3);
+        assertThat(corregido.getEstado()).isEqualTo(InventarioFisicoService.DETALLE_PENDIENTE);
+        assertThat(r.get("diferencia")).isEqualTo(-2);
+        assertThatThrownBy(() -> service.actualizarSistemaRevision(10, 501, "admin"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        assertThat(sinCorregir.getStockSistema()).isEqualTo((short) 5);
+    }
+
+    @Test
     @DisplayName("corregirConteoRevision: exige motivo y que lo haga quien confirma")
     void corregirConteoRevision_validaciones() {
         InventarioAuditoria a = auditoriaCatalogando();
