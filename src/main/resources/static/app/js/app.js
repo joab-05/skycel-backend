@@ -3559,6 +3559,13 @@ function abrirAyudaDeAquiMismo() {
   navegar('#/ayuda/' + slugTema(temaDeRuta(ruta)));
 }
 document.getElementById('btn-ayuda').onclick = abrirAyudaDeAquiMismo;
+// Un lector con el teclado en otro idioma manda el guion como apóstrofo: MIC'000002 se corrige a MIC-000002 en cualquier campo de texto
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (!t || t.tagName !== 'INPUT' || !/^(text|search|)$/.test(t.type || '')) return;
+  const v = t.value;
+  if (/(^|\s)[A-Z]{2,4}['´’]/.test(v)) t.value = v.replace(/(^|\s)([A-Z]{2,4})['´’]/g, '$1$2-');
+});
 document.addEventListener('keydown', e => {
   if (e.key === 'F1') { e.preventDefault(); abrirAyudaDeAquiMismo(); }
 });

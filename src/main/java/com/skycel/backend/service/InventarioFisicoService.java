@@ -105,7 +105,8 @@ public class InventarioFisicoService {
         if (a.getEstado() != ESTADO_ABIERTO)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este inventario ya no admite conteo (fase actual: " + nombreEstado(a.getEstado()) + ").");
         int cant = cantidad != null && cantidad > 0 ? cantidad : 1;
-        String leido = codigo == null ? "" : codigo.trim();
+        // un lector con el teclado en otro idioma manda el guion como apóstrofo: MIC'000002 es MIC-000002
+        String leido = codigo == null ? "" : codigo.trim().replaceAll("^([A-Za-z]{2,4})['´’](?=\\d)", "$1-");
 
         Optional<Producto> producto = productoRepository.findByCodproAndTienda_Codti(leido, a.getTienda().getCodti());
         if (producto.isEmpty()) {

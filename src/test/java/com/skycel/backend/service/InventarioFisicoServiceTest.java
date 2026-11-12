@@ -248,6 +248,19 @@ class InventarioFisicoServiceTest {
     }
 
     @Test
+    @DisplayName("un lector con otro teclado manda el guion como apóstrofo: MIC'000002 se cuenta como MIC-000002")
+    void escanear_guionComoApostrofo() {
+        InventarioAuditoria soloMicas = auditoriaSoloMicas();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(soloMicas));
+        when(productoRepository.findByCodproAndTienda_Codti("MIC-000002", 2)).thenReturn(Optional.of(accesorioDe("MIC-000002", micas(), new BigDecimal("4"), null)));
+        when(detalleRepository.findByInventarioAuditoria_IdinventarioAndCodpro(10, "MIC-000002")).thenReturn(Optional.empty());
+
+        Map<String, Object> r = service.escanear(10, "MIC'000002", null, "admin");
+
+        assertThat(r.get("conteo")).isEqualTo((short) 1);
+    }
+
+    @Test
     @DisplayName("cerrarConteo con alcance: lo que hay en esas categorías y no se contó queda en 0; lo de otras categorías no se toca")
     void cerrarConteo_conAlcance() {
         InventarioAuditoria a = auditoriaSoloMicas();
