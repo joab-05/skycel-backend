@@ -362,10 +362,9 @@ public class InventarioFisicoService {
             d.setEstado(DETALLE_AJUSTADO);
             d.setMotivo(null);
         } else if ("JUSTIFICAR".equalsIgnoreCase(accion)) {
-            if (motivo == null || motivo.isBlank())
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo para justificar la diferencia sin ajustar las existencias.");
             d.setEstado(DETALLE_JUSTIFICADO);
-            d.setMotivo(motivo.trim().length() > 255 ? motivo.trim().substring(0, 255) : motivo.trim());
+            String m = motivo == null ? "" : motivo.trim();   // el motivo es opcional
+            d.setMotivo(m.isEmpty() ? null : m.length() > 255 ? m.substring(0, 255) : m);
         } else if ("PENDIENTE".equalsIgnoreCase(accion)) {
             d.setEstado(DETALLE_PENDIENTE);
             d.setMotivo(null);
@@ -394,10 +393,9 @@ public class InventarioFisicoService {
             short antes = d.getStockSistema() != null ? d.getStockSistema() : 0;
             if (actual == null || stockComoShort(actual.getStock()) == antes)
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esa ya es la cantidad contada y el sistema no ha cambiado desde que se escaneó.");
-            if (motivo == null || motivo.isBlank())
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo de la corrección.");
             short hoy = stockComoShort(actual.getStock());
-            String nota = "Confirmado en físico: se comparó con las existencias de hoy (" + hoy + "; al escanear había " + antes + "). " + motivo.trim();
+            String nota = "Confirmado en físico: se comparó con las existencias de hoy (" + hoy + "; al escanear había " + antes + ")."
+                    + (motivo == null || motivo.isBlank() ? "" : " " + motivo.trim());
             String previo = d.getCorreccionMotivo();
             String junto = previo == null || previo.isBlank() ? nota : previo + " | " + nota;
             d.setCorreccionMotivo(junto.length() > 255 ? junto.substring(junto.length() - 255) : junto);
@@ -503,13 +501,14 @@ public class InventarioFisicoService {
 
     /** Guarda lo que había contado el encargado (solo la primera vez), el motivo y quién corrigió; la decisión previa se borra. */
     private void anotarCorreccion(InventarioAuditoriaDetalle d, String motivo, String username) {
-        if (motivo == null || motivo.isBlank())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo de la corrección.");
         if (d.getConteoOriginal() == null) d.setConteoOriginal(d.getConteo());
-        String m = motivo.trim();
-        String previo = d.getCorreccionMotivo();
-        String junto = previo == null || previo.isBlank() ? m : previo + " | " + m;
-        d.setCorreccionMotivo(junto.length() > 255 ? junto.substring(junto.length() - 255) : junto);
+        // el motivo es opcional: siempre queda quién corrigió y cuánto había contado el encargado
+        if (motivo != null && !motivo.isBlank()) {
+            String m = motivo.trim();
+            String previo = d.getCorreccionMotivo();
+            String junto = previo == null || previo.isBlank() ? m : previo + " | " + m;
+            d.setCorreccionMotivo(junto.length() > 255 ? junto.substring(junto.length() - 255) : junto);
+        }
         d.setCorreccionPor(username);
         d.setEstado(DETALLE_PENDIENTE);
         d.setMotivo(null);

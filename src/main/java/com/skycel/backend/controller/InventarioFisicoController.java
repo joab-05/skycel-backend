@@ -119,7 +119,7 @@ public class InventarioFisicoController {
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> corregirConteoRevision(
             @PathVariable Integer idinventario, @PathVariable Integer iddetalleInv, @RequestParam Integer conteo,
-            @RequestParam String motivo, @AuthenticationPrincipal UserDetails userDetails) {
+            @RequestParam(required = false) String motivo, @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(service.corregirConteoRevision(idinventario, iddetalleInv, conteo, motivo, userDetails.getUsername()), "detalle");
     }
 
@@ -136,7 +136,7 @@ public class InventarioFisicoController {
     @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<StandardApiResponse<Map<String, Object>>> corregirEquipoRevision(
             @PathVariable Integer idinventario, @PathVariable String imei, @RequestParam boolean encontrado,
-            @RequestParam String motivo, @AuthenticationPrincipal UserDetails userDetails) {
+            @RequestParam(required = false) String motivo, @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntityBuilder.ok(service.corregirEquipoRevision(idinventario, imei, encontrado, motivo, userDetails.getUsername()), "detalle");
     }
 

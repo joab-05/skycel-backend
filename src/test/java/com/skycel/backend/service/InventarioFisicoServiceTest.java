@@ -548,7 +548,7 @@ class InventarioFisicoServiceTest {
     }
 
     @Test
-    @DisplayName("corregirConteoRevision: exige motivo y que lo haga quien confirma")
+    @DisplayName("corregirConteoRevision: el motivo es opcional (queda quién corrigió y lo que contó el encargado) y solo lo hace quien confirma")
     void corregirConteoRevision_validaciones() {
         InventarioAuditoria a = auditoriaCatalogando();
         InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder()
@@ -557,11 +557,16 @@ class InventarioFisicoServiceTest {
         when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
         lenient().when(detalleRepository.findById(500)).thenReturn(Optional.of(d));
 
-        assertThatThrownBy(() -> service.corregirConteoRevision(10, 500, 9, "  ", "admin"))
-                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
         assertThatThrownBy(() -> service.corregirConteoRevision(10, 500, 9, "Motivo", "enc2"))
                 .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
         assertThat(d.getConteo()).isEqualTo((short) 8);
+
+        service.corregirConteoRevision(10, 500, 9, null, "admin");   // sin motivo
+
+        assertThat(d.getConteo()).isEqualTo((short) 9);
+        assertThat(d.getConteoOriginal()).isEqualTo((short) 8);
+        assertThat(d.getCorreccionPor()).isEqualTo("admin");
+        assertThat(d.getCorreccionMotivo()).isNull();
     }
 
     @Test
@@ -606,8 +611,8 @@ class InventarioFisicoServiceTest {
     }
 
     @Test
-    @DisplayName("resolverDetalle: JUSTIFICAR sin motivo -> 400")
-    void resolverDetalle_justificarSinMotivo_lanza400() {
+    @DisplayName("resolverDetalle: JUSTIFICAR sin motivo se acepta (el motivo es opcional)")
+    void resolverDetalle_justificarSinMotivo() {
         InventarioAuditoria a = auditoriaCatalogando();
         InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder()
                 .iddetalleInv(500).inventarioAuditoria(a).codpro("ACC-001").conteo((short) 8).stockSistema((short) 5)
@@ -615,8 +620,10 @@ class InventarioFisicoServiceTest {
         when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
         when(detalleRepository.findById(500)).thenReturn(Optional.of(d));
 
-        assertThatThrownBy(() -> service.resolverDetalle(10, 500, "JUSTIFICAR", "  ", "admin"))
-                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        service.resolverDetalle(10, 500, "JUSTIFICAR", "  ", "admin");
+
+        assertThat(d.getEstado()).isEqualTo(InventarioFisicoService.DETALLE_JUSTIFICADO);
+        assertThat(d.getMotivo()).isNull();
         verifyNoInteractions(movimientoInventarioService);
     }
 
