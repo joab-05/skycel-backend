@@ -387,8 +387,30 @@ public class InventarioFisicoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los equipos se corrigen por IMEI: marca cuál sí estaba o cuál no.");
         if (conteo == null || conteo < 0 || conteo > Short.MAX_VALUE)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El conteo debe ser un número entre 0 y " + Short.MAX_VALUE + ".");
-        if (conteo.shortValue() == d.getConteo())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esa ya es la cantidad contada.");
+        if (conteo.shortValue() == d.getConteo()) {
+            // La misma cantidad, vuelta a contar en físico ahora: si el sistema cambió desde que se escaneó (se vendió algo), se confirma
+            // y se compara con las existencias de hoy; si no cambió, no hay nada que actualizar.
+            Producto actual = productoRepository.findByCodproAndTienda_Codti(d.getCodpro(), a.getTienda().getCodti()).orElse(null);
+            short antes = d.getStockSistema() != null ? d.getStockSistema() : 0;
+            if (actual == null || stockComoShort(actual.getStock()) == antes)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esa ya es la cantidad contada y el sistema no ha cambiado desde que se escaneó.");
+            if (motivo == null || motivo.isBlank())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo de la corrección.");
+            short hoy = stockComoShort(actual.getStock());
+            String nota = "Confirmado en físico: se comparó con las existencias de hoy (" + hoy + "; al escanear había " + antes + "). " + motivo.trim();
+            String previo = d.getCorreccionMotivo();
+            String junto = previo == null || previo.isBlank() ? nota : previo + " | " + nota;
+            d.setCorreccionMotivo(junto.length() > 255 ? junto.substring(junto.length() - 255) : junto);
+            d.setCorreccionPor(username);
+            d.setStockSistema(hoy);
+            d.setEstado(DETALLE_PENDIENTE);
+            d.setMotivo(null);
+            d = detalleRepository.save(d);
+            recalcularTotales(a);
+            Map<String, Object> confirmado = toMapDetalle(d, null);
+            confirmado.put("stockActual", hoy);
+            return confirmado;
+        }
         anotarCorreccion(d, motivo, username);
         d.setConteo(conteo.shortValue());
         // La cantidad corregida es lo que hay en físico ahora: se compara con lo que el sistema tiene ahora, no con lo que tenía al escanear

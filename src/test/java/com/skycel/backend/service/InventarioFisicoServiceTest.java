@@ -499,6 +499,30 @@ class InventarioFisicoServiceTest {
     }
 
     @Test
+    @DisplayName("corregirConteoRevision con la misma cantidad: si el sistema cambió desde que se escaneó se confirma y se compara con lo de hoy; si no cambió, se rechaza")
+    void corregirConteoRevision_mismaCantidadConfirma() {
+        InventarioAuditoria a = auditoriaCatalogando();
+        // se contaron 8 con 9 en el sistema; luego se vendió 1 (hoy 8) y en físico hay 8
+        InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder()
+                .iddetalleInv(500).inventarioAuditoria(a).codpro("ACC-001").conteo((short) 8).stockSistema((short) 9)
+                .estado(InventarioFisicoService.DETALLE_PENDIENTE).build();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findById(500)).thenReturn(Optional.of(d));
+        when(productoRepository.findByCodproAndTienda_Codti("ACC-001", 2)).thenReturn(Optional.of(accesorioDe("ACC-001", micas(), new BigDecimal("8"), null)));
+
+        Map<String, Object> r = service.corregirConteoRevision(10, 500, 8, "Recontado en físico: hay 8", "admin");
+
+        assertThat(d.getStockSistema()).isEqualTo((short) 8);
+        assertThat(r.get("diferencia")).isEqualTo(0);
+        assertThat(d.getConteoOriginal()).isNull();   // no cambió lo contado
+        assertThat(d.getCorreccionMotivo()).contains("Confirmado en físico");
+
+        // ya está al día: repetirlo no tiene nada que actualizar
+        assertThatThrownBy(() -> service.corregirConteoRevision(10, 500, 8, "otra vez", "admin"))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
     @DisplayName("actualizarSistemaRevision: una cantidad ya corregida toma las existencias de hoy y borra la decisión; un conteo sin corregir se rechaza")
     void actualizarSistemaRevision() {
         InventarioAuditoria a = auditoriaCatalogando();
