@@ -429,11 +429,20 @@ public class InventarioFisicoService {
     public Map<String, Object> actualizarSistemaRevision(Integer idinventario, Integer iddetalleInv, String username) {
         InventarioAuditoria a = enRevisionParaCorregir(idinventario, username);
         InventarioAuditoriaDetalle d = detalleDe(idinventario, iddetalleInv);
-        if (d.getProductoMaster() != null)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los equipos no se actualizan así: se corrigen por IMEI.");
         if (d.getConteoOriginal() == null)
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Este conteo se hizo al escanear y se compara con lo que había en ese momento. "
                     + "Si lo volviste a contar y la cantidad de hoy es otra, corrígela con «Corregir la cantidad contada».");
+        if (d.getProductoMaster() != null) {            // un equipo: los disponibles que el sistema tiene hoy en esta sucursal
+            short hoy = (short) disponiblesHoy(d.getProductoMaster(), a);
+            d.setStockSistema(hoy);
+            d.setEstado(DETALLE_PENDIENTE);
+            d.setMotivo(null);
+            d = detalleRepository.save(d);
+            recalcularTotales(a);
+            Map<String, Object> me = toMapDetalle(d, d.getProductoMaster().getNombreBase());
+            me.put("stockActual", hoy);
+            return me;
+        }
         final String codpro = d.getCodpro();
         Producto p = productoRepository.findByCodproAndTienda_Codti(codpro, a.getTienda().getCodti())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "El artículo '" + codpro + "' ya no existe en esta sucursal."));
@@ -469,6 +478,9 @@ public class InventarioFisicoService {
             unidadRepository.save(InventarioAuditoriaUnidad.builder()
                     .inventarioAuditoria(a).productoMaster(u.getProductoMaster()).imei(u.getImei()).enSistema(true).build());
             d.setConteo((short) (d.getConteo() + 1));
+            // Un equipo que el sistema SÍ tiene y se acaba de encontrar: si llegó (traspaso) después de la foto del inicio, esa foto no lo
+            // incluía y sobraría uno; el Sistema se pone al día con los disponibles de hoy
+            d.setStockSistema((short) Math.max(d.getStockSistema() != null ? d.getStockSistema() : 0, disponiblesHoy(u.getProductoMaster(), a)));
         } else {
             InventarioAuditoriaUnidad u = unidadRepository.findByInventarioAuditoria_IdinventarioAndImei(idinventario, id)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "El equipo '" + imei + "' no está en este conteo."));
@@ -481,6 +493,12 @@ public class InventarioFisicoService {
         d = detalleRepository.save(d);
         recalcularTotales(a);
         return toMapDetalle(d, d.getProductoMaster().getNombreBase());
+    }
+
+    /** Cuántas unidades de este equipo tiene hoy disponibles el sistema en la sucursal del inventario. */
+    private long disponiblesHoy(ProductoMaster master, InventarioAuditoria a) {
+        return imeiRepository.countByProductoMaster_IdprodmasterAndTienda_CodtiAndEstado(
+                master.getIdprodmaster(), a.getTienda().getCodti(), ProductoImei.DISPONIBLE);
     }
 
     /** Los totales de faltantes y sobrantes que ve quien revisa se vuelven a contar después de corregir. */
@@ -673,6 +691,7 @@ public class InventarioFisicoService {
                     }
                 }
                 m.put("imeis", imeis);
+                if (a.getEstado() == ESTADO_EN_REVISION) m.put("stockActual", (short) disponiblesHoy(d.getProductoMaster(), a));
                 if (cerrado && a.getEstado() != ESTADO_CANCELADO) {
                     List<Map<String, Object>> faltan = new ArrayList<>();
                     BigDecimal valorFalta = BigDecimal.ZERO;

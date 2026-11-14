@@ -595,6 +595,46 @@ class InventarioFisicoServiceTest {
     }
 
     @Test
+    @DisplayName("un equipo que llegó después de la foto del inicio y se marca «sí estaba»: el Sistema se pone al día y ya no sobra uno")
+    void equipoEncontradoPoneAlDiaElSistema() {
+        InventarioAuditoria a = auditoriaCatalogando();
+        ProductoMaster celular = ProductoMaster.builder().idprodmaster(7).tipo(TipoProducto.CELULAR).nombreBase("Celular A57").build();
+        // la foto del inicio decía 1; después llegó otro por traspaso (hoy hay 2 disponibles); se escaneó uno
+        InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder().iddetalleInv(500).inventarioAuditoria(a)
+                .productoMaster(celular).codpro("EQ7").conteo((short) 1).stockSistema((short) 1)
+                .estado(InventarioFisicoService.DETALLE_PENDIENTE).build();
+        ProductoImei llegado = ProductoImei.builder().imei("350000000000033").productoMaster(celular).tienda(zocalo).estado("DISPONIBLE").build();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findByInventarioAuditoria_IdinventarioAndCodpro(10, "EQ7")).thenReturn(Optional.of(d));
+        when(imeiRepository.findByImei("350000000000033")).thenReturn(Optional.of(llegado));
+        when(imeiRepository.countByProductoMaster_IdprodmasterAndTienda_CodtiAndEstado(7, 2, "DISPONIBLE")).thenReturn(2L);
+
+        service.corregirEquipoRevision(10, "350000000000033", true, null, "admin");
+
+        assertThat(d.getConteo()).isEqualTo((short) 2);
+        assertThat(d.getStockSistema()).isEqualTo((short) 2);              // 2 contados contra 2 en el sistema: cuadra
+    }
+
+    @Test
+    @DisplayName("actualizarSistemaRevision también pone al día un equipo ya corregido (los disponibles de hoy)")
+    void actualizarSistemaDeUnEquipo() {
+        InventarioAuditoria a = auditoriaCatalogando();
+        ProductoMaster celular = ProductoMaster.builder().idprodmaster(7).tipo(TipoProducto.CELULAR).nombreBase("Celular A57").build();
+        InventarioAuditoriaDetalle d = InventarioAuditoriaDetalle.builder().iddetalleInv(500).inventarioAuditoria(a)
+                .productoMaster(celular).codpro("EQ7").conteo((short) 2).conteoOriginal((short) 1).stockSistema((short) 1)
+                .estado(InventarioFisicoService.DETALLE_JUSTIFICADO).build();
+        when(auditoriaRepository.findById(10)).thenReturn(Optional.of(a));
+        when(detalleRepository.findById(500)).thenReturn(Optional.of(d));
+        when(imeiRepository.countByProductoMaster_IdprodmasterAndTienda_CodtiAndEstado(7, 2, "DISPONIBLE")).thenReturn(2L);
+
+        Map<String, Object> r = service.actualizarSistemaRevision(10, 500, "admin");
+
+        assertThat(d.getStockSistema()).isEqualTo((short) 2);
+        assertThat(d.getEstado()).isEqualTo(InventarioFisicoService.DETALLE_PENDIENTE);
+        assertThat(r.get("stockActual")).isEqualTo((short) 2);
+    }
+
+    @Test
     @DisplayName("devolver: el administrador regresa el conteo al encargado y las decisiones se borran")
     void devolver_reabre() {
         InventarioAuditoria a = auditoriaCatalogando();
