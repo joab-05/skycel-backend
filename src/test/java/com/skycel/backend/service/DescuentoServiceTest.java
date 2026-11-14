@@ -164,6 +164,54 @@ class DescuentoServiceTest {
     }
 
     @Test
+    @DisplayName("un descuento por porcentaje deja el precio final en pesos cerrados (15% de $149 = $126.65 → $127)")
+    void porcentaje_redondeaAlPeso() {
+        DescuentoRegla r = reglaBase(); r.setDescuentoPorcentaje(new BigDecimal("15"));
+        when(repository.findByActivoTrue()).thenReturn(List.of(r));
+
+        BigDecimal descuento = service.calcularDescuento(accesorio(2), new BigDecimal("149"), LocalDateTime.now());
+
+        assertThat(descuento).isEqualByComparingTo("22");                                  // y no 22.35
+        assertThat(new BigDecimal("149").subtract(descuento)).isEqualByComparingTo("127");
+    }
+
+    @Test
+    @DisplayName("el redondeo de la regla puede ser a 5 o 10 pesos, o ninguno (0)")
+    void redondeoConfigurable() {
+        DescuentoRegla r = reglaBase(); r.setDescuentoPorcentaje(new BigDecimal("15")); r.setRedondeo(new BigDecimal("5"));
+        when(repository.findByActivoTrue()).thenReturn(List.of(r));
+        assertThat(new BigDecimal("149").subtract(service.calcularDescuento(accesorio(2), new BigDecimal("149"), LocalDateTime.now())))
+                .isEqualByComparingTo("125");                                              // 126.65 → 125
+
+        r.setRedondeo(new BigDecimal("10"));
+        assertThat(new BigDecimal("149").subtract(service.calcularDescuento(accesorio(2), new BigDecimal("149"), LocalDateTime.now())))
+                .isEqualByComparingTo("130");                                              // 126.65 → 130
+
+        r.setRedondeo(BigDecimal.ZERO);
+        assertThat(service.calcularDescuento(accesorio(2), new BigDecimal("149"), LocalDateTime.now())).isEqualByComparingTo("22.35");
+    }
+
+    @Test
+    @DisplayName("un descuento fijo no se redondea salvo que la regla lo pida")
+    void fijo_noSeRedondeaPorOmision() {
+        DescuentoRegla r = reglaBase(); r.setDescuentoFijo(new BigDecimal("20.50"));
+        when(repository.findByActivoTrue()).thenReturn(List.of(r));
+        assertThat(service.calcularDescuento(accesorio(2), new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("20.50");
+
+        r.setRedondeo(BigDecimal.ONE);                                                     // 79.50 → 80 (pedido por la regla)
+        assertThat(service.calcularDescuento(accesorio(2), new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("20");
+    }
+
+    @Test
+    @DisplayName("el redondeo nunca deja un descuento negativo ni el precio en $0")
+    void redondeoNoPasaDeLaLista() {
+        DescuentoRegla r = reglaBase(); r.setDescuentoPorcentaje(new BigDecimal("1")); r.setRedondeo(new BigDecimal("10"));
+        when(repository.findByActivoTrue()).thenReturn(List.of(r));
+
+        assertThat(service.calcularDescuento(accesorio(2), new BigDecimal("100"), LocalDateTime.now())).isEqualByComparingTo("0");   // 99 → 100: sin descuento
+    }
+
+    @Test
     @DisplayName("con varias reglas aplicables, se usa la que da mayor descuento")
     void variasReglas_seUsaLaMejor() {
         DescuentoRegla chica = reglaBase(); chica.setIddescuento(1); chica.setDescuentoFijo(new BigDecimal("10"));

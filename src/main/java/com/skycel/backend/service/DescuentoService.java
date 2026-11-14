@@ -105,12 +105,20 @@ public class DescuentoService {
     }
 
     static BigDecimal montoDescuento(DescuentoRegla r, BigDecimal precioLista) {
-        if (r.getDescuentoFijo() != null && r.getDescuentoFijo().signum() > 0) return r.getDescuentoFijo();
-        if (r.getDescuentoPorcentaje() != null && r.getDescuentoPorcentaje().signum() > 0) {
-            return precioLista.multiply(r.getDescuentoPorcentaje())
-                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        BigDecimal bruto = BigDecimal.ZERO;
+        boolean porcentaje = false;
+        if (r.getDescuentoFijo() != null && r.getDescuentoFijo().signum() > 0) {
+            bruto = r.getDescuentoFijo();
+        } else if (r.getDescuentoPorcentaje() != null && r.getDescuentoPorcentaje().signum() > 0) {
+            porcentaje = true;
+            bruto = precioLista.multiply(r.getDescuentoPorcentaje()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         }
-        return BigDecimal.ZERO;
+        if (bruto.signum() <= 0) return BigDecimal.ZERO;
+        // El precio final se redondea a cantidades cerradas: lo que se redondea es el precio, y el descuento es lo que resulta
+        BigDecimal paso = r.getRedondeo() != null ? r.getRedondeo() : (porcentaje ? BigDecimal.ONE : BigDecimal.ZERO);
+        if (paso.signum() <= 0) return bruto;
+        BigDecimal precioRedondeado = precioLista.subtract(bruto).divide(paso, 0, RoundingMode.HALF_UP).multiply(paso);
+        return precioLista.subtract(precioRedondeado).max(BigDecimal.ZERO);
     }
 
     // ── Administración (ROOT/ADMIN) ──────────────────────────────────────────────
@@ -186,6 +194,9 @@ public class DescuentoService {
         r.setIdProductoMaster(dto.getIdProductoMaster());
         r.setCodti(dto.getCodti());
         r.setMontoMinimo(dto.getMontoMinimo());
+        if (dto.getRedondeo() != null && dto.getRedondeo().signum() < 0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El redondeo no puede ser negativo (usa 0 para no redondear).");
+        r.setRedondeo(dto.getRedondeo());
         r.setDescuentoPorcentaje(tienePorciento ? dto.getDescuentoPorcentaje() : null);
         r.setDescuentoFijo(tieneFijo ? dto.getDescuentoFijo() : null);
         r.setAplicacion(aplicacion);
@@ -219,6 +230,7 @@ public class DescuentoService {
         m.put("categoria", r.getIdCategoria() == null ? null : categoriaRepository.findById(r.getIdCategoria()).map(DescuentoService::rutaTexto).orElse(null));
         m.put("codti", r.getCodti());
         m.put("montoMinimo", r.getMontoMinimo());
+        m.put("redondeo", r.getRedondeo());
         m.put("descuentoPorcentaje", r.getDescuentoPorcentaje());
         m.put("descuentoFijo", r.getDescuentoFijo());
         m.put("aplicacion", switch (r.getAplicacion() != null ? r.getAplicacion() : SIEMPRE) {

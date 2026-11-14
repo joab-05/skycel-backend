@@ -5375,6 +5375,16 @@ async function dibujarFormularioDescuento(cont, tiendas, regla, alGuardar) {
       <input id="df-valor" type="number" inputmode="decimal" min="0" step="0.01"
         value="${editando ? (regla.descuentoFijo ?? regla.descuentoPorcentaje ?? '') : ''}">
 
+      <label>Redondear el precio final</label>
+      <select id="df-redondeo">
+        ${(() => {
+          // por omisión un porcentaje se redondea al peso y un monto fijo no se toca
+          const actual = editando && regla.redondeo != null ? Number(regla.redondeo) : (editando && regla.descuentoFijo != null ? 0 : 1);
+          return [[1, 'Al peso'], [5, 'A 5 pesos'], [10, 'A 10 pesos'], [0, 'Sin redondeo']]
+            .map(([v, t]) => `<option value="${v}"${v === actual ? ' selected' : ''}>${t}</option>`).join('');
+        })()}
+      </select>
+
       <label class="obligatorio">Cuándo aplica</label>
       <div class="segmentado">
         <button type="button" id="df-seg-siempre" class="${!editando || regla.aplicacion === 'SIEMPRE' ? 'activo' : ''}">Siempre</button>
@@ -5438,6 +5448,7 @@ async function dibujarFormularioDescuento(cont, tiendas, regla, alGuardar) {
       montoMinimo: document.getElementById('df-minimo').value ? Number(document.getElementById('df-minimo').value) : null,
       descuentoFijo: tipoDescuento === 'fijo' ? valor : null,
       descuentoPorcentaje: tipoDescuento === 'porciento' ? valor : null,
+      redondeo: Number(document.getElementById('df-redondeo').value),
       aplicacion,
       diasSemana: aplicacion === 'DIAS_SEMANA' ? [...cont.querySelectorAll('.df-dia.activo')].map(b => b.dataset.dia) : null,
       fechaInicio: aplicacion === 'RANGO_FECHA' ? document.getElementById('df-fecha-inicio').value || null : null,
@@ -5473,7 +5484,7 @@ const AUDITORIA_CAMPO_NOMBRE = {
   rol: 'Rol', telefono: 'Teléfono', email: 'Correo', tecnicoEncargado: 'Técnico encargado',
   sueldoBase: 'Sueldo base', nombre: 'Nombre', ubicacion: 'Ubicación', esAlmacen: 'Es almacén',
   tipoProducto: 'Tipo de artículo', idCategoria: 'Categoría', idProductoMaster: 'Artículo específico', codti: 'Sucursal',
-  montoMinimo: 'Monto mínimo', descuentoPorcentaje: 'Descuento (%)', descuentoFijo: 'Descuento ($)',
+  montoMinimo: 'Monto mínimo', redondeo: 'Redondeo del precio final', descuentoPorcentaje: 'Descuento (%)', descuentoFijo: 'Descuento ($)',
   aplicacion: 'Cuándo aplica', diasSemana: 'Días', fechaInicio: 'Desde', fechaFin: 'Hasta',
 };
 function auditoriaNombreCampo(c) { return AUDITORIA_CAMPO_NOMBRE[c] || c; }

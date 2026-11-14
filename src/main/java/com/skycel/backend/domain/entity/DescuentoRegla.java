@@ -66,6 +66,13 @@ public class DescuentoRegla {
     @Column(name = "descuento_fijo", precision = 12, scale = 2)
     private BigDecimal descuentoFijo;
 
+    /**
+     * A cuántos pesos se redondea el PRECIO FINAL (lista menos descuento): 1 = al peso, 5 = a 5 pesos, 10 = a 10 pesos, 0 = sin redondeo.
+     * null = por omisión: un descuento por porcentaje se redondea al peso (queda en cantidades cerradas) y uno fijo no se toca.
+     */
+    @Column(name = "redondeo", precision = 6, scale = 2)
+    private BigDecimal redondeo;
+
     /** 0 = SIEMPRE, 1 = DIAS_SEMANA (ver {@code diasSemana}), 2 = RANGO_FECHA (ver fechaInicio/fechaFin). */
     @Column(name = "aplicacion", nullable = false, columnDefinition = "TINYINT DEFAULT 0")
     private Byte aplicacion;

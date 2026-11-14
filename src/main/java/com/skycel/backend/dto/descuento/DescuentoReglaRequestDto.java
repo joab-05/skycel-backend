@@ -20,6 +20,8 @@ public class DescuentoReglaRequestDto {
     private BigDecimal descuentoPorcentaje; // exactamente uno de los dos
     private BigDecimal descuentoFijo;
 
+    private BigDecimal redondeo;         // a cuántos pesos se redondea el precio final: 1, 5, 10, 0 = sin redondeo; null = por omisión (porcentaje: al peso)
+
     private String aplicacion;           // "SIEMPRE" | "DIAS_SEMANA" | "RANGO_FECHA"
     private java.util.List<String> diasSemana; // ["LUN","MIE",...], solo si aplicacion = DIAS_SEMANA
     private LocalDate fechaInicio;       // solo si aplicacion = RANGO_FECHA
