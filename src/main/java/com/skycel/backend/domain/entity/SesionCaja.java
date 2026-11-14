@@ -89,6 +89,23 @@ public class SesionCaja {
     @Column(name = "faltante_nomina", columnDefinition = "TINYINT")
     private Byte faltanteNomina;
 
+    // ── Corrección del cierre por un administrador ──────────────────────────
+
+    /** Lo que se contó al cerrar, antes de la primera corrección (null = el corte nunca se corrigió). */
+    @Column(name = "contado_original", precision = 12, scale = 2)
+    private BigDecimal contadoOriginal;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idusuario_correccion")
+    private Usuario usuarioCorreccion;
+
+    @Column(name = "fecha_correccion")
+    private LocalDateTime fechaCorreccion;
+
+    /** Por qué se corrigió y qué decía antes (si se corrigió varias veces, una tras otra). */
+    @Column(name = "correccion_motivo", length = 1000)
+    private String correccionMotivo;
+
     /** El corte completo al cerrar, en JSON (ver SesionCajaResponseDto.ResumenDto). */
     @Column(name = "detalle", columnDefinition = "MEDIUMTEXT")
     private String detalle;

@@ -1,6 +1,6 @@
 /**
  * Recibir un producto por garantía (igual que en JSystem): de una venta de este sistema (por IMEI o código), de una venta del sistema
- * anterior (con la fecha de compra y los días de garantía que tenía) o un equipo de vitrina con una falla (aún sin vender).
+ * anterior (con la fecha de compra y los días de garantía que tenía) o un equipo o accesorio de las existencias con una falla (aún sin vender).
  * El seguimiento (bodega, proveedor, entrega) está en el detalle de cada garantía.
  */
 
@@ -14,7 +14,7 @@ function formularioNuevaGarantia(cont, alGuardar) {
       <div class="segmentado">
         <button type="button" id="gn-o-venta" class="activo">Venta de este sistema</button>
         <button type="button" id="gn-o-anterior">Venta anterior</button>
-        <button type="button" id="gn-o-vitrina">Equipo de vitrina</button>
+        <button type="button" id="gn-o-vitrina">De las existencias</button>
       </div>
       <div id="gn-venta">
         <label class="obligatorio">Número de venta</label>
@@ -40,8 +40,10 @@ function formularioNuevaGarantia(cont, alGuardar) {
         </div>
       </div>
       <div id="gn-vitrina" class="oculto">
-        <div class="ayuda">Un equipo que aún no se vende y se le detectó una falla: se aparta de las existencias mientras va con el proveedor y vuelve al entregarse.</div>
-        <label class="obligatorio">IMEI o serie del equipo</label>
+        <div class="ayuda">Un equipo o accesorio que aún no se vende y se le detectó una falla: se aparta de las existencias (una pieza, si es accesorio) mientras va con el proveedor y vuelve al entregarse.</div>
+        <label class="obligatorio">¿Qué es?</label>
+        <select id="gn-vitrina-tipo"><option value="equipo">Equipo (celular o tablet)</option><option value="accesorio">Accesorio</option></select>
+        <label id="gn-vitrina-et" class="obligatorio">IMEI o serie del equipo</label>
         <input id="gn-imei-vitrina">
       </div>
       <label class="obligatorio">Falla reportada</label>
@@ -69,6 +71,10 @@ function formularioNuevaGarantia(cont, alGuardar) {
     ver('gn-contacto', o !== 'vitrina');
   };
   ['venta', 'anterior', 'vitrina'].forEach(k => document.getElementById('gn-o-' + k).onclick = () => elegir(k));
+  document.getElementById('gn-vitrina-tipo').onchange = () => {
+    const acc = document.getElementById('gn-vitrina-tipo').value === 'accesorio';
+    document.getElementById('gn-vitrina-et').textContent = acc ? 'Código del accesorio' : 'IMEI o serie del equipo';
+  };
   document.getElementById('gn-cancelar').onclick = () => { cont.classList.add('oculto'); cont.innerHTML = ''; };
 
   document.getElementById('gn-elegible').onclick = async () => {
@@ -91,8 +97,10 @@ function formularioNuevaGarantia(cont, alGuardar) {
     // se recibe en la sucursal con la que se está trabajando (un administrador o un vendedor pueden estar en otra distinta a la de su alta)
     const dto = { codti: Sesion.obtener().codti, fallaReportada: falla, diagnosticoInicial: v('gn-diag') || null };
     if (origen === 'vitrina') {
-      if (!v('gn-imei-vitrina')) { mostrarMensaje(root, 'Indica el IMEI o serie del equipo de vitrina.', 'error'); return; }
-      dto.vitrina = true; dto.imei = v('gn-imei-vitrina');
+      const accesorio = v('gn-vitrina-tipo') === 'accesorio';
+      if (!v('gn-imei-vitrina')) { mostrarMensaje(root, accesorio ? 'Indica el código del accesorio.' : 'Indica el IMEI o serie del equipo.', 'error'); return; }
+      dto.vitrina = true;
+      if (accesorio) dto.codpro = v('gn-imei-vitrina'); else dto.imei = v('gn-imei-vitrina');
     } else {
       dto.nombreContacto = v('gn-contacto-nombre') || null; dto.telefonoContacto = v('gn-contacto-tel') || null;
       if (origen === 'venta') {

@@ -255,6 +255,57 @@ class GarantiaServiceTest {
             assertEstado(HttpStatus.CONFLICT, () -> service.crear(reclamoVitrina(IMEI_VITRINA), "abigail"));
         }
 
+        private GarantiaRequestDto reclamoAccesorio(String codpro) {
+            GarantiaRequestDto d = new GarantiaRequestDto();
+            d.setVitrina(true);
+            d.setCodpro(codpro);
+            d.setFallaReportada("Viene sin carga");
+            return d;
+        }
+
+        @Test
+        @DisplayName("un accesorio de las existencias: sale UNA pieza (con su movimiento), va al proveedor y no pide IMEI")
+        void accesorioCrear() {
+            pAccesorio.setStock(BigDecimal.valueOf(5));
+            pAccesorio.setProveedor(proveedor);
+
+            GarantiaResponseDto r = service.crear(reclamoAccesorio("ACC-000001"), "abigail");
+
+            assertThat(r.getVitrina()).isTrue();
+            assertThat(r.getImei()).isNull();
+            assertThat(r.getCodpro()).isEqualTo("ACC-000001");
+            assertThat(r.getNombreProducto()).isEqualTo("Funda Silicon");
+            assertThat(r.getTipoProducto()).isEqualTo("ACCESORIO");
+            assertThat(r.getProveedor()).isEqualTo("Mayorista Movil MX");
+            assertThat(pAccesorio.getStock()).isEqualByComparingTo("4");
+            verify(movimientoInventarioService).registrar(eq(pAccesorio), eq(BigDecimal.valueOf(5)), eq("GARANTIA_VITRINA"), anyString(), eq(r.getFolio()));
+        }
+
+        @Test
+        @DisplayName("un accesorio sin existencias, un servicio, un equipo por código o un código que no existe: no se recibe")
+        void accesorioInvalido() {
+            pAccesorio.setStock(BigDecimal.ZERO);
+            assertEstado(HttpStatus.CONFLICT, () -> service.crear(reclamoAccesorio("ACC-000001"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(reclamoAccesorio("SRV-000001"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(reclamoAccesorio("CEL-000002"), "abigail"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.crear(reclamoAccesorio("NO-EXISTE"), "abigail"));
+            assertThat(pAccesorio.getStock()).isEqualByComparingTo("0");
+        }
+
+        @Test
+        @DisplayName("un accesorio cambiado por el proveedor no pide IMEI nuevo, y al entregar la pieza regresa a las existencias")
+        void accesorioRegresa() {
+            pAccesorio.setStock(BigDecimal.valueOf(5));
+            int g = service.crear(reclamoAccesorio("ACC-000001"), "abigail").getIdgarantia();
+            ir(g, "gerente", 2, 3, 4, 5, 7, 9, 10);          // el cambio físico (7) no exige imeiReemplazo
+
+            assertThat(pAccesorio.getStock()).isEqualByComparingTo("4");   // sigue fuera mientras no se entrega
+            service.avanzar(g, paso(11, null), "abigail");
+
+            assertThat(pAccesorio.getStock()).isEqualByComparingTo("5");
+            verify(movimientoInventarioService).registrar(eq(pAccesorio), eq(BigDecimal.valueOf(4)), eq("GARANTIA_VITRINA"), eq("Regresa de garantía"), anyString());
+        }
+
         @Test
         @DisplayName("reparado por el proveedor: al entregarse el equipo vuelve a las existencias (DISPONIBLE)")
         void reparadoVuelve() {

@@ -47,12 +47,22 @@
       select.focus();
     };
 
-    // posición: debajo de la lista; si no cabe, arriba
-    const r = select.getBoundingClientRect();
-    caja.style.minWidth = Math.max(240, r.width) + 'px';
-    caja.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Math.max(240, r.width) - 8)) + 'px';
-    const alto = 330;
-    caja.style.top = (r.bottom + alto < window.innerHeight ? r.bottom + 4 : Math.max(8, r.top - alto - 4)) + 'px';
+    // posición: debajo de la lista; si no cabe, arriba. En el celular el teclado le quita pantalla a la página: se usa el área
+    // realmente visible (visualViewport) y la lista se achica para que siempre se vean las opciones.
+    const colocar = () => {
+      const r = select.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const altoVisible = vv ? vv.height : window.innerHeight;
+      const ancho = Math.max(240, r.width);
+      caja.style.minWidth = ancho + 'px';
+      caja.style.left = Math.max(8, Math.min(r.left, window.innerWidth - ancho - 8)) + 'px';
+      const cabeBajo = altoVisible - r.bottom - 70, cabeArriba = r.top - 70;      // 70 = el cuadro de búsqueda y los márgenes
+      const abajo = cabeBajo >= 150 || cabeBajo >= cabeArriba;
+      const espacio = Math.max(110, Math.min(280, abajo ? cabeBajo : cabeArriba));
+      lista.style.maxHeight = espacio + 'px';
+      caja.style.top = abajo ? (r.bottom + 4) + 'px' : Math.max(8, r.top - espacio - 66) + 'px';
+    };
+    colocar();
 
     q.addEventListener('input', filtrar);
     q.addEventListener('keydown', (e) => {
@@ -69,14 +79,23 @@
     lista.addEventListener('mousedown', (e) => { e.preventDefault(); const el = e.target.closest('.buscable-op'); if (el) elegir(Number(el.dataset.k)); });
 
     const fuera = (e) => { if (!caja.contains(e.target)) cerrar(); };
-    const alMover = (e) => { if (!caja.contains(e.target)) cerrar(); };
+    // Al aparecer el teclado del celular la página se mueve y cambia de tamaño: la lista NO se cierra, se acomoda;
+    // solo se cierra si la lista de la que salió ya no se ve en la pantalla
+    const acomodar = (e) => {
+      if (e && e.target && caja.contains(e.target)) return;      // el desplazamiento de la propia lista
+      const r = select.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) { cerrar(); return; }
+      colocar();
+    };
     setTimeout(() => document.addEventListener('mousedown', fuera, true), 0);
-    window.addEventListener('scroll', alMover, true);
-    window.addEventListener('resize', cerrar);
+    window.addEventListener('scroll', acomodar, true);
+    window.addEventListener('resize', acomodar);
+    if (window.visualViewport) { window.visualViewport.addEventListener('resize', acomodar); window.visualViewport.addEventListener('scroll', acomodar); }
     abierta = { select, caja, cerrar() {
       document.removeEventListener('mousedown', fuera, true);
-      window.removeEventListener('scroll', alMover, true);
-      window.removeEventListener('resize', cerrar);
+      window.removeEventListener('scroll', acomodar, true);
+      window.removeEventListener('resize', acomodar);
+      if (window.visualViewport) { window.visualViewport.removeEventListener('resize', acomodar); window.visualViewport.removeEventListener('scroll', acomodar); }
       caja.remove();
       abierta = null;
     } };

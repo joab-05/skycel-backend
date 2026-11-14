@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -150,8 +151,12 @@ public class GarantiaService {
      */
     private GarantiaResponseDto crearDeVitrina(GarantiaRequestDto dto, Usuario usuario, Tienda tienda) {
         String identificador = trimOrNull(dto.getImei());
+        if (identificador == null && trimOrNull(dto.getCodpro()) != null) {
+            return crearDeExistenciasAccesorio(dto, usuario, tienda);
+        }
         if (identificador == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el IMEI o serie del equipo de vitrina (imei).");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Indique el IMEI o serie del equipo (imei) o el código del accesorio (codpro).");
         }
         ProductoImei unidad = productoImeiRepository.findByImei(identificador.toUpperCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "El IMEI o serie '" + identificador + "' no está registrado en el inventario."));
@@ -181,6 +186,46 @@ public class GarantiaService {
         productoImeiRepository.save(unidad);
         movimientoInventarioService.registrarEquipo(unidad, -1, "GARANTIA_VITRINA", "Falla en vitrina: " + g.getFallaReportada(), g.getFolioSeguimiento());
         registrar(g, usuario, "Equipo de vitrina apartado en " + tienda.getNombre()
+                + (g.getDiagnosticoInicial() != null ? ". Estado: " + g.getDiagnosticoInicial() : ""));
+        return toDto(g);
+    }
+
+    /**
+     * Un accesorio de las existencias (aún sin vender, o que la tienda recibió con defecto) que va con el proveedor: igual que un
+     * equipo de vitrina, pero la pieza se identifica por su código. Sale UNA pieza de las existencias (queda registrado en el
+     * historial de movimientos) y regresa cuando la garantía se entrega.
+     */
+    private GarantiaResponseDto crearDeExistenciasAccesorio(GarantiaRequestDto dto, Usuario usuario, Tienda tienda) {
+        String codpro = trimOrNull(dto.getCodpro());
+        Producto p = productoRepository.findByCodproAndTienda_Codti(codpro, tienda.getCodti())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "El código '" + codpro + "' no existe en " + tienda.getNombre() + "."));
+        ProductoMaster master = p.getProductoMaster();
+        if (master == null || master.getTipo() != TipoProducto.ACCESORIO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "'" + codpro + "' no es un accesorio: los equipos se identifican por su IMEI o serie y un servicio no entra a garantía.");
+        }
+        BigDecimal antes = p.getStock() != null ? p.getStock() : BigDecimal.ZERO;
+        if (antes.compareTo(BigDecimal.ONE) < 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "No hay existencias de '" + master.getNombreBase() + "' en " + tienda.getNombre() + " (hay " + antes.stripTrailingZeros().toPlainString() + ").");
+        }
+        LocalDate hoy = LocalDate.now();
+        Garantia g = garantiaRepository.save(Garantia.builder()
+                .vitrina(true).producto(p).productoMaster(master)
+                .usuarioRecibe(usuario).tienda(tienda)
+                .folioSeguimiento(siguienteFolio())
+                .fallaReportada(dto.getFallaReportada().trim())
+                .diagnosticoInicial(trimOrNull(dto.getDiagnosticoInicial()))
+                .nombreContacto(usuario.getNombreCompleto()).telefonoContacto("VITRINA")
+                .proveedor(p.getProveedor())
+                .estadoActual(RECIBIDO_SUCURSAL)
+                .fechaLimiteSolucion(sumarDiasHabiles(hoy, DIAS_HABILES_SOLUCION))
+                .build());
+        p.setStock(antes.subtract(BigDecimal.ONE));
+        productoRepository.save(p);
+        movimientoInventarioService.registrar(p, antes, "GARANTIA_VITRINA", "Accesorio con falla: " + g.getFallaReportada(), g.getFolioSeguimiento());
+        registrar(g, usuario, "Accesorio apartado de las existencias de " + tienda.getNombre()
                 + (g.getDiagnosticoInicial() != null ? ". Estado: " + g.getDiagnosticoInicial() : ""));
         return toDto(g);
     }
@@ -326,7 +371,8 @@ public class GarantiaService {
             g.setImeiReemplazo(reemplazo);
         }
         boolean vitrina = Boolean.TRUE.equals(g.getVitrina());
-        if (vitrina && hacia == CAMBIO_FISICO) {
+        // un accesorio cambiado por el proveedor regresa con el mismo código: solo un equipo trae un IMEI o serie nuevo
+        if (vitrina && hacia == CAMBIO_FISICO && g.getImei() != null) {
             if (reemplazo == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el IMEI o serie del equipo nuevo (imeiReemplazo): sustituye al de vitrina.");
             }
@@ -613,6 +659,14 @@ public class GarantiaService {
 
     /** Al entregar una garantía de vitrina, el equipo (reparado o el que lo sustituyó) vuelve a las existencias. */
     private void volverAVitrina(Garantia g) {
+        if (g.getImei() == null && g.getImeiReemplazo() == null && g.getProducto() != null) {   // un accesorio: vuelve su pieza a las existencias
+            Producto p = g.getProducto();
+            BigDecimal antes = p.getStock() != null ? p.getStock() : BigDecimal.ZERO;
+            p.setStock(antes.add(BigDecimal.ONE));
+            productoRepository.save(p);
+            movimientoInventarioService.registrar(p, antes, "GARANTIA_VITRINA", "Regresa de garantía", g.getFolioSeguimiento());
+            return;
+        }
         String imei = g.getImeiReemplazo() != null ? g.getImeiReemplazo() : g.getImei();
         productoImeiRepository.findByImei(imei).ifPresent(u -> {
             if (ProductoImei.EN_GARANTIA.equals(u.getEstado())) {

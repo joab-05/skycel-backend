@@ -199,6 +199,69 @@ public class SesionCajaService {
         return toDtoCerrada(sesion, true);
     }
 
+    // ── Corregir un corte ya cerrado (solo administración) ──────────────────
+
+    /**
+     * Cuando quien cerró se equivocó al contar (o al decidir lo que deja para mañana), un administrador corrige el corte:
+     * cambian lo contado, la diferencia, lo que se retiró y lo que queda para mañana. Lo que el sistema esperaba y el detalle
+     * de ventas y movimientos NO cambian (son lo que de verdad ocurrió). Queda registrado quién lo corrigió, cuándo, por qué
+     * y lo que se había contado originalmente. No mueve la caja: la diferencia se absorbe en la siguiente apertura, como siempre.
+     * Si el faltante ya se descontó en una nómina, primero se quita esa deducción (el faltante queda perdonado) en Nómina.
+     */
+    @Transactional
+    public SesionCajaResponseDto corregirCierre(Integer idsesion, com.skycel.backend.dto.caja.CorregirCierreRequestDto dto, String username) {
+        Usuario usuario = usuario(username);
+        if (usuario.getRol() != Rol.ROOT && usuario.getRol() != Rol.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador puede corregir un corte cerrado.");
+        }
+        SesionCaja sesion = sesionCajaRepository.findById(idsesion)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Turno de caja no encontrado: " + idsesion));
+        if (sesion.getEstado() != SesionCaja.CERRADA) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El turno sigue abierto: se cierra normalmente, no se corrige.");
+        }
+        String motivo = dto.getMotivo() == null ? "" : dto.getMotivo().trim();
+        if (motivo.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo de la corrección.");
+
+        BigDecimal contado = dto.getEfectivoContado().setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal fondoAnterior = sesion.getFondoSiguiente() != null ? sesion.getFondoSiguiente() : BigDecimal.ZERO;
+        BigDecimal fondoSiguiente = dto.getFondoSiguiente() != null
+                ? dto.getFondoSiguiente().setScale(2, java.math.RoundingMode.HALF_UP)
+                : fondoAnterior.min(contado);
+        if (fondoSiguiente.compareTo(contado) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El fondo que se deja para mañana ($" + fondoSiguiente + ") no puede ser mayor a lo contado ($" + contado + ").");
+        }
+        BigDecimal esperado = sesion.getEfectivoEsperado() != null ? sesion.getEfectivoEsperado() : BigDecimal.ZERO;
+        BigDecimal diferenciaNueva = contado.subtract(esperado);
+        BigDecimal diferenciaVieja = sesion.getDiferencia() != null ? sesion.getDiferencia() : BigDecimal.ZERO;
+        if (sesion.getFaltanteNomina() != null && sesion.getFaltanteNomina() == NominaService.FALTANTE_DESCONTADO
+                && diferenciaNueva.compareTo(diferenciaVieja) != 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "El faltante de este corte ya se descontó en una nómina. Primero quita esa deducción en Nómina (el faltante queda perdonado) y luego corrige el corte.");
+        }
+
+        BigDecimal contadoAnterior = sesion.getEfectivoContado();
+        if (sesion.getContadoOriginal() == null) sesion.setContadoOriginal(contadoAnterior);
+        String antes = "antes: contado $" + (contadoAnterior != null ? contadoAnterior.toPlainString() : "0.00") + ", para mañana $" + fondoAnterior.toPlainString();
+        String nota = motivo + " (" + antes + ")";
+        String previa = sesion.getCorreccionMotivo();
+        String junto = previa == null || previa.isBlank() ? nota : previa + " | " + nota;
+        sesion.setCorreccionMotivo(junto.length() > 1000 ? junto.substring(junto.length() - 1000) : junto);
+        sesion.setUsuarioCorreccion(usuario);
+        sesion.setFechaCorreccion(LocalDateTime.now());
+
+        sesion.setEfectivoContado(contado);
+        sesion.setDiferencia(diferenciaNueva);
+        sesion.setFondoSiguiente(fondoSiguiente);
+        sesion.setRetiroCierre(contado.subtract(fondoSiguiente));
+        if (dto.getObservaciones() != null) {
+            sesion.setObservaciones(dto.getObservaciones().isBlank() ? null : dto.getObservaciones().trim());
+        }
+        // Un faltante que ya no lo es (o que apareció) vuelve a evaluarse para la nómina: si no se había descontado ni perdonado, nada que limpiar
+        sesionCajaRepository.save(sesion);
+        return toDtoCerrada(sesion, true);
+    }
+
     // ── Piezas internas ──────────────────────────────────────────────────────
 
     /** Lo que ocurrió en la caja entre {@code desde} y {@code hasta}: ventas por método y movimientos por motivo. */
@@ -262,6 +325,12 @@ public class SesionCajaService {
         dto.setFondoSiguiente(s.getFondoSiguiente());
         dto.setRetiroCierre(s.getRetiroCierre());
         dto.setObservaciones(s.getObservaciones());
+        if (s.getFechaCorreccion() != null) {
+            dto.setContadoOriginal(s.getContadoOriginal());
+            dto.setCorregidoPor(s.getUsuarioCorreccion() != null ? s.getUsuarioCorreccion().getNombreCompleto() : null);
+            dto.setFechaCorreccion(s.getFechaCorreccion());
+            dto.setMotivoCorreccion(s.getCorreccionMotivo());
+        }
         if (conDetalle) {
             ResumenDto guardado = deJson(s.getDetalle());
             dto.setResumen(guardado);

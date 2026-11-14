@@ -311,7 +311,7 @@ public class OrdenServicioService {
         exigirEstado(orden, "agregar renglones", RECIBIDA, EN_REPARACION);
         Tienda deDonde = tiendaDeInventario(orden, usuario);
         short cantidad = dto.getCantidad() != null ? dto.getCantidad() : 1;
-        String descripcion = dto.getDescripcion().trim().replaceAll("\s+", " ");
+        String descripcion = dto.getDescripcion().trim().replaceAll("\\s+", " ");
         String nombrePieza = descripcion + " (" + orden.getFolio() + ")";
         boolean yaAgregada = detalleRepository.findByOrden_IdordenOrderByIddetalle(id).stream()
                 .anyMatch(d -> d.getProductoMaster() != null && nombrePieza.equalsIgnoreCase(d.getProductoMaster().getNombreBase()));

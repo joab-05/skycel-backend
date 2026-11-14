@@ -38,6 +38,12 @@ public class SesionCajaResponseDto {
     private BigDecimal retiroCierre;
     private String observaciones;
 
+    /** Si un administrador corrigió el cierre: lo que se había contado, quién, cuándo y por qué. */
+    private BigDecimal contadoOriginal;
+    private String     corregidoPor;
+    private LocalDateTime fechaCorreccion;
+    private String     motivoCorreccion;
+
     /** Cuando la caja está cerrada: con cuánto se sugiere abrir (lo que quedó en el cajón). */
     private BigDecimal fondoSugerido;
 

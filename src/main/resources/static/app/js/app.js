@@ -795,9 +795,24 @@ async function pantallaCorte(id) {
   const r = c.resumen;
   const dif = Number(c.diferencia || 0);
   const claseDif = Math.abs(dif) < 0.005 ? 'c3' : (dif > 0 ? 'c4' : 'c6');
+  const puedeCorregir = !c.abierta && c.idsesionCaja && SUPERIOR.includes(Sesion.obtener().rol);   // un administrador corrige un cierre equivocado
   root.innerHTML = `
     <button class="enlace" onclick="navegar('#/caja')" style="margin-bottom:6px;">${ic('arrow-left')} Volver a caja</button>
-    ${cabeceraPantalla(ic('receipt') + ' Corte #' + c.idsesionCaja, `${escapar(c.nombreCaja)} · ${escapar(c.nombreTienda || '')}`, `<button id="cr-imprimir" class="btn btn-gris">${ic('printer')} Imprimir</button>`)}
+    ${cabeceraPantalla(ic('receipt') + ' Corte #' + c.idsesionCaja, `${escapar(c.nombreCaja)} · ${escapar(c.nombreTienda || '')}`,
+      `${puedeCorregir ? `<button id="cr-corregir" class="btn btn-azul">${ic('pencil')} Corregir cierre</button> ` : ''}<button id="cr-imprimir" class="btn btn-gris">${ic('printer')} Imprimir</button>`)}
+    ${c.corregidoPor ? `<div class="mensaje info">${ic('pencil')} Corregido por ${escapar(c.corregidoPor)} · ${formatoFecha(c.fechaCorreccion)}${c.contadoOriginal != null ? `. Al cerrar se había contado <strong>${formatoDinero(c.contadoOriginal)}</strong>.` : ''}${c.motivoCorreccion ? '<br>' + escapar(c.motivoCorreccion) : ''}</div>` : ''}
+    ${puedeCorregir ? `<div id="cr-form" class="tarjeta oculto">
+      <h2>Corregir el cierre</h2>
+      <p class="ayuda">Solo cambian lo contado, la diferencia y lo que queda para mañana. Lo que el sistema esperaba (${formatoDinero(c.efectivoEsperado)}) y las ventas y movimientos del turno no cambian. Queda registrado quién lo corrigió, por qué y lo que decía antes. Si el faltante ya se descontó en nómina, primero quita esa deducción en Nómina.</p>
+      <div class="dos-cols">
+        <div><label class="obligatorio">Efectivo contado (lo que había de verdad)</label><input id="cr-contado" type="number" min="0" step="0.01" inputmode="decimal" data-moneda value="${Number(c.efectivoContado || 0).toFixed(2)}"></div>
+        <div><label>Se dejó para mañana</label><input id="cr-fondo" type="number" min="0" step="0.01" inputmode="decimal" data-moneda value="${Number(c.fondoSiguiente || 0).toFixed(2)}"></div>
+      </div>
+      <p id="cr-resultado" class="ayuda" style="font-weight:700;"></p>
+      <label class="obligatorio">Motivo de la corrección</label><input id="cr-motivo" maxlength="255" placeholder="Por ejemplo: se contó mal el billete de $500">
+      <label>Observaciones del corte</label><textarea id="cr-obs" maxlength="1000">${escapar(c.observaciones || '')}</textarea>
+      <div class="grupo-botones" style="margin-top:8px;"><button id="cr-guardar" class="btn btn-verde">Guardar corrección</button><button id="cr-cancelar" class="btn btn-gris">Cancelar</button></div>
+    </div>` : ''}
     ${c.modificadaDespuesDelCierre ? '<div class="mensaje info">Después de cerrar entraron movimientos con fecha de este turno (por ejemplo ventas hechas sin conexión). Este corte conserva lo que se contó al cerrar.</div>' : ''}
     <div class="kp-h">
       ${kpiH('c1', 'banknote', formatoDinero(c.efectivoEsperado), c.abierta ? 'Efectivo esperado ahora' : 'Efectivo esperado')}
@@ -807,8 +822,8 @@ async function pantallaCorte(id) {
     </div>
     <div class="tarjeta">
       <h2>Información del turno</h2>
-      <div class="detalle-fila"><span class="k">Abrió</span><span class="v">${escapar(c.usuarioApertura || '')} · ${formatoFecha(c.fechaApertura)}</span></div>
-      ${c.abierta ? '' : `<div class="detalle-fila"><span class="k">Cerró</span><span class="v">${escapar(c.usuarioCierre || '')} · ${formatoFecha(c.fechaCierre)}</span></div>`}
+      <div class="detalle-fila"><span class="k">Abrió</span><span class="v">${escapar(primerNombre(c.usuarioApertura))} · ${formatoFecha(c.fechaApertura)}</span></div>
+      ${c.abierta ? '' : `<div class="detalle-fila"><span class="k">Cerró</span><span class="v">${escapar(primerNombre(c.usuarioCierre))} · ${formatoFecha(c.fechaCierre)}</span></div>`}
       <div class="detalle-fila"><span class="k">Fondo inicial</span><span class="v">${formatoDinero(c.fondoInicial)}</span></div>
       ${c.abierta ? '' : `<div class="detalle-fila"><span class="k">Retirado al cerrar</span><span class="v">${formatoDinero(c.retiroCierre)}</span></div>`}
       ${c.observaciones ? `<div class="detalle-fila"><span class="k">Observaciones</span><span class="v">${escapar(c.observaciones)}</span></div>` : ''}
@@ -829,6 +844,37 @@ async function pantallaCorte(id) {
       </div>
     </div>` : ''}`;
   document.getElementById('cr-imprimir').onclick = () => window.print();
+  if (puedeCorregir) {
+    const form = document.getElementById('cr-form');
+    const mostrarResultado = () => {
+      const contado = Number(document.getElementById('cr-contado').value || 0);
+      const fondo = Number(document.getElementById('cr-fondo').value || 0);
+      const d = contado - Number(c.efectivoEsperado || 0);
+      const el = document.getElementById('cr-resultado');
+      el.textContent = fondo > contado ? `El fondo para mañana (${formatoDinero(fondo)}) no puede ser mayor a lo contado (${formatoDinero(contado)}).`
+        : `Quedaría una diferencia de ${formatoDinero(d)} y se retirarían ${formatoDinero(contado - fondo)}.`;
+      el.style.color = fondo > contado ? '#dc2626' : (Math.abs(d) < 0.005 ? '#059669' : '#b45309');
+    };
+    document.getElementById('cr-corregir').onclick = () => { form.classList.toggle('oculto'); mostrarResultado(); };
+    document.getElementById('cr-cancelar').onclick = () => form.classList.add('oculto');
+    ['cr-contado', 'cr-fondo'].forEach(i => document.getElementById(i).addEventListener('input', mostrarResultado));
+    document.getElementById('cr-guardar').onclick = async (ev) => {
+      const contado = Number(document.getElementById('cr-contado').value);
+      const fondo = Number(document.getElementById('cr-fondo').value);
+      const motivo = document.getElementById('cr-motivo').value.trim();
+      if (document.getElementById('cr-contado').value === '' || !(contado >= 0)) { mostrarMensaje(root, 'Indica el efectivo contado.', 'error'); return; }
+      if (!(fondo >= 0) || fondo > contado) { mostrarMensaje(root, 'El fondo para mañana no puede ser mayor a lo contado.', 'error'); return; }
+      if (!motivo) { mostrarMensaje(root, 'Escribe el motivo de la corrección.', 'error'); return; }
+      ev.currentTarget.disabled = true;
+      try {
+        await api('PATCH', `/api/cajas/sesiones/${id}/cierre`, { efectivoContado: contado, fondoSiguiente: fondo, motivo, observaciones: document.getElementById('cr-obs').value.trim() });
+        pantallaCorte(id);
+      } catch (err) {
+        ev.currentTarget.disabled = false;
+        mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
+      }
+    };
+  }
   // Encargados y administradores revisan qué se vendió y qué movimientos de efectivo hubo, uno por uno
   if (c.idsesionCaja && Sesion.tiene('CAJA_MOVIMIENTOS')) {
     root.insertAdjacentHTML('beforeend', `<div class="tarjeta" id="cr-auditoria">
@@ -1578,6 +1624,10 @@ async function pantallaOrdenDetalle(id) {
   const esTecnicoLibre = s.rol === 'TECNICO' && !o.idTecnico && o.estado === 1;
   const puedeResponder = Sesion.tiene('ORDEN_RECIBIR');   // quien atiende al cliente registra su respuesta
   const viva = o.estado === 1 || o.estado === 2;
+  const puedeLineas = puedeTrabajar && viva;              // agregar o quitar servicios y refacciones
+  const puedeRegalo = SUPERIOR.includes(s.rol);           // un regalo ($0) solo lo autoriza un administrador
+  // Las refacciones salen del inventario del taller de la orden; sin técnico asignado, el del técnico que cotiza; si no, la sucursal de la orden
+  const codtiInventario = o.codtiTaller != null ? o.codtiTaller : (s.rol === 'TECNICO' && s.codti != null ? s.codti : o.codti);
   const lineas = o.lineas || [];
 
   /** Cuadro de la cotización: qué falta del cliente y qué botones corresponden. */
@@ -1685,9 +1735,35 @@ async function pantallaOrdenDetalle(id) {
       </div>
       <p class="ayuda">Se abre WhatsApp con el mensaje ya escrito: solo pulsa enviar. Queda anotado en la bitácora.</p>
     </div>
-    ${lineas.length ? `<div class="tarjeta"><h2>Servicios y refacciones</h2>
-      ${lineas.map(l => `<div class="detalle-fila"><span class="k">${escapar(l.nombre)} ×${l.cantidad}${l.nombreTiendaStock && l.tipoProducto !== 'SERVICIO' ? ' <span class="ayuda">· sale de ' + escapar(l.nombreTiendaStock) + '</span>' : ''}</span><span class="v">${l.esRegalo ? 'Regalo' : formatoDinero(l.subtotal)}</span></div>`).join('')}
-      <div class="detalle-fila"><span class="k"><strong>Total</strong></span><span class="v"><strong>${formatoDinero(o.total)}</strong></span></div></div>` : ''}
+    ${lineas.length || puedeLineas ? `<div class="tarjeta"><h2>Servicios y refacciones</h2>
+      ${lineas.length ? lineas.map(l => `<div class="detalle-fila"><span class="k">${escapar(l.nombre)} ×${l.cantidad}${l.nombreTiendaStock && l.tipoProducto !== 'SERVICIO' ? ' <span class="ayuda">· sale de ' + escapar(l.nombreTiendaStock) + '</span>' : ''}</span><span class="v">${l.esRegalo ? 'Regalo' : formatoDinero(l.subtotal)}${puedeLineas ? ` <button type="button" class="btn btn-gris btn-chico ln-quitar" data-d="${l.iddetalle}" title="Quitar este renglón" aria-label="Quitar ${escapar(l.nombre)}">${ic('x')}</button>` : ''}</span></div>`).join('')
+        : '<div class="vacio">Aún no hay servicios ni refacciones: agrega la mano de obra y las piezas para cotizar.</div>'}
+      ${lineas.length ? `<div class="detalle-fila"><span class="k"><strong>Total</strong></span><span class="v"><strong>${formatoDinero(o.total)}</strong></span></div>` : ''}
+      ${puedeLineas ? `<div class="grupo-botones" style="margin-top:10px;"><button type="button" id="ln-abrir" class="btn btn-azul">${ic('plus')} Agregar servicio o refacción</button></div>
+        <div id="ln-form" class="oculto" style="margin-top:10px;">
+          <label class="ln-modo"><input type="checkbox" id="ln-comprada"> La pieza no está en el inventario: la compré para esta orden</label>
+          <div id="ln-inventario">
+            <label class="obligatorio">Servicio o refacción</label>
+            <select id="ln-producto"><option value="">Cargando...</option></select>
+            <div class="dos-cols" style="margin-top:6px;">
+              <div><label>Cantidad</label><input id="ln-cantidad" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
+              <div><label>Precio de venta</label><input id="ln-precio" type="number" min="0" step="0.01" inputmode="decimal" data-moneda></div>
+            </div>
+            ${puedeRegalo ? '<label class="ln-modo"><input type="checkbox" id="ln-regalo"> Es un regalo ($0)</label>' : ''}
+            <p class="ayuda" id="ln-origen"></p>
+          </div>
+          <div id="ln-pieza" class="oculto">
+            <label class="obligatorio">Descripción de la pieza</label><input id="ln-desc" maxlength="80" placeholder="Ej. Pantalla Samsung A16">
+            <div class="dos-cols" style="margin-top:6px;">
+              <div><label class="obligatorio">Costo de cada pieza</label><input id="ln-costo" type="number" min="0" step="0.01" inputmode="decimal" data-moneda></div>
+              <div><label class="obligatorio">Precio al cliente</label><input id="ln-precio-cliente" type="number" min="0.01" step="0.01" inputmode="decimal" data-moneda></div>
+            </div>
+            <div style="margin-top:6px;"><label>Cantidad</label><input id="ln-cantidad-pieza" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
+            <p class="ayuda">La pieza entra al inventario del taller con su costo y sale al entregar la orden. El gasto en efectivo, si lo hubo, se registra aparte en Caja.</p>
+          </div>
+          <div class="grupo-botones" style="margin-top:8px;"><button type="button" id="ln-guardar" class="btn btn-verde">Agregar</button><button type="button" id="ln-cancelar" class="btn btn-gris">Cancelar</button></div>
+        </div>` : ''}
+      </div>` : ''}
     <div class="tarjeta">
       <h2>Información de la orden</h2>
       <div class="detalle-fila"><span class="k">Cliente</span><span class="v">${escapar(o.nombreCliente)}</span></div>
@@ -1699,6 +1775,9 @@ async function pantallaOrdenDetalle(id) {
       <div class="detalle-fila"><span class="k">Estado físico</span><span class="v">${escapar(o.estadoFisico || '—')}</span></div>
       <div class="detalle-fila"><span class="k">Falla reportada</span><span class="v">${escapar(o.fallaReportada)}</span></div>
       <div class="detalle-fila"><span class="k">Diagnóstico</span><span class="v">${escapar(o.diagnostico || '—')}</span></div>
+      ${puedeEditar && puedeTrabajar ? `<div class="grupo-botones" style="margin:4px 0 8px;"><button type="button" id="dg-editar" class="btn btn-gris btn-chico">${ic('clipboard-pen')} ${o.diagnostico ? 'Editar' : 'Escribir'} diagnóstico</button></div>
+        <div id="dg-form" class="oculto"><textarea id="dg-texto" maxlength="1000" placeholder="Lo que encontró el técnico">${escapar(o.diagnostico || '')}</textarea>
+        <div class="grupo-botones" style="margin-top:6px;"><button type="button" id="dg-guardar" class="btn btn-azul">Guardar diagnóstico</button><button type="button" id="dg-cancelar" class="btn btn-gris">Cancelar</button></div></div>` : ''}
       <div class="detalle-fila"><span class="k">Técnico</span><span class="v">${escapar(o.nombreTecnico || 'Sin asignar')}${o.nombreTaller ? ' · ' + escapar(o.nombreTaller) : ''}</span></div>
       <div class="detalle-fila"><span class="k">Recibió</span><span class="v">${escapar(o.nombreRecibe)}</span></div>
       <div class="detalle-fila"><span class="k">Fecha prometida</span><span class="v">${o.fechaPromesaHora ? formatoFecha(o.fechaPromesaHora) + (o.horasEstimadas != null ? ' (' + o.horasEstimadas + ' h)' : '') : (o.fechaPromesa || '—')}</span></div>
@@ -1731,6 +1810,16 @@ async function pantallaOrdenDetalle(id) {
         <label>Cuenta qué pasó (obligatorio si el motivo es «otro»)</label>
         <textarea id="dt-noquedo-detalle" maxlength="255"></textarea>
         <button id="dt-noquedo-enviar" class="btn btn-rojo">Reportar que no quedó</button>
+      </div>
+      <div id="dt-asignar-cont" class="oculto" style="margin-top:10px;">
+        <label>Técnico que la repara</label>
+        <select id="dt-asignar-tecnico"><option value="">Cargando...</option></select>
+        <button id="dt-asignar-enviar" class="btn btn-azul">Asignar técnico</button>
+      </div>
+      <div id="dt-reabrir-cont" class="oculto" style="margin-top:10px;">
+        <label class="obligatorio">¿Por qué se vuelve a reparar?</label>
+        <input id="dt-reabrir-texto" maxlength="200" placeholder="El cliente regresó: sigue la falla">
+        <button id="dt-reabrir-enviar" class="btn btn-azul">Reabrir la reparación</button>
       </div>
       <div id="dt-nota-cont" class="oculto" style="margin-top:10px;">
         <label>Observación</label>
@@ -1856,6 +1945,84 @@ async function pantallaOrdenDetalle(id) {
   });
   pintarFotos();
 
+  // Diagnóstico: lo que encontró el técnico
+  if (document.getElementById('dg-editar')) {
+    document.getElementById('dg-editar').onclick = () => document.getElementById('dg-form').classList.toggle('oculto');
+    document.getElementById('dg-cancelar').onclick = () => document.getElementById('dg-form').classList.add('oculto');
+    document.getElementById('dg-guardar').onclick = async (ev) => {
+      ev.currentTarget.disabled = true;
+      try { await api('PATCH', `/api/ordenes-servicio/${id}`, { diagnostico: document.getElementById('dg-texto').value.trim() }); pantallaOrdenDetalle(id); }
+      catch (err) { ev.currentTarget.disabled = false; fallo(err); }
+    };
+  }
+
+  // Servicios y refacciones de la orden: quitar un renglón y agregar uno (del inventario del taller o una pieza comprada para esta orden)
+  if (puedeLineas) {
+    document.querySelectorAll('.ln-quitar').forEach(b => b.onclick = async () => {
+      if (!confirm('¿Quitar este renglón de la orden?')) return;
+      b.disabled = true;
+      try { await api('DELETE', `/api/ordenes-servicio/${id}/lineas/${b.dataset.d}`); pantallaOrdenDetalle(id); }
+      catch (err) { b.disabled = false; fallo(err); }
+    });
+    const form = document.getElementById('ln-form');
+    const selProducto = document.getElementById('ln-producto');
+    const inpPrecio = document.getElementById('ln-precio');
+    const chkComprada = document.getElementById('ln-comprada');
+    const chkRegalo = document.getElementById('ln-regalo');
+    let catalogo = null;
+    const cargarCatalogo = async () => {
+      if (catalogo) return;
+      try {
+        const lista = await api('GET', `/api/productos/tienda/${codtiInventario}`);
+        // Los equipos no son refacción; de los servicios solo la mano de obra del taller (el resto se cobra en caja); lo demás, si hay existencias
+        catalogo = lista.filter(p => p.tipo !== 'CELULAR' && (p.tipo === 'SERVICIO' ? p.paraReparacion === true : Number(p.stock) > 0))
+          .sort((a, b) => String(a.nombreProductoMaster).localeCompare(String(b.nombreProductoMaster), 'es'));
+        selProducto.innerHTML = '<option value="">Elige una refacción o la mano de obra</option>' + catalogo.map(p =>
+          `<option value="${escapar(p.codpro)}">${escapar(p.codpro)} — ${escapar(p.nombreProductoMaster)}${p.tipo === 'SERVICIO' ? '' : ' (existencias ' + Number(p.stock) + ')'}</option>`).join('');
+      } catch (err) { selProducto.innerHTML = '<option value="">No se pudo cargar el catálogo</option>'; fallo(err); }
+    };
+    document.getElementById('ln-origen').textContent = 'Las refacciones salen del inventario de ' + (o.codtiTaller != null ? (o.nombreTaller || 'el taller') : 'tu sucursal') + '. El cobro se hace en ' + (o.nombreTienda || 'la sucursal de la orden') + '.';
+    document.getElementById('ln-abrir').onclick = () => { form.classList.remove('oculto'); cargarCatalogo(); };
+    document.getElementById('ln-cancelar').onclick = () => form.classList.add('oculto');
+    selProducto.onchange = () => {
+      const p = (catalogo || []).find(x => x.codpro === selProducto.value);
+      if (p) inpPrecio.value = Number(p.preciopub || 0).toFixed(2);
+    };
+    if (chkRegalo) chkRegalo.onchange = () => { inpPrecio.disabled = chkRegalo.checked; if (chkRegalo.checked) inpPrecio.value = '0.00'; };
+    chkComprada.onchange = () => {
+      document.getElementById('ln-inventario').classList.toggle('oculto', chkComprada.checked);
+      document.getElementById('ln-pieza').classList.toggle('oculto', !chkComprada.checked);
+      document.getElementById('ln-guardar').textContent = chkComprada.checked ? 'Agregar la pieza' : 'Agregar';
+    };
+    document.getElementById('ln-guardar').onclick = async (ev) => {
+      const boton = ev.currentTarget;
+      let url, cuerpo;
+      if (chkComprada.checked) {
+        const descripcion = document.getElementById('ln-desc').value.trim();
+        const costo = Number(document.getElementById('ln-costo').value);
+        const precio = Number(document.getElementById('ln-precio-cliente').value);
+        const cantidad = Math.floor(Number(document.getElementById('ln-cantidad-pieza').value));
+        if (!descripcion) { fallo(new Error('Describe la pieza.')); return; }
+        if (document.getElementById('ln-costo').value === '' || !(costo >= 0)) { fallo(new Error('Indica cuánto costó la pieza.')); return; }
+        if (!(precio > 0)) { fallo(new Error('Indica el precio al cliente (mayor a cero).')); return; }
+        if (!(cantidad >= 1)) { fallo(new Error('La cantidad mínima es 1.')); return; }
+        url = `/api/ordenes-servicio/${id}/piezas-compradas`;
+        cuerpo = { descripcion, cantidad, costo, precio };
+      } else {
+        const codpro = selProducto.value;
+        const cantidad = Math.floor(Number(document.getElementById('ln-cantidad').value));
+        if (!codpro) { fallo(new Error('Elige un servicio o una refacción.')); return; }
+        if (!(cantidad >= 1)) { fallo(new Error('La cantidad mínima es 1.')); return; }
+        url = `/api/ordenes-servicio/${id}/lineas`;
+        cuerpo = { codpro, cantidad, esRegalo: !!(chkRegalo && chkRegalo.checked) };
+        if (inpPrecio.value !== '' && !(chkRegalo && chkRegalo.checked)) cuerpo.precioUnitario = Number(inpPrecio.value);
+      }
+      boton.disabled = true;   // un segundo toque no lo manda dos veces
+      try { await api('POST', url, cuerpo); pantallaOrdenDetalle(id); }
+      catch (err) { boton.disabled = false; fallo(err); }
+    };
+  }
+
   if (!puedeTrabajar && !esTecnicoLibre) return;
 
   const llego = document.getElementById('es-llego');
@@ -1876,6 +2043,18 @@ async function pantallaOrdenDetalle(id) {
   }
   if (puedeTrabajar && viva && !o.esperaMotivo) acciones.push({ t: ic('hourglass') + ' Esperar refacción', color: 'btn-gris', fn: () => document.getElementById('dt-espera-cont').classList.toggle('oculto') });
   if (puedeTrabajar && viva && o.estado <= 2) acciones.push({ t: ic('circle-x') + ' No quedó', color: 'btn-gris', fn: () => document.getElementById('dt-noquedo-cont').classList.toggle('oculto') });
+  if (puedeTrabajar && viva && (SUPERIOR.includes(s.rol) || s.tecnicoEncargado)) acciones.push({ t: ic('user') + (o.idTecnico ? ' Cambiar técnico' : ' Asignar técnico'), color: 'btn-gris', fn: async () => {
+    const cont = document.getElementById('dt-asignar-cont');
+    cont.classList.toggle('oculto');
+    const sel = document.getElementById('dt-asignar-tecnico');
+    if (cont.classList.contains('oculto') || sel.dataset.listo) return;
+    try {
+      const tecnicos = await api('GET', '/api/usuarios/tecnicos' + (o.codtiTaller != null ? '?codti=' + o.codtiTaller : ''));
+      sel.innerHTML = '<option value="">Elige un técnico</option>' + tecnicos.map(t => `<option value="${t.idusuario}"${t.idusuario === o.idTecnico ? ' selected' : ''}>${escapar(t.nombreCompleto)}${t.tecnicoEncargado ? ' (encargado)' : ''}</option>`).join('');
+      sel.dataset.listo = '1';
+    } catch (err) { fallo(err); }
+  } });
+  if (puedeTrabajar && o.estado === 3) acciones.push({ t: ic('rotate-ccw') + ' Reabrir reparación', color: 'btn-gris', fn: () => document.getElementById('dt-reabrir-cont').classList.toggle('oculto') });
   if (puedeTrabajar) acciones.push({ t: ic('clipboard-pen') + ' Agregar observación', color: 'btn-gris', fn: () => document.getElementById('dt-nota-cont').classList.toggle('oculto') });
 
   if (acciones.length === 0) { contAcc.classList.add('oculto'); return; }
@@ -1901,6 +2080,19 @@ async function pantallaOrdenDetalle(id) {
       await api('POST', `/api/ordenes-servicio/${id}/espera`, { comentario: texto });
       pantallaOrdenDetalle(id);
     } catch (err) { fallo(err); }
+  };
+
+  document.getElementById('dt-asignar-enviar').onclick = async () => {
+    const idTecnico = Number(document.getElementById('dt-asignar-tecnico').value);
+    if (!idTecnico) { mostrarMensaje(root, 'Elige el técnico.', 'error'); return; }
+    try { await api('POST', `/api/ordenes-servicio/${id}/tecnico`, { idTecnico }); pantallaOrdenDetalle(id); } catch (err) { fallo(err); }
+  };
+
+  document.getElementById('dt-reabrir-enviar').onclick = async () => {
+    const comentario = document.getElementById('dt-reabrir-texto').value.trim();
+    if (!comentario) { mostrarMensaje(root, 'Escribe por qué se reabre.', 'error'); return; }
+    if (!confirm('La orden regresa a «En reparación». ¿Reabrirla?')) return;
+    try { await api('POST', `/api/ordenes-servicio/${id}/reabrir`, { comentario }); pantallaOrdenDetalle(id); } catch (err) { fallo(err); }
   };
 
   document.getElementById('dt-nota-enviar').onclick = async () => {
@@ -1932,6 +2124,9 @@ const CONDICIONES_ORDEN = [
   'La garantía cubre el trabajo realizado y las piezas cambiadas; no cubre golpes, humedad ni mal uso posteriores.',
   'Respalda tu información: no nos hacemos responsables por los datos del equipo.',
 ];
+
+/** Por seguridad del personal, lo que se imprime lleva solo el nombre de pila (sin apellidos). */
+function primerNombre(nombre) { return String(nombre || '').trim().split(/\s+/)[0] || ''; }
 
 /** Comprobante de recepción para imprimir (papel de ticket de 80 mm o una hoja): folio, equipo, falla, anticipo, fecha prometida, QR de seguimiento y condiciones. */
 async function imprimirComprobanteOrden(o) {
@@ -2782,7 +2977,7 @@ async function pantallaGarantiaDetalle(id) {
     ${cabeceraPantalla(escapar(g.folio), `${escapar(g.nombreProducto)} · ingresó ${formatoFecha(g.fechaIngreso)}`, pastillaGarantia(g))}
     <div class="tarjeta">
       <h2>Información de la garantía</h2>
-      ${g.vitrina ? `<div class="detalle-fila"><span class="k">Origen</span><span class="v">Equipo de vitrina: no se había vendido; mientras está fuera no cuenta en las existencias</span></div>`
+      ${g.vitrina ? `<div class="detalle-fila"><span class="k">Origen</span><span class="v">De las existencias: no se había vendido; mientras está fuera no cuenta en el inventario</span></div>`
         : g.ventaAnterior ? `<div class="detalle-fila"><span class="k">Compra</span><span class="v">Sistema anterior${g.folioVentaAnterior ? ' · ticket ' + escapar(g.folioVentaAnterior) : ''} · ${escapar(g.fechaVentaOriginal || '—')} · cubría hasta ${escapar(g.garantiaVigenteHasta || '—')}</span></div>`
         : `<div class="detalle-fila"><span class="k">Venta</span><span class="v">#${g.idventa}${g.fechaVentaOriginal ? ' · ' + escapar(g.fechaVentaOriginal) : ''}</span></div>`}
       <div class="detalle-fila"><span class="k">Producto</span><span class="v">${escapar(g.nombreProducto)}</span></div>
@@ -4750,24 +4945,12 @@ async function pantallaProductoEditar(param) {
       if (!(precio > 0)) { mostrarMensaje(root, 'Indica un precio mayor a cero para la unidad.', 'error'); return; }
       e.target.disabled = true;
       try {
-        await api('PATCH', `/api/productos/imei/${encodeURIComponent(u.imei)}`, {
-          condicion: fila.querySelector('.ue-condicion').value,
-          costoUnitario: costoTxt === '' ? null : Number(costoTxt),
-        });
-        // solo se fija precio propio si cambió respecto al que ya cobraba esa unidad
-        if (Math.abs(precio - Number(u.precioVenta)) > 0.004) {
-          await api('PATCH', `/api/productos/imei/${encodeURIComponent(u.imei)}/precio`, { precioVenta: precio });
-        }
+        // un solo cambio al equipo (las rutas /api/productos/imei/... ya no existen: el equipo se corrige en /api/equipos/{imei})
+        const cambio = { condicion: fila.querySelector('.ue-condicion').value };
+        if (costoTxt !== '') cambio.costo = Number(costoTxt);
+        if (Math.abs(precio - Number(u.precioVenta)) > 0.004) cambio.precioVenta = precio;   // el precio solo se toca si cambió
+        await api('PUT', `/api/equipos/${encodeURIComponent(u.imei)}`, cambio);
         mostrarMensaje(root, 'Unidad actualizada.', 'ok');
-        setTimeout(() => pantallaProductoEditar(param), 700);
-      } catch (err) { mostrarMensaje(root, errorDe(err), 'error'); e.target.disabled = false; }
-    };
-    const quitar = fila.querySelector('.ue-quitar');
-    if (quitar) quitar.onclick = async (e) => {
-      e.target.disabled = true;
-      try {
-        await api('PATCH', `/api/productos/imei/${encodeURIComponent(u.imei)}/precio`, { precioVenta: null });
-        mostrarMensaje(root, 'La unidad vuelve a cobrar el precio del modelo.', 'ok');
         setTimeout(() => pantallaProductoEditar(param), 700);
       } catch (err) { mostrarMensaje(root, errorDe(err), 'error'); e.target.disabled = false; }
     };

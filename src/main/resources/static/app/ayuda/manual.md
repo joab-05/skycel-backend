@@ -134,6 +134,13 @@ La ventana de cierre te guía con **tres cuadros numerados** y un resumen:
 ### Cortes anteriores
 **Cortes** guarda el historial. Abre cualquiera para ver su detalle (ventas por forma de pago, movimientos, quién abrió y quién cerró) e **imprimirlo**. Si después de cerrar llegan ventas hechas sin conexión con fecha de ese turno, el corte avisa que fue **modificado después del cierre**.
 
+### Corregir un corte ya cerrado (solo administrador)
+Si quien cerró se equivocó al contar o al decidir lo que deja para mañana, abre el corte y pulsa **Corregir cierre**. Escribe lo que había de verdad en el cajón, lo que se dejó para mañana y el **motivo** (obligatorio).
+- Cambian lo **contado**, la **diferencia**, lo **retirado** y lo que **queda para mañana**. Lo que el sistema esperaba y las ventas y movimientos del turno **no** cambian: son lo que de verdad ocurrió.
+- El corte queda marcado como **corregido**, con quién lo corrigió, cuándo, por qué y **lo que se había contado antes**. Se puede corregir más de una vez.
+- Si el faltante de ese corte **ya se descontó en una nómina**, primero quita esa deducción en **Nómina** (el faltante queda perdonado) y luego corrige el corte.
+- Un corte de **servicios** ya confirmado se corrige con **Reabrir**.
+
 ### Revisar un corte a detalle (encargado y administrador)
 Para comprobar que todo lo vendido y todo el efectivo quedó bien registrado, abre un corte y pulsa **Ver ventas y movimientos**. Muestra, de todo el turno:
 - **Ventas:** una por una, con la hora, quién vendió, el cliente, la forma de pago y **todo lo que se llevó el cliente**. Cada equipo sale con su **IMEI** y si fue **al contado** o con **PayJoy** (enganche y plazo). Las canceladas aparecen marcadas y no suman.
@@ -297,10 +304,10 @@ Registra los reclamos de garantía de productos vendidos y su viaje hasta el pro
 
 ### Registrar una garantía
 1. Entra a **Garantías** y pulsa **Recibir garantía**.
-2. Elige de dónde viene el producto: **Venta de este sistema** (escribe el número de venta y el IMEI o código; **Revisar si todavía tiene garantía** te dice hasta cuándo cubre), **Venta anterior** o **Equipo de vitrina**.
+2. Elige de dónde viene el producto: **Venta de este sistema** (escribe el número de venta y el IMEI o código; **Revisar si todavía tiene garantía** te dice hasta cuándo cubre), **Venta anterior** o **De las existencias**.
 3. Escribe la **falla reportada**, cómo se recibe y los datos de contacto, y pulsa **Recibir garantía**. Se genera un folio **GAR-…**.
 
-> Un **equipo de vitrina** (aún sin vender) con una falla también va con el proveedor. Elige «Equipo de vitrina» y escribe su IMEI. No hay venta ni cliente. Mientras está fuera **no cuenta en la existencia**, y vuelve cuando la garantía se entrega. Si el proveedor lo cambia por otro, captura el IMEI del equipo nuevo.
+> Un **equipo o accesorio de las existencias** (aún sin vender) con una falla también va con el proveedor. Elige «De las existencias», luego si es un **equipo** (su IMEI) o un **accesorio** (su código). No hay venta ni cliente. Mientras está fuera **no cuenta en la existencia** (de un accesorio sale **una pieza**) y vuelve cuando la garantía se entrega. Si el proveedor cambia un equipo por otro, captura el IMEI del equipo nuevo; un accesorio regresa con el mismo código.
 
 > Si el producto se vendió con el **sistema anterior**, elige «Venta anterior» y captura la fecha de compra, el nombre del producto y los días de garantía (que aún deben estar vigentes) y, si los tienes, el IMEI, el folio y el proveedor.
 
@@ -366,7 +373,7 @@ Si el equipo se repara en la misma sucursal que lo recibió, no hay viaje y este
 Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las tiendas**.
 1. Un técnico **recibe en el taller** una orden libre (el equipo ya llegó de la tienda) o el técnico encargado se la **asigna**.
 2. **Iniciar reparación** cambia la orden a «En reparación».
-3. Agrega **renglones** (refacciones y servicios con su precio) y **observaciones**, que quedan en el historial. El **técnico encargado** ve el **costo** de cada refacción; los demás ven solo el precio. Las **refacciones salen del inventario del taller** (la sucursal del técnico), no del de la sucursal que recibió el equipo; cada renglón dice de dónde sale.
+3. Agrega **renglones** (refacciones y servicios con su precio) y **observaciones**, que quedan en el historial. El **técnico encargado** ve el **costo** de cada refacción; los demás ven solo el precio. Las **refacciones salen del inventario del taller** (la sucursal del técnico), no del de la sucursal que recibió el equipo; cada renglón dice de dónde sale. En el detalle de la orden (también en la **web**) están **Agregar servicio o refacción** (del inventario del taller, o una **pieza comprada** para esa orden), la ✕ para quitar un renglón, **Escribir diagnóstico**, **Asignar técnico** y **Reabrir reparación**.
 4. **Pedir autorización** al cliente cuando el costo esté listo (ver arriba).
 5. **Marcar lista** avisa a la sucursal que el equipo ya está listo en el taller y debe regresar. El botón **no se puede pulsar mientras la orden no tenga servicios ni refacciones**: agrega al menos un renglón. Si hace falta corregir algo, **Reabrir** (el equipo vuelve a quedar en reparación).
 

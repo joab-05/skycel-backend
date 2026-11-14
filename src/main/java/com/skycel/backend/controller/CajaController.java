@@ -142,6 +142,17 @@ public class CajaController {
         return ResponseEntityBuilder.ok(detalleCorteService.detalle(idsesion, userDetails.getUsername()), "detalle del turno");
     }
 
+    @Operation(summary = "Corregir un corte ya cerrado (solo administración)",
+            description = "Cambia lo contado y lo que se deja para mañana; queda registrado quién, cuándo, por qué y lo que decía antes.")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PatchMapping("/sesiones/{idsesion}/cierre")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<StandardApiResponse<SesionCajaResponseDto>> corregirCierre(
+            @PathVariable Integer idsesion, @Valid @RequestBody com.skycel.backend.dto.caja.CorregirCierreRequestDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.updated(sesionCajaService.corregirCierre(idsesion, request, userDetails.getUsername()), "corte de caja");
+    }
+
     @Operation(summary = "Un turno con su corte completo")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/sesiones/{idsesion}")

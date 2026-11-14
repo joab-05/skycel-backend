@@ -266,6 +266,85 @@ class SesionCajaServiceTest {
         assertThat(guardado.getResumen().getMovimientos()).extracting("motivo").containsExactly(VENTA, "Gasto operativo");
     }
 
+    private com.skycel.backend.dto.caja.CorregirCierreRequestDto correccion(String contado, String fondo, String motivo) {
+        var d = new com.skycel.backend.dto.caja.CorregirCierreRequestDto();
+        d.setEfectivoContado(new BigDecimal(contado));
+        d.setFondoSiguiente(fondo != null ? new BigDecimal(fondo) : null);
+        d.setMotivo(motivo);
+        return d;
+    }
+
+    private int cerrarConFaltante() {
+        service.abrir(ID_CAJA, abrirCon("1500"), "luis");
+        venderEnEfectivo("1251.00");                              // esperado = 2751
+        return service.cerrar(ID_CAJA, cerrarCon("2600", "1500", null), "luis").getIdsesionCaja();   // faltan $151
+    }
+
+    @Test
+    @DisplayName("corregir un cierre: cambia lo contado, la diferencia y el retiro; lo esperado y el detalle no; queda quién, cuándo, por qué y lo de antes")
+    void corregirCierre() {
+        int id = cerrarConFaltante();
+
+        SesionCajaResponseDto r = service.corregirCierre(id, correccion("2751", null, "Se contó mal: eran $2,751"), "root");
+
+        assertThat(r.getEfectivoEsperado()).isEqualByComparingTo("2751");
+        assertThat(r.getEfectivoContado()).isEqualByComparingTo("2751");
+        assertThat(r.getDiferencia()).isEqualByComparingTo("0");
+        assertThat(r.getFondoSiguiente()).isEqualByComparingTo("1500");
+        assertThat(r.getRetiroCierre()).isEqualByComparingTo("1251");
+        assertThat(r.getContadoOriginal()).isEqualByComparingTo("2600");
+        assertThat(r.getCorregidoPor()).isEqualTo("Root");
+        assertThat(r.getFechaCorreccion()).isNotNull();
+        assertThat(r.getMotivoCorreccion()).contains("Se contó mal").contains("antes: contado $2600.00");
+        assertThat(r.getResumen().getTotalEntradas()).isEqualByComparingTo("1251");   // el detalle del turno sigue igual
+    }
+
+    @Test
+    @DisplayName("corregir dos veces conserva lo contado originalmente y junta los motivos")
+    void corregirDosVeces() {
+        int id = cerrarConFaltante();
+        service.corregirCierre(id, correccion("2700", null, "Primero"), "root");
+
+        SesionCajaResponseDto r = service.corregirCierre(id, correccion("2751", "1000", "Segundo"), "root");
+
+        assertThat(r.getContadoOriginal()).isEqualByComparingTo("2600");
+        assertThat(r.getMotivoCorreccion()).contains("Primero").contains("Segundo");
+        assertThat(r.getFondoSiguiente()).isEqualByComparingTo("1000");
+        assertThat(r.getRetiroCierre()).isEqualByComparingTo("1751");
+    }
+
+    @Test
+    @DisplayName("solo un administrador corrige; el motivo es obligatorio; no se corrige un turno abierto ni un fondo mayor a lo contado")
+    void corregirValidaciones() {
+        int id = cerrarConFaltante();
+
+        assertThatThrownBy(() -> service.corregirCierre(id, correccion("2751", null, "x"), "luis"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("administrador");
+        assertThatThrownBy(() -> service.corregirCierre(id, correccion("2751", null, "  "), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("motivo");
+        assertThatThrownBy(() -> service.corregirCierre(id, correccion("1000", "1500", "x"), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("fondo");
+
+        service.abrir(ID_CAJA, abrirCon("1500"), "luis");
+        int abierto = sesiones.get(sesiones.size() - 1).getIdsesionCaja();
+        assertThatThrownBy(() -> service.corregirCierre(abierto, correccion("1500", null, "x"), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("abierto");
+    }
+
+    @Test
+    @DisplayName("si el faltante ya se descontó en nómina, no se cambia la diferencia hasta quitar la deducción; sí se puede cambiar lo demás")
+    void corregirConFaltanteYaDescontado() {
+        int id = cerrarConFaltante();
+        sesiones.get(0).setFaltanteNomina((byte) 1);
+
+        assertThatThrownBy(() -> service.corregirCierre(id, correccion("2700", null, "x"), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Nómina");
+
+        SesionCajaResponseDto r = service.corregirCierre(id, correccion("2600", "1000", "Dejaron menos para mañana"), "root");   // misma diferencia
+        assertThat(r.getDiferencia()).isEqualByComparingTo("-151");
+        assertThat(r.getFondoSiguiente()).isEqualByComparingTo("1000");
+    }
+
     @Test
     @DisplayName("el detalle del corte agrupa las ventas por método de pago y no cuenta las canceladas")
     void ventasPorMetodo() {
