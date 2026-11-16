@@ -249,6 +249,101 @@ class NominaServiceTest {
         verify(deduccionRepository).delete(d);
     }
 
+    // ── Corte corregido por un administrador: la nómina se regulariza ────────
+
+    private NominaDeduccion faltanteDescontado(NominaDetalle detalle, SesionCaja corte, String monto) {
+        corte.setFaltanteNomina(NominaService.FALTANTE_DESCONTADO);
+        NominaDeduccion d = NominaDeduccion.builder().iddeduccion(5).detalle(detalle).concepto("Faltante de caja del 10/10/2026 · Caja 1")
+                .monto(new BigDecimal(monto)).sesion(corte).build();
+        lenient().when(deduccionRepository.findBySesion_IdsesionCaja(corte.getIdsesionCaja())).thenReturn(List.of(d));
+        return d;
+    }
+
+    @Test
+    @DisplayName("corte corregido con la nómina sin pagar: la deducción cambia al faltante nuevo")
+    void corteCorregido_cambiaLaDeduccion() {
+        NominaDetalle detalle = detallePendiente(10);
+        SesionCaja corte = corteConFaltante(7, detalle.getEmpleado().getUsuario(), detalle.getEmpleado().getUsuario(), "-120.00");
+        NominaDeduccion d = faltanteDescontado(detalle, corte, "120");
+
+        String aviso = service.ajustarFaltanteCorregido(corte, new BigDecimal("-120.00"), new BigDecimal("-40.00"));
+
+        assertThat(d.getMonto()).isEqualByComparingTo("40");
+        assertThat(d.getConcepto()).endsWith("(corregido)");
+        assertThat(aviso).contains("$120").contains("$40");
+        verify(deduccionRepository).save(d);
+    }
+
+    @Test
+    @DisplayName("corte corregido sin faltante y con la nómina sin pagar: se quita la deducción y el corte vuelve a evaluarse")
+    void corteCorregido_quitaLaDeduccion() {
+        NominaDetalle detalle = detallePendiente(10);
+        SesionCaja corte = corteConFaltante(7, detalle.getEmpleado().getUsuario(), detalle.getEmpleado().getUsuario(), "-120.00");
+        NominaDeduccion d = faltanteDescontado(detalle, corte, "120");
+
+        String aviso = service.ajustarFaltanteCorregido(corte, new BigDecimal("-120.00"), BigDecimal.ZERO);
+
+        verify(deduccionRepository).delete(d);
+        assertThat(corte.getFaltanteNomina()).isNull();
+        assertThat(aviso).contains("ya no tiene faltante");
+    }
+
+    @Test
+    @DisplayName("corte corregido con la nómina ya pagada: la diferencia va a la línea pendiente del período abierto")
+    void corteCorregido_nominaPagada_ajustaElPeriodoAbierto() {
+        NominaDetalle pagada = detallePendiente(10);
+        pagada.setEstado(NominaService.DETALLE_PAGADO);
+        SesionCaja corte = corteConFaltante(7, pagada.getEmpleado().getUsuario(), pagada.getEmpleado().getUsuario(), "-120.00");
+        faltanteDescontado(pagada, corte, "120");
+        NominaPeriodo abierto = NominaPeriodo.builder().idperiodo(2).estado(NominaService.PERIODO_ABIERTO).build();
+        NominaDetalle pendiente = NominaDetalle.builder().iddetalle(20).empleado(pagada.getEmpleado()).periodo(abierto)
+                .estado(NominaService.DETALLE_PENDIENTE).totalPercepciones(BigDecimal.ZERO).totalDeducciones(BigDecimal.ZERO).totalNeto(BigDecimal.ZERO).build();
+        when(periodoRepository.findFirstByEstadoOrderByFechaInicioDesc(NominaService.PERIODO_ABIERTO)).thenReturn(Optional.of(abierto));
+        when(detalleRepository.findByPeriodo_IdperiodoAndEmpleado_Idempleado(2, 1)).thenReturn(Optional.of(pendiente));
+
+        // se le descontó de más: $120 y en realidad eran $40 → se le devuelven $80
+        String aviso = service.ajustarFaltanteCorregido(corte, new BigDecimal("-120.00"), new BigDecimal("-40.00"));
+        verify(percepcionRepository).save(percepcionCaptor.capture());
+        assertThat(percepcionCaptor.getValue().getMonto()).isEqualByComparingTo("80");
+        assertThat(percepcionCaptor.getValue().getConcepto()).contains("#7").contains("devolución");
+        assertThat(aviso).contains("devolución de $80");
+
+        // y si el faltante creció: $120 → $200, se descuentan $80 más
+        service.ajustarFaltanteCorregido(corte, new BigDecimal("-120.00"), new BigDecimal("-200.00"));
+        verify(deduccionRepository).save(deduccionCaptor.capture());
+        assertThat(deduccionCaptor.getValue().getMonto()).isEqualByComparingTo("80");
+        assertThat(deduccionCaptor.getValue().getDetalle()).isSameAs(pendiente);
+    }
+
+    @Test
+    @DisplayName("corte corregido con la nómina pagada y sin período abierto: no se puede, con un mensaje claro")
+    void corteCorregido_nominaPagadaSinPeriodoAbierto() {
+        NominaDetalle pagada = detallePendiente(10);
+        pagada.setEstado(NominaService.DETALLE_PAGADO);
+        SesionCaja corte = corteConFaltante(7, pagada.getEmpleado().getUsuario(), pagada.getEmpleado().getUsuario(), "-120.00");
+        faltanteDescontado(pagada, corte, "120");
+        when(periodoRepository.findFirstByEstadoOrderByFechaInicioDesc(NominaService.PERIODO_ABIERTO)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.ajustarFaltanteCorregido(corte, new BigDecimal("-120.00"), new BigDecimal("-40.00")))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(e.getReason()).contains("período de nómina abierto");
+                });
+    }
+
+    @Test
+    @DisplayName("un corte sin faltante descontado, o con el mismo faltante, no toca la nómina")
+    void corteCorregido_sinNadaQueAjustar() {
+        SesionCaja sinDescontar = corteConFaltante(7, null, null, "-120.00");
+        assertThat(service.ajustarFaltanteCorregido(sinDescontar, new BigDecimal("-120.00"), new BigDecimal("-40.00"))).isNull();
+
+        NominaDetalle detalle = detallePendiente(10);
+        SesionCaja mismo = corteConFaltante(8, detalle.getEmpleado().getUsuario(), detalle.getEmpleado().getUsuario(), "-120.00");
+        faltanteDescontado(detalle, mismo, "120");
+        assertThat(service.ajustarFaltanteCorregido(mismo, new BigDecimal("-120.00"), new BigDecimal("-120.00"))).isNull();
+        verify(deduccionRepository, never()).delete(any());
+    }
+
     // ── Percepciones / deducciones ───────────────────────────────────────────
 
     private NominaDetalle detallePendiente(int id) {

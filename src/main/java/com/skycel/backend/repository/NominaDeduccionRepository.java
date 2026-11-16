@@ -10,4 +10,7 @@ import java.util.List;
 public interface NominaDeduccionRepository extends JpaRepository<NominaDeduccion, Integer> {
 
     List<NominaDeduccion> findByDetalle_IddetalleOrderByIddeduccionAsc(Integer iddetalle);
+
+    /** La deducción que cobró el faltante de un corte de caja (si ya se descontó). */
+    List<NominaDeduccion> findBySesion_IdsesionCaja(Integer idsesionCaja);
 }

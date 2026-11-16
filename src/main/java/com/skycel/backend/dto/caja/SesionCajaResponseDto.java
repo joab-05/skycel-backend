@@ -43,6 +43,12 @@ public class SesionCajaResponseDto {
     private String     corregidoPor;
     private LocalDateTime fechaCorreccion;
     private String     motivoCorreccion;
+    /** Lo que se hizo en la nómina al corregir el corte (solo en la respuesta de la corrección). */
+    private String     avisoNomina;
+    /** Un corte cerrado con faltante: «Por descontar», «Descontado» o «Perdonado» (qué pasó con él en la nómina); null si no hay faltante. */
+    private String     estadoNomina;
+    /** true si un administrador corrigió el cierre. */
+    private boolean    corregido;
 
     /** Cuando la caja está cerrada: con cuánto se sugiere abrir (lo que quedó en el cajón). */
     private BigDecimal fondoSugerido;

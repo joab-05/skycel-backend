@@ -233,7 +233,8 @@ La ventana de cierre te guía con **tres cuadros numerados** y un resumen:
 Si quien cerró se equivocó al contar o al decidir lo que deja para mañana, abre el corte y pulsa **Corregir cierre**. Escribe lo que había de verdad en el cajón, lo que se dejó para mañana y el **motivo** (obligatorio).
 - Cambian lo **contado**, la **diferencia**, lo **retirado** y lo que **queda para mañana**. Lo que el sistema esperaba y las ventas y movimientos del turno **no** cambian: son lo que de verdad ocurrió.
 - El corte queda marcado como **corregido**, con quién lo corrigió, cuándo, por qué y **lo que se había contado antes**. Se puede corregir más de una vez.
-- Si el faltante de ese corte **ya se descontó en una nómina**, primero quita esa deducción en **Nómina** (el faltante queda perdonado) y luego corrige el corte.
+- Si el faltante de ese corte **ya se descontó en una nómina**, la nómina se **regulariza sola**: si la línea sigue pendiente, el descuento cambia al faltante nuevo (o se quita si ya no hay faltante); si ya se pagó, la diferencia va a la línea del mismo empleado en la **nómina abierta** (un descuento extra o una devolución). Si no hay período abierto, el sistema lo avisa y no cambia nada: abre el período y vuelve a corregir.
+- Si el corte no tenía faltante y ahora sí, el sistema avisa: se cobra con la nómina del período que incluye su fecha de cierre; si ese período ya se cerró, agrégalo como deducción en Nómina.
 - Un corte de **servicios** ya confirmado se corrige con **Reabrir**.
 
 ### Revisar un corte a detalle (encargado y administrador)

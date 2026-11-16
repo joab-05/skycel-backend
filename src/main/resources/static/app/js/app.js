@@ -803,7 +803,7 @@ async function pantallaCorte(id) {
     ${c.corregidoPor ? `<div class="mensaje info">${ic('pencil')} Corregido por ${escapar(c.corregidoPor)} · ${formatoFecha(c.fechaCorreccion)}${c.contadoOriginal != null ? `. Al cerrar se había contado <strong>${formatoDinero(c.contadoOriginal)}</strong>.` : ''}${c.motivoCorreccion ? '<br>' + escapar(c.motivoCorreccion) : ''}</div>` : ''}
     ${puedeCorregir ? `<div id="cr-form" class="tarjeta oculto">
       <h2>Corregir el cierre</h2>
-      <p class="ayuda">Solo cambian lo contado, la diferencia y lo que queda para mañana. Lo que el sistema esperaba (${formatoDinero(c.efectivoEsperado)}) y las ventas y movimientos del turno no cambian. Queda registrado quién lo corrigió, por qué y lo que decía antes. Si el faltante ya se descontó en nómina, primero quita esa deducción en Nómina.</p>
+      <p class="ayuda">Solo cambian lo contado, la diferencia y lo que queda para mañana. Lo que el sistema esperaba (${formatoDinero(c.efectivoEsperado)}) y las ventas y movimientos del turno no cambian. Queda registrado quién lo corrigió, por qué y lo que decía antes. Si el faltante ya se descontó en la nómina, ahí mismo se regulariza (se ajusta el descuento o, si ya se pagó, la diferencia va a la nómina abierta).</p>
       <div class="dos-cols">
         <div><label class="obligatorio">Efectivo contado (lo que había de verdad)</label><input id="cr-contado" type="number" min="0" step="0.01" inputmode="decimal" data-moneda value="${Number(c.efectivoContado || 0).toFixed(2)}"></div>
         <div><label>Se dejó para mañana</label><input id="cr-fondo" type="number" min="0" step="0.01" inputmode="decimal" data-moneda value="${Number(c.fondoSiguiente || 0).toFixed(2)}"></div>
@@ -867,8 +867,9 @@ async function pantallaCorte(id) {
       if (!motivo) { mostrarMensaje(root, 'Escribe el motivo de la corrección.', 'error'); return; }
       ev.currentTarget.disabled = true;
       try {
-        await api('PATCH', `/api/cajas/sesiones/${id}/cierre`, { efectivoContado: contado, fondoSiguiente: fondo, motivo, observaciones: document.getElementById('cr-obs').value.trim() });
-        pantallaCorte(id);
+        const resp = await api('PATCH', `/api/cajas/sesiones/${id}/cierre`, { efectivoContado: contado, fondoSiguiente: fondo, motivo, observaciones: document.getElementById('cr-obs').value.trim() });
+        await pantallaCorte(id);
+        if (resp && resp.avisoNomina) mostrarMensaje(root, 'Nómina: ' + resp.avisoNomina, 'ok');
       } catch (err) {
         ev.currentTarget.disabled = false;
         mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
@@ -5087,14 +5088,15 @@ async function pantallaCaja() {
       const cortes = await api('GET', `/api/cajas/${idCaja}/sesiones?limite=30`);
       contCortes.innerHTML = cortes.length === 0 ? '<div class="vacio">Aún no hay cortes.</div>' : `
         <div class="tabla-cont"><table class="tabla">
-          <thead><tr><th>#</th><th>Apertura</th><th>Cierre</th><th>Abrió</th><th>Cerró</th><th>Fondo</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr></thead>
+          <thead><tr><th>#</th><th>Apertura</th><th>Cierre</th><th>Abrió</th><th>Cerró</th><th>Fondo</th><th>Esperado</th><th>Contado</th><th>Diferencia</th><th>Nómina</th></tr></thead>
           <tbody>${cortes.map(c => `
             <tr data-id="${c.idsesionCaja}">
-              <td>${c.idsesionCaja}</td><td>${formatoFecha(c.fechaApertura)}</td><td>${c.abierta ? 'abierta' : formatoFecha(c.fechaCierre)}</td>
+              <td>${c.idsesionCaja}${c.corregido ? ' <span title="Un administrador corrigió el cierre" style="color:#0369a1;">✎</span>' : ''}</td><td>${formatoFecha(c.fechaApertura)}</td><td>${c.abierta ? 'abierta' : formatoFecha(c.fechaCierre)}</td>
               <td>${escapar(c.usuarioApertura || '')}</td><td>${escapar(c.usuarioCierre || '')}</td>
               <td>${formatoDinero(c.fondoInicial)}</td>
               <td>${c.abierta ? '' : formatoDinero(c.efectivoEsperado)}</td><td>${c.abierta ? '' : formatoDinero(c.efectivoContado)}</td>
               <td class="${Number(c.diferencia) < -0.004 ? 'monto-rojo' : (Number(c.diferencia) > 0.004 ? 'dias-pos' : '')}">${c.abierta ? '' : formatoDinero(c.diferencia)}</td>
+              <td>${escapar(c.estadoNomina || '')}</td>
             </tr>`).join('')}</tbody>
         </table></div>
         <div class="inv-tarjetas">${cortes.map(c => `

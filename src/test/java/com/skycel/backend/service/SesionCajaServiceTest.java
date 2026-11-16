@@ -42,6 +42,7 @@ class SesionCajaServiceTest {
     @Mock private MovimientoCajaRepository movimientoCajaRepository;
     @Mock private MovimientoCajaService    movimientoCajaService;
     @Mock private VentaRepository          ventaRepository;
+    @Mock private NominaService            nominaService;
 
     private SesionCajaService service;
 
@@ -58,7 +59,7 @@ class SesionCajaServiceTest {
     @BeforeEach
     void setUp() {
         service = new SesionCajaService(sesionCajaRepository, cajaRepository, usuarioRepository, movimientoCajaRepository,
-                movimientoCajaService, ventaRepository, new ObjectMapper());
+                movimientoCajaService, ventaRepository, new ObjectMapper(), nominaService);
         zocalo = Tienda.builder().codti(2).nombre("Zocalo").build();
         corpo = Tienda.builder().codti(3).nombre("Corpo").build();
         caja = Caja.builder().idCaja(ID_CAJA).nombreCaja("Caja Zocalo").tienda(zocalo).build();
@@ -332,17 +333,44 @@ class SesionCajaServiceTest {
     }
 
     @Test
-    @DisplayName("si el faltante ya se descontó en nómina, no se cambia la diferencia hasta quitar la deducción; sí se puede cambiar lo demás")
+    @DisplayName("si el faltante ya se descontó en nómina, la corrección regulariza la nómina y devuelve su aviso")
     void corregirConFaltanteYaDescontado() {
+        int id = cerrarConFaltante();                                    // faltaron $151
+        sesiones.get(0).setFaltanteNomina((byte) 1);
+        when(nominaService.ajustarFaltanteCorregido(eq(sesiones.get(0)), argThat(d -> d.compareTo(new BigDecimal("-151")) == 0),
+                argThat(d -> d.compareTo(new BigDecimal("-51")) == 0))).thenReturn("El descuento cambió de $151 a $51.");
+
+        SesionCajaResponseDto r = service.corregirCierre(id, correccion("2700", null, "Se contó mal un billete"), "root");
+
+        assertThat(r.getDiferencia()).isEqualByComparingTo("-51");
+        assertThat(r.getAvisoNomina()).isEqualTo("El descuento cambió de $151 a $51.");
+    }
+
+    @Test
+    @DisplayName("si la nómina no se puede regularizar (ya pagada y sin período abierto), el corte NO cambia")
+    void corregirSinPoderRegularizarLaNomina() {
         int id = cerrarConFaltante();
         sesiones.get(0).setFaltanteNomina((byte) 1);
+        when(nominaService.ajustarFaltanteCorregido(any(), any(), any()))
+                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "No hay un período de nómina abierto"));
 
         assertThatThrownBy(() -> service.corregirCierre(id, correccion("2700", null, "x"), "root"))
-                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Nómina");
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("período de nómina");
+        assertThat(sesiones.get(0).getEfectivoContado()).isEqualByComparingTo("2600");   // sigue como estaba
+        assertThat(sesiones.get(0).getCorreccionMotivo()).isNull();
+    }
 
-        SesionCajaResponseDto r = service.corregirCierre(id, correccion("2600", "1000", "Dejaron menos para mañana"), "root");   // misma diferencia
-        assertThat(r.getDiferencia()).isEqualByComparingTo("-151");
-        assertThat(r.getFondoSiguiente()).isEqualByComparingTo("1000");
+    @Test
+    @DisplayName("un corte que ahora tiene faltante y no se había descontado avisa cómo se cobra")
+    void corregirQueApareceUnFaltante() {
+        service.abrir(ID_CAJA, abrirCon("1500"), "luis");
+        venderEnEfectivo("1251.00");                                     // esperado 2751
+        int id = service.cerrar(ID_CAJA, cerrarCon("2751", "1500", null), "luis").getIdsesionCaja();   // cuadró
+
+        SesionCajaResponseDto r = service.corregirCierre(id, correccion("2700", null, "Estaba mal el conteo"), "root");
+
+        assertThat(r.getDiferencia()).isEqualByComparingTo("-51");
+        assertThat(r.getAvisoNomina()).contains("$51").contains("todavía no se descuenta");
     }
 
     @Test

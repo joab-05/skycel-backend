@@ -68,6 +68,7 @@ public class SesionCajaService {
     private final MovimientoCajaService    movimientoCajaService;
     private final VentaRepository          ventaRepository;
     private final ObjectMapper             objectMapper;
+    private final NominaService            nominaService;
 
     // ── Consultas ────────────────────────────────────────────────────────────
 
@@ -206,7 +207,7 @@ public class SesionCajaService {
      * cambian lo contado, la diferencia, lo que se retiró y lo que queda para mañana. Lo que el sistema esperaba y el detalle
      * de ventas y movimientos NO cambian (son lo que de verdad ocurrió). Queda registrado quién lo corrigió, cuándo, por qué
      * y lo que se había contado originalmente. No mueve la caja: la diferencia se absorbe en la siguiente apertura, como siempre.
-     * Si el faltante ya se descontó en una nómina, primero se quita esa deducción (el faltante queda perdonado) en Nómina.
+     * Si el faltante ya se descontó en una nómina, la nómina se regulariza sola (ver {@link NominaService#ajustarFaltanteCorregido}).
      */
     @Transactional
     public SesionCajaResponseDto corregirCierre(Integer idsesion, com.skycel.backend.dto.caja.CorregirCierreRequestDto dto, String username) {
@@ -234,10 +235,11 @@ public class SesionCajaService {
         BigDecimal esperado = sesion.getEfectivoEsperado() != null ? sesion.getEfectivoEsperado() : BigDecimal.ZERO;
         BigDecimal diferenciaNueva = contado.subtract(esperado);
         BigDecimal diferenciaVieja = sesion.getDiferencia() != null ? sesion.getDiferencia() : BigDecimal.ZERO;
-        if (sesion.getFaltanteNomina() != null && sesion.getFaltanteNomina() == NominaService.FALTANTE_DESCONTADO
-                && diferenciaNueva.compareTo(diferenciaVieja) != 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "El faltante de este corte ya se descontó en una nómina. Primero quita esa deducción en Nómina (el faltante queda perdonado) y luego corrige el corte.");
+        // Si el faltante ya se descontó en la nómina, se regulariza ahí mismo (o falla con un mensaje claro y no cambia nada)
+        String avisoNomina = nominaService.ajustarFaltanteCorregido(sesion, diferenciaVieja, diferenciaNueva);
+        if (avisoNomina == null && diferenciaNueva.signum() < 0 && diferenciaNueva.compareTo(diferenciaVieja) != 0 && sesion.getFaltanteNomina() == null) {
+            avisoNomina = "El corte ahora tiene un faltante de $" + diferenciaNueva.negate().toPlainString() + " que todavía no se descuenta: se carga con la nómina del período que incluye "
+                    + "su fecha de cierre; si ese período ya se cerró, agrégalo como deducción en Nómina.";
         }
 
         BigDecimal contadoAnterior = sesion.getEfectivoContado();
@@ -257,9 +259,10 @@ public class SesionCajaService {
         if (dto.getObservaciones() != null) {
             sesion.setObservaciones(dto.getObservaciones().isBlank() ? null : dto.getObservaciones().trim());
         }
-        // Un faltante que ya no lo es (o que apareció) vuelve a evaluarse para la nómina: si no se había descontado ni perdonado, nada que limpiar
         sesionCajaRepository.save(sesion);
-        return toDtoCerrada(sesion, true);
+        SesionCajaResponseDto respuesta = toDtoCerrada(sesion, true);
+        respuesta.setAvisoNomina(avisoNomina);
+        return respuesta;
     }
 
     // ── Piezas internas ──────────────────────────────────────────────────────
@@ -325,6 +328,11 @@ public class SesionCajaService {
         dto.setFondoSiguiente(s.getFondoSiguiente());
         dto.setRetiroCierre(s.getRetiroCierre());
         dto.setObservaciones(s.getObservaciones());
+        dto.setCorregido(s.getFechaCorreccion() != null);
+        if (s.getDiferencia() != null && s.getDiferencia().signum() < 0) {
+            dto.setEstadoNomina(s.getFaltanteNomina() == null ? "Por descontar"
+                    : s.getFaltanteNomina() == NominaService.FALTANTE_DESCONTADO ? "Descontado" : "Perdonado");
+        }
         if (s.getFechaCorreccion() != null) {
             dto.setContadoOriginal(s.getContadoOriginal());
             dto.setCorregidoPor(s.getUsuarioCorreccion() != null ? s.getUsuarioCorreccion().getNombreCompleto() : null);

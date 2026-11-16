@@ -177,6 +177,70 @@ public class NominaService {
         return concepto.length() > 100 ? concepto.substring(0, 100) : concepto;
     }
 
+    /**
+     * Un administrador corrigió un corte cuyo faltante ya se había descontado: la nómina se regulariza sola.
+     * <ul>
+     *   <li>Si la línea de nómina sigue pendiente, la deducción se cambia al faltante nuevo (o se quita si ya no hay faltante).</li>
+     *   <li>Si esa línea ya se pagó, la diferencia se aplica en la línea pendiente del mismo empleado en el período abierto: un
+     *       descuento extra si el faltante creció, o una percepción (devolución) si bajó.</li>
+     * </ul>
+     * @return lo que se hizo en la nómina, para avisarle al administrador; null si no había nada que ajustar
+     */
+    @Transactional
+    public String ajustarFaltanteCorregido(SesionCaja s, BigDecimal diferenciaVieja, BigDecimal diferenciaNueva) {
+        if (s.getFaltanteNomina() == null || s.getFaltanteNomina() != FALTANTE_DESCONTADO) return null;
+        BigDecimal viejo = diferenciaVieja != null && diferenciaVieja.signum() < 0 ? diferenciaVieja.negate() : BigDecimal.ZERO;
+        BigDecimal nuevo = diferenciaNueva != null && diferenciaNueva.signum() < 0 ? diferenciaNueva.negate() : BigDecimal.ZERO;
+        if (viejo.compareTo(nuevo) == 0) return null;
+
+        List<NominaDeduccion> deducciones = deduccionRepository.findBySesion_IdsesionCaja(s.getIdsesionCaja());
+        if (deducciones == null || deducciones.isEmpty()) {          // marcado como descontado pero sin deducción: que se evalúe de nuevo
+            s.setFaltanteNomina(null);
+            sesionRepository.save(s);
+            return null;
+        }
+        NominaDeduccion ded = deducciones.get(0);
+        NominaDetalle detalle = ded.getDetalle();
+        String quien = detalle.getEmpleado() != null && detalle.getEmpleado().getUsuario() != null
+                ? detalle.getEmpleado().getUsuario().getNombreCompleto() : "el empleado";
+
+        if (detalle.getEstado() == DETALLE_PENDIENTE) {
+            if (nuevo.signum() == 0) {
+                deduccionRepository.delete(ded);
+                s.setFaltanteNomina(null);                              // ya no hay faltante que cobrar
+                sesionRepository.save(s);
+                recalcularTotales(detalle);
+                return "Se quitó el descuento de $" + viejo.toPlainString() + " en la nómina de " + quien + ": el corte ya no tiene faltante.";
+            }
+            ded.setMonto(nuevo);
+            if (!ded.getConcepto().endsWith("(corregido)"))
+                ded.setConcepto((ded.getConcepto().length() > 88 ? ded.getConcepto().substring(0, 88) : ded.getConcepto()) + " (corregido)");
+            deduccionRepository.save(ded);
+            recalcularTotales(detalle);
+            return "El descuento en la nómina de " + quien + " cambió de $" + viejo.toPlainString() + " a $" + nuevo.toPlainString() + ".";
+        }
+
+        // La línea ya se pagó con el faltante viejo: la diferencia va a la línea pendiente de la nómina abierta
+        NominaPeriodo abierto = periodoRepository.findFirstByEstadoOrderByFechaInicioDesc(PERIODO_ABIERTO).orElse(null);
+        NominaDetalle pendiente = abierto == null || detalle.getEmpleado() == null ? null
+                : detalleRepository.findByPeriodo_IdperiodoAndEmpleado_Idempleado(abierto.getIdperiodo(), detalle.getEmpleado().getIdempleado())
+                        .filter(d -> d.getEstado() == DETALLE_PENDIENTE).orElse(null);
+        if (pendiente == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El faltante de este corte ya se descontó en una nómina que se pagó, y no hay un período de nómina abierto con una línea pendiente de "
+                    + quien + " donde aplicar la diferencia. Abre el período de nómina y vuelve a corregir el corte.");
+        }
+        BigDecimal delta = nuevo.subtract(viejo);                      // > 0: se descontó de menos; < 0: se descontó de más
+        String concepto = "Ajuste por corrección del corte #" + s.getIdsesionCaja();
+        if (delta.signum() > 0) {
+            deduccionRepository.save(NominaDeduccion.builder().detalle(pendiente).concepto(concepto).monto(delta).build());
+        } else {
+            percepcionRepository.save(NominaPercepcion.builder().detalle(pendiente).concepto(concepto + " (devolución)").monto(delta.negate()).build());
+        }
+        recalcularTotales(pendiente);
+        return (delta.signum() > 0 ? "Se agregó un descuento de $" + delta.toPlainString() : "Se agregó una devolución de $" + delta.negate().toPlainString())
+                + " en la nómina abierta de " + quien + " (el faltante ya se había descontado en una nómina pagada).";
+    }
+
     @Transactional(readOnly = true)
     public Map<String, Object> periodoActivo() {
         return periodoRepository.findFirstByEstadoOrderByFechaInicioDesc(PERIODO_ABIERTO)
