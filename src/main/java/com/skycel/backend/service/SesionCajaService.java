@@ -265,6 +265,150 @@ public class SesionCajaService {
         return respuesta;
     }
 
+    // ── Movimientos de efectivo de un corte ya cerrado (solo administración) ──
+
+    /**
+     * Agrega a un corte cerrado un movimiento de efectivo que no se registró (o que se registró en otro turno). El efectivo que el
+     * sistema esperaba cambia por ese monto, la diferencia se recalcula y, si el faltante ya se descontó en nómina, la nómina se regulariza.
+     */
+    @Transactional
+    public SesionCajaResponseDto agregarMovimientoACorte(Integer idsesion, com.skycel.backend.dto.caja.CorreccionMovimientoRequestDto dto, String username) {
+        Usuario admin = administradorQueCorrige(username);
+        SesionCaja sesion = corteCerrado(idsesion);
+        String porque = motivoDeLaCorreccion(dto);
+        com.skycel.backend.domain.entity.CatMotivo motivo = movimientoCajaService.motivoManual(dto.getIdmotivo());
+        BigDecimal monto = montoDelMovimiento(dto.getMonto());
+        LocalDateTime fecha = dto.getFecha() != null ? dto.getFecha() : sesion.getFechaCierre().minusSeconds(1);
+        if (fecha.isBefore(sesion.getFechaApertura())) fecha = sesion.getFechaApertura();
+        if (fecha.isBefore(sesion.getFechaApertura()) || fecha.isAfter(sesion.getFechaCierre()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha del movimiento debe estar dentro del turno (de "
+                    + sesion.getFechaApertura() + " a " + sesion.getFechaCierre() + ").");
+
+        movimientoCajaService.agregarACorteCerrado(sesion.getCaja(), admin, motivo, monto,
+                notaDelMovimiento(dto.getObservaciones(), sesion, admin, porque), fecha);
+        return aplicarCambioDeMovimientos(sesion, efecto(motivo.getTipoMov(), monto), admin,
+                "Agregó " + descripcion(motivo.getTipoMov(), motivo.getNombre(), monto) + " — " + porque);
+    }
+
+    /** Cambia el motivo, el monto o la nota de un movimiento manual de un corte cerrado. */
+    @Transactional
+    public SesionCajaResponseDto cambiarMovimientoDeCorte(Integer idsesion, Integer idmovimiento,
+                                                          com.skycel.backend.dto.caja.CorreccionMovimientoRequestDto dto, String username) {
+        Usuario admin = administradorQueCorrige(username);
+        SesionCaja sesion = corteCerrado(idsesion);
+        String porque = motivoDeLaCorreccion(dto);
+        MovimientoCaja m = movimientoDelCorte(sesion, idmovimiento);
+        com.skycel.backend.domain.entity.CatMotivo motivo = dto.getIdmotivo() != null ? movimientoCajaService.motivoManual(dto.getIdmotivo()) : m.getMotivo();
+        BigDecimal monto = dto.getMonto() != null ? montoDelMovimiento(dto.getMonto()) : m.getMonto();
+        String antes = descripcion(m.getTipo(), m.getMotivo().getNombre(), m.getMonto());
+        BigDecimal efectoViejo = efecto(m.getTipo(), m.getMonto());
+        String nota = dto.getObservaciones() != null ? notaDelMovimiento(dto.getObservaciones(), sesion, admin, porque) : m.getObservaciones();
+
+        movimientoCajaService.cambiarMovimiento(m, motivo, monto, nota);
+        return aplicarCambioDeMovimientos(sesion, efecto(motivo.getTipoMov(), monto).subtract(efectoViejo), admin,
+                "Cambió " + antes + " por " + descripcion(motivo.getTipoMov(), motivo.getNombre(), monto) + " — " + porque);
+    }
+
+    /** Quita un movimiento manual de un corte cerrado (queda en el historial de cambios). */
+    @Transactional
+    public SesionCajaResponseDto quitarMovimientoDeCorte(Integer idsesion, Integer idmovimiento, String motivoCorreccion, String username) {
+        Usuario admin = administradorQueCorrige(username);
+        SesionCaja sesion = corteCerrado(idsesion);
+        if (motivoCorreccion == null || motivoCorreccion.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo de la corrección.");
+        MovimientoCaja m = movimientoDelCorte(sesion, idmovimiento);
+        String quitado = descripcion(m.getTipo(), m.getMotivo().getNombre(), m.getMonto());
+        BigDecimal efectoViejo = efecto(m.getTipo(), m.getMonto());
+
+        movimientoCajaService.quitarMovimiento(m);
+        return aplicarCambioDeMovimientos(sesion, efectoViejo.negate(), admin, "Quitó " + quitado + " — " + motivoCorreccion.trim());
+    }
+
+    /**
+     * Después de cambiar los movimientos del turno: el efectivo esperado se mueve por lo que cambió, la diferencia se recalcula contra lo
+     * contado y se vuelve a guardar el detalle del corte; la nómina se regulariza si el faltante cambió.
+     */
+    private SesionCajaResponseDto aplicarCambioDeMovimientos(SesionCaja sesion, BigDecimal cambioEnEsperado, Usuario admin, String nota) {
+        BigDecimal esperadoNuevo = (sesion.getEfectivoEsperado() != null ? sesion.getEfectivoEsperado() : BigDecimal.ZERO).add(cambioEnEsperado);
+        BigDecimal contado = sesion.getEfectivoContado() != null ? sesion.getEfectivoContado() : BigDecimal.ZERO;
+        BigDecimal diferenciaNueva = contado.subtract(esperadoNuevo);
+        BigDecimal diferenciaVieja = sesion.getDiferencia() != null ? sesion.getDiferencia() : BigDecimal.ZERO;
+
+        String avisoNomina = nominaService.ajustarFaltanteCorregido(sesion, diferenciaVieja, diferenciaNueva);
+        if (avisoNomina == null && diferenciaNueva.signum() < 0 && diferenciaNueva.compareTo(diferenciaVieja) != 0 && sesion.getFaltanteNomina() == null) {
+            avisoNomina = "El corte ahora tiene un faltante de $" + diferenciaNueva.negate().toPlainString() + " que todavía no se descuenta: se carga con la nómina del período que incluye "
+                    + "su fecha de cierre; si ese período ya se cerró, agrégalo como deducción en Nómina.";
+        }
+
+        sesion.setEfectivoEsperado(esperadoNuevo);
+        sesion.setDiferencia(diferenciaNueva);
+        sesion.setDetalle(aJson(resumen(sesion.getCaja().getIdCaja(), sesion.getFechaApertura(), sesion.getFechaCierre())));
+        String previa = sesion.getCorreccionMotivo();
+        String junto = previa == null || previa.isBlank() ? nota : previa + " | " + nota;
+        sesion.setCorreccionMotivo(junto.length() > 1000 ? junto.substring(junto.length() - 1000) : junto);
+        sesion.setUsuarioCorreccion(admin);
+        sesion.setFechaCorreccion(LocalDateTime.now());
+        sesionCajaRepository.save(sesion);
+
+        SesionCajaResponseDto respuesta = toDtoCerrada(sesion, true);
+        respuesta.setAvisoNomina(avisoNomina);
+        return respuesta;
+    }
+
+    private Usuario administradorQueCorrige(String username) {
+        Usuario usuario = usuario(username);
+        if (usuario.getRol() != Rol.ROOT && usuario.getRol() != Rol.ADMIN)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador puede corregir un corte cerrado.");
+        return usuario;
+    }
+
+    private SesionCaja corteCerrado(Integer idsesion) {
+        SesionCaja sesion = sesionCajaRepository.findById(idsesion)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Turno de caja no encontrado: " + idsesion));
+        if (sesion.getEstado() != SesionCaja.CERRADA)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El turno sigue abierto: sus movimientos se manejan normalmente, no se corrigen.");
+        return sesion;
+    }
+
+    /** Un movimiento que pertenece a este turno y que una persona capturó (no una venta, un abono ni lo del turno). */
+    private MovimientoCaja movimientoDelCorte(SesionCaja sesion, Integer idmovimiento) {
+        MovimientoCaja m = movimientoCajaRepository.findById(idmovimiento)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Movimiento no encontrado: " + idmovimiento));
+        boolean delTurno = m.getCaja().getIdCaja().equals(sesion.getCaja().getIdCaja()) && m.getFechaMov() != null
+                && !m.getFechaMov().isBefore(sesion.getFechaApertura()) && !m.getFechaMov().isAfter(sesion.getFechaCierre());
+        if (!delTurno) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ese movimiento no es de este turno.");
+        if (MotivoCajaService.esDelSistema(m.getMotivo().getNombre()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "«" + m.getMotivo().getNombre() + "» lo registra el sistema (una venta, un abono, la apertura o el cierre): "
+                    + "no se cambia aquí. Si hay un error en la venta, se corrige la venta; si el efectivo no cuadra, agrega un movimiento que lo compense.");
+        return m;
+    }
+
+    private static String motivoDeLaCorreccion(com.skycel.backend.dto.caja.CorreccionMovimientoRequestDto dto) {
+        if (dto.getMotivoCorreccion() == null || dto.getMotivoCorreccion().isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo de la corrección.");
+        return dto.getMotivoCorreccion().trim();
+    }
+
+    private static BigDecimal montoDelMovimiento(BigDecimal monto) {
+        if (monto == null || monto.signum() <= 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El monto debe ser mayor a cero.");
+        return monto.setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** Lo que ese movimiento le hace al efectivo: + una entrada, − una salida. */
+    private static BigDecimal efecto(Byte tipo, BigDecimal monto) {
+        return tipo != null && tipo == ENTRADA ? monto : monto.negate();
+    }
+
+    private static String descripcion(Byte tipo, String motivo, BigDecimal monto) {
+        return (tipo != null && tipo == ENTRADA ? "entrada" : "salida") + " «" + motivo + "» $" + monto.toPlainString();
+    }
+
+    private static String notaDelMovimiento(String nota, SesionCaja sesion, Usuario admin, String porque) {
+        String base = "[Corrección del corte #" + sesion.getIdsesionCaja() + " por " + admin.getNombreCompleto() + ": " + porque + "]";
+        String texto = nota == null || nota.isBlank() ? base : base + " " + nota.trim();
+        return texto.length() > 1000 ? texto.substring(0, 1000) : texto;
+    }
+
     // ── Piezas internas ──────────────────────────────────────────────────────
 
     /** Lo que ocurrió en la caja entre {@code desde} y {@code hasta}: ventas por método y movimientos por motivo. */

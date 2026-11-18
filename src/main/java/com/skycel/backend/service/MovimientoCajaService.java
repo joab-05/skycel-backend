@@ -157,6 +157,43 @@ public class MovimientoCajaService {
         return toDto(guardado);
     }
 
+    // ── Movimientos de un corte ya cerrado (los corrige un administrador; lo llama SesionCajaService) ──
+
+    /** El motivo de un movimiento que se captura a mano: existe, está activo y no es de los que registra el sistema. */
+    @Transactional(readOnly = true)
+    public CatMotivo motivoManual(Integer idmotivo) {
+        if (idmotivo == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique el motivo del movimiento.");
+        CatMotivo motivo = catMotivoRepository.findById(idmotivo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Motivo no encontrado: " + idmotivo));
+        if (!Boolean.TRUE.equals(motivo.getActivo()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El motivo '" + motivo.getNombre() + "' está desactivado.");
+        if (MotivoCajaService.esDelSistema(motivo.getNombre()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El motivo '" + motivo.getNombre() + "' lo registra el sistema automáticamente.");
+        return motivo;
+    }
+
+    /** Agrega a mano un movimiento a un turno cerrado, con la fecha que le toca dentro del turno. */
+    @Transactional
+    public MovimientoCaja agregarACorteCerrado(Caja caja, Usuario admin, CatMotivo motivo, BigDecimal monto, String observaciones,
+                                               java.time.LocalDateTime fecha) {
+        return guardar(caja, admin, admin, motivo, monto, observaciones, null, fecha);
+    }
+
+    /** Cambia el motivo, el monto o la nota de un movimiento (la fecha no cambia). */
+    @Transactional
+    public MovimientoCaja cambiarMovimiento(MovimientoCaja m, CatMotivo motivo, BigDecimal monto, String observaciones) {
+        m.setMotivo(motivo);
+        m.setTipo(motivo.getTipoMov());
+        m.setMonto(monto);
+        m.setObservaciones(observaciones);
+        return movimientoCajaRepository.save(m);
+    }
+
+    @Transactional
+    public void quitarMovimiento(MovimientoCaja m) {
+        movimientoCajaRepository.delete(m);
+    }
+
     // ── Movimientos automáticos (los llama VentaService en la misma transacción) ──
 
     /** Entrada por una venta en efectivo. Si fue a crédito, solo entra lo abonado. */

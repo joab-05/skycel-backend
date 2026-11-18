@@ -373,6 +373,136 @@ class SesionCajaServiceTest {
         assertThat(r.getAvisoNomina()).contains("$51").contains("todavía no se descuenta");
     }
 
+    // ── Movimientos de un corte cerrado ──────────────────────────────────────
+
+    private com.skycel.backend.dto.caja.CorreccionMovimientoRequestDto cambioDeMovimiento(Integer idmotivo, String monto, String nota, String porque) {
+        var d = new com.skycel.backend.dto.caja.CorreccionMovimientoRequestDto();
+        d.setIdmotivo(idmotivo);
+        d.setMonto(monto != null ? new BigDecimal(monto) : null);
+        d.setObservaciones(nota);
+        d.setMotivoCorreccion(porque);
+        return d;
+    }
+
+    private CatMotivo motivoManual(int id, String nombre, byte tipo) {
+        CatMotivo m = CatMotivo.builder().idmotivo(id).nombre(nombre).tipoMov(tipo).activo(true).build();
+        lenient().when(movimientoCajaService.motivoManual(id)).thenReturn(m);
+        return m;
+    }
+
+    /** Un corte cerrado con esperado $2,751 y lo contado que se indique. */
+    private int cerrarContando(String contado) {
+        service.abrir(ID_CAJA, abrirCon("1500"), "luis");
+        venderEnEfectivo("1251.00");
+        return service.cerrar(ID_CAJA, cerrarCon(contado, "1500", null), "luis").getIdsesionCaja();
+    }
+
+    @Test
+    @DisplayName("agregar una entrada que no se registró: el esperado sube, el sobrante se va y el detalle se vuelve a guardar")
+    void agregarEntradaACorte_quitaElSobrante() {
+        int id = cerrarContando("2800");                                    // sobraron $49 (la entrega de una reparación)
+        motivoManual(7, "Otro ingreso", ENTRADA);
+
+        SesionCajaResponseDto r = service.agregarMovimientoACorte(id, cambioDeMovimiento(7, "49", "Entrega de reparación OS-12", "Se cobró y se registró después"), "root");
+
+        assertThat(r.getEfectivoEsperado()).isEqualByComparingTo("2800");
+        assertThat(r.getDiferencia()).isEqualByComparingTo("0");
+        assertThat(r.getEfectivoContado()).isEqualByComparingTo("2800");     // lo contado no cambia
+        assertThat(r.getMotivoCorreccion()).contains("Agregó entrada «Otro ingreso» $49.00").contains("Se cobró y se registró después");
+        assertThat(r.getCorregidoPor()).isEqualTo("Root");
+        verify(movimientoCajaService).agregarACorteCerrado(eq(caja), eq(root), any(CatMotivo.class), argThat(m -> m.compareTo(new BigDecimal("49.00")) == 0),
+                contains("Entrega de reparación OS-12"), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("agregar una salida: el esperado baja y el faltante se va")
+    void agregarSalidaACorte_quitaElFaltante() {
+        int id = cerrarContando("2600");                                    // faltaron $151
+        motivoManual(8, "Gasto operativo", SALIDA);
+
+        SesionCajaResponseDto r = service.agregarMovimientoACorte(id, cambioDeMovimiento(8, "151", null, "Cobro ya contado en el turno anterior"), "root");
+
+        assertThat(r.getEfectivoEsperado()).isEqualByComparingTo("2600");
+        assertThat(r.getDiferencia()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("cambiar el monto de un movimiento manual recalcula el corte; quitarlo lo devuelve")
+    void cambiarYQuitarMovimientoDeCorte() {
+        int id = cerrarContando("2711");                                    // esperado 2751 → faltan $40
+        SesionCaja sesion = sesiones.get(0);
+        motivoManual(8, "Gasto operativo", SALIDA);
+        MovimientoCaja gasto = MovimientoCaja.builder().idmovimiento(900).caja(caja).usuarioEncargado(luis).tipo(SALIDA).monto(new BigDecimal("50"))
+                .motivo(CatMotivo.builder().idmotivo(8).nombre("Gasto operativo").tipoMov(SALIDA).build()).fechaMov(sesion.getFechaApertura()).build();
+        when(movimientoCajaRepository.findById(900)).thenReturn(Optional.of(gasto));
+
+        // el gasto era de $20, no de $50: el esperado sube $30 → faltan $10
+        SesionCajaResponseDto r = service.cambiarMovimientoDeCorte(id, 900, cambioDeMovimiento(8, "20", null, "Se capturó mal el monto"), "root");
+        assertThat(r.getEfectivoEsperado()).isEqualByComparingTo("2781");
+        assertThat(r.getDiferencia()).isEqualByComparingTo("-70");
+        verify(movimientoCajaService).cambiarMovimiento(eq(gasto), any(CatMotivo.class), argThat(m -> m.compareTo(new BigDecimal("20.00")) == 0), any());
+
+        // y si ese gasto en realidad no existió, se quita: el esperado sube otros $50
+        gasto.setMonto(new BigDecimal("20"));
+        SesionCajaResponseDto q = service.quitarMovimientoDeCorte(id, 900, "No hubo tal gasto", "root");
+        assertThat(q.getEfectivoEsperado()).isEqualByComparingTo("2801");
+        assertThat(q.getMotivoCorreccion()).contains("Cambió").contains("Quitó");
+        verify(movimientoCajaService).quitarMovimiento(gasto);
+    }
+
+    @Test
+    @DisplayName("una venta, un abono o lo del turno no se cambian aquí; tampoco un movimiento de otro turno")
+    void movimientosQueNoSeCambian() {
+        int id = cerrarContando("2751");
+        SesionCaja sesion = sesiones.get(0);
+        MovimientoCaja venta = MovimientoCaja.builder().idmovimiento(901).caja(caja).usuarioEncargado(luis).tipo(ENTRADA).monto(new BigDecimal("100"))
+                .motivo(CatMotivo.builder().idmotivo(1).nombre(VENTA).tipoMov(ENTRADA).build()).fechaMov(sesion.getFechaApertura()).build();
+        MovimientoCaja deOtroTurno = MovimientoCaja.builder().idmovimiento(902).caja(caja).usuarioEncargado(luis).tipo(SALIDA).monto(new BigDecimal("10"))
+                .motivo(CatMotivo.builder().idmotivo(8).nombre("Gasto operativo").tipoMov(SALIDA).build()).fechaMov(sesion.getFechaApertura().minusDays(3)).build();
+        when(movimientoCajaRepository.findById(901)).thenReturn(Optional.of(venta));
+        when(movimientoCajaRepository.findById(902)).thenReturn(Optional.of(deOtroTurno));
+
+        assertThatThrownBy(() -> service.quitarMovimientoDeCorte(id, 901, "x", "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("lo registra el sistema");
+        assertThatThrownBy(() -> service.quitarMovimientoDeCorte(id, 902, "x", "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no es de este turno");
+        verify(movimientoCajaService, never()).quitarMovimiento(any());
+    }
+
+    @Test
+    @DisplayName("solo un administrador; el motivo de la corrección es obligatorio; no en un turno abierto")
+    void movimientosDeCorte_validaciones() {
+        int id = cerrarContando("2751");
+        motivoManual(7, "Otro ingreso", ENTRADA);
+
+        assertThatThrownBy(() -> service.agregarMovimientoACorte(id, cambioDeMovimiento(7, "10", null, "x"), "luis"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("administrador");
+        assertThatThrownBy(() -> service.agregarMovimientoACorte(id, cambioDeMovimiento(7, "10", null, "  "), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("motivo");
+        assertThatThrownBy(() -> service.agregarMovimientoACorte(id, cambioDeMovimiento(7, null, null, "x"), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("monto");
+
+        service.abrir(ID_CAJA, abrirCon("1500"), "luis");
+        int abierto = sesiones.get(sesiones.size() - 1).getIdsesionCaja();
+        assertThatThrownBy(() -> service.agregarMovimientoACorte(abierto, cambioDeMovimiento(7, "10", null, "x"), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("abierto");
+        verify(movimientoCajaService, never()).agregarACorteCerrado(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("si el faltante ya estaba descontado en nómina, agregar el movimiento regulariza la nómina")
+    void agregarMovimiento_regularizaLaNomina() {
+        int id = cerrarContando("2600");                                    // faltaron $151
+        sesiones.get(0).setFaltanteNomina((byte) 1);
+        motivoManual(8, "Gasto operativo", SALIDA);
+        when(nominaService.ajustarFaltanteCorregido(eq(sesiones.get(0)), argThat(d -> d.compareTo(new BigDecimal("-151")) == 0),
+                argThat(d -> d.compareTo(BigDecimal.ZERO) == 0))).thenReturn("Se quitó el descuento de $151.");
+
+        SesionCajaResponseDto r = service.agregarMovimientoACorte(id, cambioDeMovimiento(8, "151", null, "Cobro ya contado antes"), "root");
+
+        assertThat(r.getAvisoNomina()).isEqualTo("Se quitó el descuento de $151.");
+    }
+
     @Test
     @DisplayName("el detalle del corte agrupa las ventas por método de pago y no cuenta las canceladas")
     void ventasPorMetodo() {

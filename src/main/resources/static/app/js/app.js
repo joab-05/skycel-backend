@@ -106,6 +106,29 @@ async function actualizarEncabezado() {
   await dibujarSidebar();
 }
 
+/** Al entrar, un apoyo (vendedor) dice en qué sucursal va a trabajar: de ahí salen las cajas, las ventas y el inventario. */
+async function pantallaElegirSucursal() {
+  const s = Sesion.obtener();
+  if (!s || !s.sucursalPendiente) { navegar('#/menu'); return; }
+  root.innerHTML = `
+    ${cabeceraPantalla(ic('house') + ' ¿En qué sucursal vas a trabajar?', 'Las cajas, las ventas y el inventario se manejan con la sucursal que elijas aquí; no con la de tu alta')}
+    <div class="tarjeta"><div id="su-lista"><div class="vacio">Cargando...</div></div></div>`;
+  const lista = document.getElementById('su-lista');
+  try {
+    const tiendas = (await api('GET', '/api/tiendas')).filter(t => !t.esAlmacen && t.activo !== false);
+    lista.innerHTML = tiendas.map(t => `<button type="button" class="btn btn-azul su-tienda" data-id="${t.codti}" style="display:block;width:100%;margin:8px 0;padding:14px;">${escapar(t.nombre)}</button>`).join('')
+      || '<div class="vacio">No hay sucursales disponibles.</div>';
+    lista.querySelectorAll('.su-tienda').forEach(b => b.onclick = () => {
+      const t = tiendas.find(x => String(x.codti) === b.dataset.id);
+      Sesion.cambiarTienda(t.codti, t.nombre);
+      navegar('#/menu');
+    });
+  } catch (err) {
+    lista.innerHTML = `<div class="mensaje error">${escapar(err.network ? 'Sin conexión con el servidor.' : err.message)}</div>
+      <button class="btn btn-gris" onclick="location.reload()">Reintentar</button>`;
+  }
+}
+
 /**
  * Un vendedor no tiene sucursal fija: rota día a día según dónde se le necesite (o cubre a un encargado que
  * descansa). Este selector, visible solo para su rol, cambia la sucursal con la que trabaja en el momento —
@@ -297,6 +320,7 @@ async function render() {
 
   if (!s && ruta !== 'login') { navegar('#/login'); return; }
   if (s && ruta === 'login') { navegar('#/menu'); return; }
+  if (s && s.sucursalPendiente && ruta !== 'sucursal') { navegar('#/sucursal'); return; }
 
   // Una vez por carga de la página se traen los permisos del rol (root los puede haber cambiado): si cambiaron, se redibuja
   if (s && !s.permisos) await Sesion.cargarPermisos(true);
@@ -313,6 +337,7 @@ async function render() {
 
   try {
     if (ruta === 'login') return pantallaLogin();
+    if (ruta === 'sucursal') return pantallaElegirSucursal();
     if (ruta === 'menu') return pantallaMenu();
     if (ruta === 'recepcion') return pantallaRecepcion();
     if (ruta === 'taller') return pantallaTaller();
@@ -435,6 +460,8 @@ function pantallaLogin() {
       Sesion.guardar({
         token: r.token, idusuario: r.idusuario, username: r.username, nombreCompleto: r.nombreCompleto,
         rol: r.rol, codti: r.codti, tecnicoEncargado: r.tecnicoEncargado, permisos: r.permisos || undefined,
+        // un apoyo (vendedor) cubre la tienda donde lo necesiten: la sucursal con la que trabaja se elige en CADA entrada, no se hereda de su alta
+        sucursalPendiente: r.rol === 'VENDEDOR',
       });
       navegar('#/menu');
       actualizarBadgeNotificaciones();
@@ -883,12 +910,12 @@ async function pantallaCorte(id) {
       <div class="ayuda" style="margin-bottom:10px;">Cada venta con lo que se llevó el cliente (equipos con su IMEI, al contado o con PayJoy) y cada movimiento de efectivo con su nota.</div>
       <button id="cr-ver-detalle" class="btn btn-azul">${ic('search')} Ver ventas y movimientos</button>
     </div>`);
-    document.getElementById('cr-ver-detalle').onclick = () => cargarAuditoriaCorte(c.idsesionCaja, document.getElementById('cr-auditoria'));
+    document.getElementById('cr-ver-detalle').onclick = () => cargarAuditoriaCorte(c.idsesionCaja, document.getElementById('cr-auditoria'), puedeCorregir);
   }
 }
 
 /** El detalle de un turno para auditarlo: ventas con sus artículos, equipos vendidos y movimientos con su nota. */
-async function cargarAuditoriaCorte(idsesion, cont) {
+async function cargarAuditoriaCorte(idsesion, cont, puedeCorregir) {
   cont.innerHTML = '<h2>Ventas y movimientos del turno</h2><div class="vacio">Cargando...</div>';
   let d;
   try { d = await api('GET', '/api/cajas/sesiones/' + idsesion + '/detalle'); }
@@ -968,12 +995,78 @@ async function cargarAuditoriaCorte(idsesion, cont) {
         </select>
         <span class="ayuda">${lista.length} movimientos · entradas ${formatoDinero(e)} · salidas ${formatoDinero(sa)} (${(entradas - salidas) >= 0 ? '' : '−'}${formatoDinero(Math.abs(entradas - salidas))} de neto del turno)</span>
       </div>
+      ${puedeCorregir ? `<div class="grupo-botones" style="margin-bottom:8px;"><button type="button" id="mv-agregar" class="btn btn-azul btn-chico">${ic('plus')} Agregar movimiento</button></div>
+        <div class="ayuda" style="margin-bottom:8px;">Solo se cambian los movimientos que registró una persona (no las ventas, los abonos ni el fondo y el retiro del turno). El efectivo esperado y la diferencia del corte se recalculan, y si el faltante ya estaba en la nómina, la nómina se ajusta.</div>
+        <div id="mv-form" class="tarjeta oculto"></div>` : ''}
       ${lista.length === 0 ? '<div class="vacio">No hay movimientos de este tipo.</div>' : lista.map(m => `<div class="detalle-fila">
         <span class="k">${formatoFecha(m.fecha)} · ${escapar(m.motivo)}${m.usuario ? ' · ' + escapar(m.usuario) : ''}${m.observaciones ? ' · ' + escapar(m.observaciones) : ''}</span>
-        <span class="v ${m.tipo === 1 ? 'monto-ok' : 'monto-rojo'}">${m.tipo === 1 ? '+' : '−'}${formatoDinero(m.monto)}</span></div>`).join('')}`;
+        <span class="v ${m.tipo === 1 ? 'monto-ok' : 'monto-rojo'}">${m.tipo === 1 ? '+' : '−'}${formatoDinero(m.monto)}${puedeCorregir && m.editable ? ` <button type="button" class="btn btn-gris btn-chico mv-cambiar" data-id="${m.idmovimiento}">Cambiar</button> <button type="button" class="btn btn-gris btn-chico mv-quitar" data-id="${m.idmovimiento}">Quitar</button>` : ''}</span></div>`).join('')}`;
     const sel = document.getElementById('cf-mov');
     sel.value = filtros.mov;
     sel.onchange = () => { filtros.mov = sel.value; dibujarMovs(); };
+    if (puedeCorregir) {
+      document.getElementById('mv-agregar').onclick = () => formularioMovimiento(null);
+      vista.querySelectorAll('.mv-cambiar').forEach(b => b.onclick = () => formularioMovimiento(movs.find(m => String(m.idmovimiento) === b.dataset.id)));
+      vista.querySelectorAll('.mv-quitar').forEach(b => b.onclick = async () => {
+        const m = movs.find(x => String(x.idmovimiento) === b.dataset.id);
+        const porque = (prompt(`¿Por qué se quita ${m.tipo === 1 ? 'la entrada' : 'la salida'} «${m.motivo}» de ${formatoDinero(m.monto)}?`) || '').trim();
+        if (!porque) return;
+        b.disabled = true;
+        try { aplicarCambioDeCorte(await api('DELETE', `/api/cajas/sesiones/${idsesion}/movimientos/${m.idmovimiento}?motivo=${encodeURIComponent(porque)}`)); }
+        catch (err) { b.disabled = false; mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+      });
+    }
+  }
+
+  /** Cuando el cambio sale bien se vuelve a dibujar el corte (ya recalculado) y se cuenta qué pasó, nómina incluida. */
+  async function aplicarCambioDeCorte(resp) {
+    await pantallaCorte(idsesion);
+    mostrarMensaje(root, `Corte corregido: efectivo esperado ${formatoDinero(resp.efectivoEsperado)}, diferencia ${formatoDinero(resp.diferencia)}.${resp.avisoNomina ? ' Nómina: ' + resp.avisoNomina : ''}`, 'ok');
+  }
+
+  /** Agregar (m == null) o cambiar un movimiento manual del corte. */
+  async function formularioMovimiento(m) {
+    const caja = document.getElementById('mv-form');
+    caja.classList.remove('oculto');
+    caja.innerHTML = '<div class="vacio">Cargando motivos...</div>';
+    let motivos = [];
+    try { motivos = (await api('GET', '/api/motivos-caja')).filter(x => !x.delSistema); }
+    catch (err) { caja.innerHTML = `<div class="mensaje error">${escapar(err.message)}</div>`; return; }
+    caja.innerHTML = `<h2>${m ? 'Cambiar movimiento' : 'Agregar un movimiento que faltó registrar en este turno'}</h2>
+      <label class="obligatorio">Motivo</label>
+      <select id="mv-motivo"><option value="">Elige el motivo</option>${motivos.map(x => `<option value="${x.idmotivo}" data-tipo="${x.tipoMov}"${m && x.nombre === m.motivo ? ' selected' : ''}>${escapar(x.nombre)} (${x.tipoMov === 1 ? 'entrada' : 'salida'})</option>`).join('')}</select>
+      <label class="obligatorio">Monto</label>
+      <input id="mv-monto" type="number" min="0.01" step="0.01" inputmode="decimal" data-moneda value="${m ? Number(m.monto).toFixed(2) : ''}">
+      <label>Nota</label>
+      <input id="mv-nota" maxlength="500" placeholder="Opcional: por ejemplo, la orden o el folio" value="${m && m.observaciones && !m.observaciones.startsWith('[') ? escapar(m.observaciones) : ''}">
+      <label class="obligatorio">Motivo de la corrección</label>
+      <input id="mv-porque" maxlength="255" placeholder="Por qué se corrige el corte">
+      <p id="mv-efecto" class="ayuda" style="font-weight:700;"></p>
+      <div class="grupo-botones"><button type="button" id="mv-guardar" class="btn btn-verde">Guardar</button><button type="button" id="mv-cancelar" class="btn btn-gris">Cancelar</button></div>`;
+    const efecto = () => {
+      const op = document.getElementById('mv-motivo').selectedOptions[0];
+      const monto = Number(document.getElementById('mv-monto').value);
+      document.getElementById('mv-efecto').textContent = op && op.value && monto > 0
+        ? (op.dataset.tipo === '1' ? 'Es una ENTRADA: el efectivo esperado del corte sube ' : 'Es una SALIDA: el efectivo esperado del corte baja ') + formatoDinero(monto) + '.' : '';
+    };
+    document.getElementById('mv-motivo').onchange = efecto;
+    document.getElementById('mv-monto').oninput = efecto;
+    efecto();
+    document.getElementById('mv-cancelar').onclick = () => { caja.classList.add('oculto'); caja.innerHTML = ''; };
+    document.getElementById('mv-guardar').onclick = async (ev) => {
+      const idmotivo = Number(document.getElementById('mv-motivo').value);
+      const monto = Number(document.getElementById('mv-monto').value);
+      const porque = document.getElementById('mv-porque').value.trim();
+      if (!idmotivo) { mostrarMensaje(root, 'Elige el motivo del movimiento.', 'error'); return; }
+      if (!(monto > 0)) { mostrarMensaje(root, 'Escribe un monto mayor a cero.', 'error'); return; }
+      if (!porque) { mostrarMensaje(root, 'Escribe por qué se corrige el corte.', 'error'); return; }
+      const cuerpo = { idmotivo, monto, observaciones: document.getElementById('mv-nota').value.trim() || null, motivoCorreccion: porque };
+      ev.currentTarget.disabled = true;
+      try {
+        aplicarCambioDeCorte(m ? await api('PUT', `/api/cajas/sesiones/${idsesion}/movimientos/${m.idmovimiento}`, cuerpo)
+                               : await api('POST', `/api/cajas/sesiones/${idsesion}/movimientos`, cuerpo));
+      } catch (err) { ev.currentTarget.disabled = false; mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error'); }
+    };
   }
 
   const vistas = { ventas: dibujarVentas, equipos: dibujarEquipos, movs: dibujarMovs };

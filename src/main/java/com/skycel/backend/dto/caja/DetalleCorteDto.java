@@ -107,6 +107,8 @@ public class DetalleCorteDto {
         private BigDecimal monto;
         private String usuario;
         private String observaciones;
+        /** true si un administrador puede cambiarlo o quitarlo (lo que registró una persona; no ventas, abonos ni lo del turno). */
+        private boolean editable;
     }
 
     /** Cuántos equipos se vendieron en el turno y cómo (para ver de un vistazo que lo que se vendió al contado entró a la caja). */

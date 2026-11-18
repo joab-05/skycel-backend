@@ -30,7 +30,7 @@ Todo lo que se captura (ventas, inventario, caja) se guarda en un **servidor** e
 Los campos de dinero ponen solos el signo **$** y las comas: escribes `1299.5` y se ve **$1,299.50**. Solo aceptan números y **dos decimales**. Los teléfonos son de **10 dígitos** y no dejan escribir más. {formato}
 
 ### Si te cambian de sucursal
-Solo el **encargado** y el **técnico** están ligados a una tienda; los vendedores (apoyos) y los administradores trabajan en la que se necesite. {cambio}
+Solo el **encargado** y el **técnico** están ligados a una tienda; los vendedores (apoyos) y los administradores trabajan en la que se necesite, y **la sucursal con la que se trabaja nunca sale de la sucursal de su alta**: la decide el equipo (JSystem) o lo que el apoyo elige al entrar (web). {cambio}
 
 ### Moverse por el programa
 - El **menú de la izquierda** tiene todas las secciones: Ventas, Inventario, Finanzas, Clientes, Taller y Administración.
@@ -52,7 +52,7 @@ PRIMEROS_WEB = PRIMEROS_COMUN.format(
     entrar="2. Pulsa **Entrar**.",
     salir="el botón de abajo del menú",
     formato="El signo $ aparece dentro del campo y el monto se completa a dos decimales al salir de él.",
-    cambio="En la web, la sesión se pone al día sola (cada par de minutos y al volver a la pestaña). Un vendedor elige arriba la sucursal donde trabaja ese día.",
+    cambio="En la web, la sesión se pone al día sola (cada par de minutos y al volver a la pestaña). Un vendedor (apoyo) **elige la sucursal donde va a trabajar cada vez que entra** (no puede seguir sin elegirla) y puede cambiarla arriba durante el día.",
     moverse="""- En el celular hay un acceso rápido abajo: **Inicio, Vender, Inventario y Caja**.
 - **Ajustes** sirve para cambiar tu contraseña; el administrador también define ahí las formas de pago y el logo del negocio.
 - El indicador de conexión te dice si estás en línea o si hay cosas guardadas esperando enviarse.
@@ -236,6 +236,8 @@ Si quien cerró se equivocó al contar o al decidir lo que deja para mañana, ab
 - Si el faltante de ese corte **ya se descontó en una nómina**, la nómina se **regulariza sola**: si la línea sigue pendiente, el descuento cambia al faltante nuevo (o se quita si ya no hay faltante); si ya se pagó, la diferencia va a la línea del mismo empleado en la **nómina abierta** (un descuento extra o una devolución). Si no hay período abierto, el sistema lo avisa y no cambia nada: abre el período y vuelve a corregir.
 - Si el corte no tenía faltante y ahora sí, el sistema avisa: se cobra con la nómina del período que incluye su fecha de cierre; si ese período ya se cerró, agrégalo como deducción en Nómina.
 - Un corte de **servicios** ya confirmado se corrige con **Reabrir**.
+- **Agregar, cambiar o quitar movimientos de efectivo del corte** (solo administrador): en el detalle del corte, pestaña **Movimientos de efectivo**, pulsa **Agregar movimiento**; elige el motivo (es una entrada o una salida), el monto, una nota y **por qué** se corrige. **Cambiar** y **Quitar** funcionan sobre lo que registró una persona; las ventas, los abonos y el fondo y el retiro del turno no se tocan aquí. El **efectivo esperado** y la **diferencia** se recalculan y, si el faltante ya estaba en la nómina, la nómina se ajusta.
+- Ejemplo: se cobró la entrega de una reparación pero se registró en el sistema hasta el día siguiente. El primer turno tuvo un **sobrante** y el segundo un **faltante**. Agrega una **entrada** al primer corte (por lo que se cobró) y una **salida** al segundo (el cobro que ya se había contado antes): los dos cuadran y en total no cambia el dinero de la caja.
 
 ### Revisar un corte a detalle (encargado y administrador)
 Para comprobar que todo lo vendido y todo el efectivo quedó bien registrado, abre un corte y pulsa **Ver ventas y movimientos**. Muestra, de todo el turno:

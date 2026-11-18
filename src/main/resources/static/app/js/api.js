@@ -17,6 +17,7 @@ const Sesion = (() => {
     if (!s) return;
     s.codti = codti;
     s.nombreTienda = nombreTienda;
+    delete s.sucursalPendiente;   // ya eligió dónde trabaja
     guardar(s);
   }
 

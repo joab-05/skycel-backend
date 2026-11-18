@@ -150,6 +150,7 @@ public class DetalleCorteService {
                     .motivo(motivo).origen(origen).monto(m.getMonto())
                     .usuario(m.getUsuarioEncargado() != null ? m.getUsuarioEncargado().getNombreCompleto() : null)
                     .observaciones(m.getObservaciones())
+                    .editable(!MotivoCajaService.esDelSistema(motivo))
                     .build());
         }
 

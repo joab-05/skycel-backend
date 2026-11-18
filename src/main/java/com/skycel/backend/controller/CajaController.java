@@ -153,6 +153,36 @@ public class CajaController {
         return ResponseEntityBuilder.updated(sesionCajaService.corregirCierre(idsesion, request, userDetails.getUsername()), "corte de caja");
     }
 
+    @Operation(summary = "Agregar un movimiento de efectivo a un corte ya cerrado (solo administración)")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/sesiones/{idsesion}/movimientos")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<StandardApiResponse<SesionCajaResponseDto>> agregarMovimientoACorte(
+            @PathVariable Integer idsesion, @Valid @RequestBody com.skycel.backend.dto.caja.CorreccionMovimientoRequestDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.updated(sesionCajaService.agregarMovimientoACorte(idsesion, request, userDetails.getUsername()), "corte de caja");
+    }
+
+    @Operation(summary = "Cambiar un movimiento manual de un corte ya cerrado (solo administración)")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PutMapping("/sesiones/{idsesion}/movimientos/{idmovimiento}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<StandardApiResponse<SesionCajaResponseDto>> cambiarMovimientoDeCorte(
+            @PathVariable Integer idsesion, @PathVariable Integer idmovimiento,
+            @Valid @RequestBody com.skycel.backend.dto.caja.CorreccionMovimientoRequestDto request, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.updated(sesionCajaService.cambiarMovimientoDeCorte(idsesion, idmovimiento, request, userDetails.getUsername()), "corte de caja");
+    }
+
+    @Operation(summary = "Quitar un movimiento manual de un corte ya cerrado (solo administración)")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/sesiones/{idsesion}/movimientos/{idmovimiento}")
+    @PreAuthorize("hasAnyRole('ROOT','ADMIN')")
+    public ResponseEntity<StandardApiResponse<SesionCajaResponseDto>> quitarMovimientoDeCorte(
+            @PathVariable Integer idsesion, @PathVariable Integer idmovimiento, @RequestParam String motivo,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.updated(sesionCajaService.quitarMovimientoDeCorte(idsesion, idmovimiento, motivo, userDetails.getUsername()), "corte de caja");
+    }
+
     @Operation(summary = "Un turno con su corte completo")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/sesiones/{idsesion}")
