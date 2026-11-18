@@ -168,11 +168,16 @@ Sirven para regresar un producto vendido: se le **reembolsa** al cliente o se le
 2. **Busca la venta** (por folio) y elige los artículos que regresan y la cantidad. En los equipos, elige cada IMEI.
 3. Escribe el **motivo**.
 4. Marca si el artículo está en **buen estado** (regresa a inventario) o **dañado** (se da de baja).
-5. Elige cómo se resuelve. **Reembolso**: se devuelve el dinero; si es en efectivo, sale de la caja (debe estar abierta). **Cambio**: el cliente se lleva otro producto, que debe valer **igual o más**; si vale más, se cobra la diferencia.
+5. Elige cómo se resuelve. **Reembolso**: se devuelve el dinero; si es en efectivo, sale de la caja (debe estar abierta). **Cambio**: el cliente se lleva otro producto, que debe valer **igual o más** que lo devuelto; si vale más, se cobra la diferencia.
+   - En **Cambio**, el sistema carga los productos de la sucursal de la venta (con existencia) y se busca escribiendo el nombre. Si no carga, aparece **Reintentar**.
+   - Al elegir el producto se llena el **precio de entrega** con el que tiene hoy en el sistema. Si se debe **entregar a otro precio** (por ejemplo, el cliente recibió un artículo equivocado de $100 y el correcto cuesta $199, pero se le deja en $100), cámbialo en ese campo o pulsa **Dejarlo al precio de lo devuelto**. Aparece el aviso de **precio especial**.
+   - Lo que se lleva sigue sin poder valer menos que lo devuelto.
 6. Pulsa **Solicitar devolución**.
 
 ### Aprobar o rechazar
 Un **encargado** o **administrador** revisa la solicitud y pulsa **Aprobar y ejecutar** (mueve el inventario y el dinero) o **Rechazar** (con el motivo). Hasta que se aprueba, no cambia nada.
+
+Un cambio con **precio especial** (un producto que se entrega por menos de lo que cuesta en el sistema) lo aprueba **solo un administrador**: el encargado puede rechazarlo, pero no aprobarlo. En el detalle se ve el precio de lista junto al precio al que se entrega.
 
 > Una venta con una devolución pedida o ya hecha no se puede cancelar.
 

@@ -53,6 +53,7 @@ class DevolucionServiceTest {
     @Mock private MovimientoInventarioService     movimientoInventarioService;
     @Mock private VentaService                    ventaService;
     @Mock private ConfiguracionNegocioService     configuracionNegocioService;
+    @Mock private DescuentoService                descuentoService;
 
     @InjectMocks
     private DevolucionService service;
@@ -74,6 +75,7 @@ class DevolucionServiceTest {
     @BeforeEach
     void setUp() {
         lenient().when(configuracionNegocioService.diasDevolucion()).thenReturn(15);
+        lenient().when(descuentoService.calcularDescuento(any(ProductoMaster.class), any(), any(), any())).thenReturn(BigDecimal.ZERO);
         zocalo = Tienda.builder().codti(2).nombre("Zocalo").build();
         corpo = Tienda.builder().codti(3).nombre("Corpo").build();
         vendedor = Usuario.builder().idusuario(9).username("yamilet").nombreCompleto("Yamilet").rol(Rol.VENDEDOR).tienda(zocalo).build();
@@ -262,6 +264,40 @@ class DevolucionServiceTest {
         }
 
         @Test
+        @DisplayName("cambio: guarda el precio de lista del producto nuevo y marca el precio especial")
+        void cambioGuardaElPrecioDeLista() {
+            Producto nuevo = Producto.builder().idproducto(5).codpro("FUN-000009").tienda(zocalo).productoMaster(mAccesorio)
+                    .stock(new BigDecimal("4")).preciopub(new BigDecimal("199")).build();
+            when(productoRepository.findByCodproAndTienda_Codti("FUN-000009", 2)).thenReturn(Optional.of(nuevo));
+
+            DevolucionResponseDto igual = service.solicitar(solicitudCambio("199", linea(10, 1, true)), "yamilet");
+            assertThat(igual.getCambio().get(0).getPrecioLista()).isEqualByComparingTo("199");
+            assertThat(igual.getCambio().get(0).getPrecioEspecial()).isFalse();
+            assertThat(igual.getRequiereAdministrador()).isFalse();
+
+            detalles.clear();
+            DevolucionResponseDto especial = service.solicitar(solicitudCambio("100", linea(10, 1, true)), "yamilet");
+            assertThat(especial.getCambio().get(0).getPrecioLista()).isEqualByComparingTo("199");
+            assertThat(especial.getCambio().get(0).getPrecioEspecial()).isTrue();
+            assertThat(especial.getRequiereAdministrador()).isTrue();
+            assertThat(especial.getDiferencia()).isEqualByComparingTo("0");
+        }
+
+        @Test
+        @DisplayName("cambio: el precio de lista descuenta la regla de descuento vigente")
+        void cambioConDescuentoVigente() {
+            Producto nuevo = Producto.builder().idproducto(5).codpro("FUN-000009").tienda(zocalo).productoMaster(mAccesorio)
+                    .stock(new BigDecimal("4")).preciopub(new BigDecimal("199")).build();
+            when(productoRepository.findByCodproAndTienda_Codti("FUN-000009", 2)).thenReturn(Optional.of(nuevo));
+            when(descuentoService.calcularDescuento(any(ProductoMaster.class), any(), any(), any())).thenReturn(new BigDecimal("49"));
+
+            DevolucionResponseDto r = service.solicitar(solicitudCambio("150", linea(10, 1, true)), "yamilet");
+
+            assertThat(r.getCambio().get(0).getPrecioLista()).isEqualByComparingTo("150");
+            assertThat(r.getCambio().get(0).getPrecioEspecial()).isFalse();
+        }
+
+        @Test
         @DisplayName("cambio: guarda el producto nuevo y la diferencia")
         void cambioValido() {
             DevolucionResponseDto r = service.solicitar(solicitudCambio("150", linea(10, 1, true)), "yamilet");
@@ -379,6 +415,28 @@ class DevolucionServiceTest {
             assertThat(v.getPagos().get(1).getMonto()).isEqualByComparingTo("50");
             assertThat(r.getIdventaCambio()).isEqualTo(77);
             verify(movimientoCajaService, never()).registrarDevolucionVenta(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("cambio a precio especial: un encargado no lo aprueba (403); un administrador sí, y la venta sale al precio acordado")
+        void cambioPrecioEspecial() {
+            Producto nuevo = Producto.builder().idproducto(5).codpro("FUN-000009").tienda(zocalo).productoMaster(mAccesorio)
+                    .stock(new BigDecimal("4")).preciopub(new BigDecimal("199")).build();
+            when(productoRepository.findByCodproAndTienda_Codti("FUN-000009", 2)).thenReturn(Optional.of(nuevo));
+            int id = service.solicitar(solicitudCambio("100", linea(10, 1, true)), "yamilet").getIddevolucion();
+
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.aprobar(id, null, "abigail"));
+            verify(ventaService, never()).crearDesdeDevolucion(any(VentaRequestDto.class), anyInt());
+
+            when(ventaService.crearDesdeDevolucion(any(VentaRequestDto.class), anyInt()))
+                    .thenReturn(VentaResponseDto.builder().idventa(79).build());
+            DevolucionResponseDto r = service.aprobar(id, null, "root");
+
+            ArgumentCaptor<VentaRequestDto> cap = ArgumentCaptor.forClass(VentaRequestDto.class);
+            verify(ventaService).crearDesdeDevolucion(cap.capture(), eq(1));
+            assertThat(cap.getValue().getDetalles().get(0).getPrecioUnitarioFinal()).isEqualByComparingTo("100");
+            assertThat(cap.getValue().getPagos()).hasSize(1);
+            assertThat(r.getIdventaCambio()).isEqualTo(79);
         }
 
         @Test

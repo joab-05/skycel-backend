@@ -6390,7 +6390,7 @@ async function pantallaDevoluciones() {
     // ── Cambio: el producto nuevo se elige del catálogo de la tienda de la venta ──
     let esCambio = false;
     let catalogo = null;                // se pide la primera vez que se elige «Cambio»
-    const nuevos = [];                  // { idprodmaster, codpro, nombre, cantidad, precio, imei, stock }
+    const nuevos = [];                  // { idprodmaster, codpro, nombre, cantidad, precio (al que se entrega), lista (lo que cuesta hoy), imei, stock }
     const contBuscar = document.getElementById('dv-cambio-buscar');
     const contRes = document.getElementById('dv-cambio-resultados');
     const contLista = document.getElementById('dv-cambio-lista');
@@ -6413,19 +6413,47 @@ async function pantallaDevoluciones() {
           <div>${escapar(n.nombre)}${n.imei ? ' · IMEI ' + escapar(n.imei) : ''}</div>
           <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
             ${n.imei ? '1 pieza' : `<input type="number" class="dv-nuevo-cant" data-k="${k}" min="1" max="${n.stock}" value="${n.cantidad}" style="width:72px;">`}
-            <span class="ayuda" style="margin:0;">× ${formatoDinero(n.precio)}</span>
-            <b style="margin-left:auto;">${formatoDinero(n.cantidad * n.precio)}</b>
+            <span class="ayuda" style="margin:0;">× $</span>
+            <input type="number" class="dv-nuevo-precio" data-k="${k}" min="0.01" step="0.01" inputmode="decimal" value="${n.precio}" style="width:96px;" title="Precio al que se entrega">
+            <b class="dv-nuevo-sub" style="margin-left:auto;">${formatoDinero(n.cantidad * n.precio)}</b>
             <button type="button" class="btn btn-gris btn-chico dv-nuevo-quitar" data-k="${k}" title="Quitar" style="flex:0 0 auto;">${ic('x')}</button>
           </div>
+          <div class="dv-nuevo-aviso ayuda" data-k="${k}" style="margin:4px 0 0;"></div>
         </div>`).join('');
+      contLista.querySelectorAll('.dv-nuevo-precio').forEach(inp => inp.addEventListener('input', () => {
+        const n = nuevos[Number(inp.dataset.k)];
+        n.precio = Math.max(0, Math.round(Number(inp.value) * 100) / 100) || 0;
+        inp.closest('.dv-nuevo').querySelector('.dv-nuevo-sub').textContent = formatoDinero(n.cantidad * n.precio);
+        avisoPrecio(Number(inp.dataset.k));
+        resumenCambio();
+      }));
+      nuevos.forEach((n, k) => avisoPrecio(k));
       contLista.querySelectorAll('.dv-nuevo-quitar').forEach(b => b.onclick = () => { nuevos.splice(Number(b.dataset.k), 1); dibujarNuevos(); });
       contLista.querySelectorAll('.dv-nuevo-cant').forEach(inp => inp.addEventListener('input', () => {
         const n = nuevos[Number(inp.dataset.k)];
         n.cantidad = Math.max(1, Math.min(n.stock, Math.floor(Number(inp.value)) || 1));
         resumenCambio();
-        inp.closest('.dv-nuevo').querySelector('b').textContent = formatoDinero(n.cantidad * n.precio);
+        inp.closest('.dv-nuevo').querySelector('.dv-nuevo-sub').textContent = formatoDinero(n.cantidad * n.precio);
       }));
       resumenCambio();
+    };
+    /** Entregarlo por menos de lo que cuesta es un precio especial: se avisa aquí y solo un administrador lo aprueba. */
+    const avisoPrecio = (k) => {
+      const n = nuevos[k];
+      const el = contLista.querySelector(`.dv-nuevo-aviso[data-k="${k}"]`);
+      if (!n || !el) return;
+      const especial = n.lista > 0 && n.precio + 0.004 < n.lista;
+      el.className = 'dv-nuevo-aviso ayuda' + (especial ? ' mensaje info' : '');
+      el.innerHTML = especial
+        ? `Precio especial: en el sistema cuesta ${formatoDinero(n.lista)} y se entrega en ${formatoDinero(n.precio)}. Un administrador debe aprobar este cambio.`
+        : (n.lista > 0 ? `Precio en el sistema: ${formatoDinero(n.lista)}` : '');
+      if (esCambio) el.insertAdjacentHTML('beforeend', ` <button type="button" class="btn btn-gris btn-chico dv-igualar" data-k="${k}">Dejarlo al precio de lo devuelto</button>`);
+      el.querySelectorAll('.dv-igualar').forEach(b => b.onclick = () => {
+        const dev = totalDevuelto();
+        if (!(dev > 0)) { mostrarMensaje(root, 'Marca arriba lo que se devuelve para igualar su precio.', 'info'); return; }
+        n.precio = Math.round(dev / n.cantidad * 100) / 100;
+        dibujarNuevos();
+      });
     };
     const resumenCambio = () => {
       const resumen = document.getElementById('dv-cambio-resumen');
@@ -6434,7 +6462,8 @@ async function pantallaDevoluciones() {
       if (!esCambio) return;
       if (nuevos.length === 0) { resumen.textContent = dev > 0 ? `Devuelve ${formatoDinero(dev)}: elige lo que se lleva.` : ''; resumen.className = 'mixto-estado'; return; }
       if (nuevo + 0.004 < dev) { resumen.textContent = `Devuelve ${formatoDinero(dev)} → se lleva ${formatoDinero(nuevo)}: debe valer igual o más que lo devuelto.`; resumen.className = 'mixto-estado falta'; return; }
-      resumen.textContent = `Devuelve ${formatoDinero(dev)} → se lleva ${formatoDinero(nuevo)}` + (nuevo > dev + 0.004 ? ` · diferencia a cobrar ${formatoDinero(nuevo - dev)}` : ' · sin diferencia');
+      resumen.textContent = `Devuelve ${formatoDinero(dev)} → se lleva ${formatoDinero(nuevo)}` + (nuevo > dev + 0.004 ? ` · diferencia a cobrar ${formatoDinero(nuevo - dev)}` : ' · sin diferencia')
+        + (nuevos.some(n => n.lista > 0 && n.precio + 0.004 < n.lista) ? ' · lleva precio especial: lo aprueba un administrador' : '');
       resumen.className = 'mixto-estado ok';
     };
     cont.querySelectorAll('.dv-linea-chk, .dv-linea-cant').forEach(el => el.addEventListener('input', resumenCambio));
@@ -6444,7 +6473,7 @@ async function pantallaDevoluciones() {
       if (imei && nuevos.some(n => n.imei === imei)) { mostrarMensaje(root, 'Esa unidad ya está en la lista.', 'info'); return; }
       const ya = !imei ? nuevos.find(n => n.codpro === p.codpro) : null;
       if (ya) { if (ya.cantidad < ya.stock) ya.cantidad++; }
-      else nuevos.push({ idprodmaster: p.idProductoMaster, codpro: p.esEquipo ? null : p.codpro, nombre: p.nombreProductoMaster, cantidad: 1, precio: Number(precio), imei: imei || null, stock: p.esEquipo ? 1 : Number(p.stock) });
+      else nuevos.push({ idprodmaster: p.idProductoMaster, codpro: p.esEquipo ? null : p.codpro, nombre: p.nombreProductoMaster, cantidad: 1, precio: Number(precio), lista: Number(precio), imei: imei || null, stock: p.esEquipo ? 1 : Number(p.stock) });
       contBuscar.value = ''; contRes.innerHTML = '';
       dibujarNuevos();
     };
@@ -6459,7 +6488,7 @@ async function pantallaDevoluciones() {
             <div class="orden-cliente">${p.esEquipo ? Number(p.stock) + ' disponible' + (Number(p.stock) === 1 ? '' : 's') : escapar(p.codpro) + ' · Stock: ' + (p.tipo === 'SERVICIO' ? '∞' : Number(p.stock))}</div>
           </div>
           ${p.esEquipo ? `<div class="grupo-botones pos-imeis">${p.imeisDisponibles.map(u => `<button type="button" class="btn btn-azul btn-chico dv-agregar-imei" data-imei="${escapar(u.imei)}">${escapar(u.imei)} · ${formatoDinero(u.precioVenta)}</button>`).join('')}</div>`
-            : `<span class="pos-precio">${formatoDinero(p.preciopub)} <span class="pv-mas">${ic('plus')}</span></span>`}
+            : `<span class="pos-precio">${formatoDinero(p.precioFinal ?? p.preciopub)} <span class="pv-mas">${ic('plus')}</span></span>`}
         </div>`).join('');
       contRes.querySelectorAll('.orden-item').forEach(el => {
         const p = lista.find(x => x.codpro === el.dataset.codpro);
@@ -6468,7 +6497,7 @@ async function pantallaDevoluciones() {
           const u = p.imeisDisponibles.find(x => x.imei === b.dataset.imei);
           agregarNuevo(p, u.imei, u.precioVenta);
         });
-        else el.onclick = () => agregarNuevo(p, null, p.preciopub);
+        else el.onclick = () => agregarNuevo(p, null, p.precioFinal ?? p.preciopub);
       });
     };
     contBuscar.addEventListener('input', buscarNuevos);
@@ -6518,6 +6547,7 @@ async function pantallaDevoluciones() {
       const payload = { idventa: venta.idventa, tipo: esCambio ? 2 : 1, motivo, lineas };
       if (esCambio) {
         if (nuevos.length === 0) { mostrarMensaje(root, 'Elige el producto que se lleva el cliente.', 'error'); return; }
+        if (nuevos.some(n => !(n.precio > 0))) { mostrarMensaje(root, 'Escribe el precio al que se entrega cada producto.', 'error'); return; }
         const dev = totalDevuelto(), nuevo = totalNuevo();
         if (nuevo + 0.004 < dev) { mostrarMensaje(root, `Lo que se lleva (${formatoDinero(nuevo)}) debe valer igual o más que lo devuelto (${formatoDinero(dev)}).`, 'error'); return; }
         payload.cambio = {
@@ -6531,7 +6561,7 @@ async function pantallaDevoluciones() {
       e.target.innerHTML = '<span class="spinner"></span> Enviando...';
       try {
         const dev = await api('POST', '/api/devoluciones', payload);
-        mostrarMensaje(root, `Devolución ${dev.folio} solicitada. Queda pendiente de aprobación.`, 'ok');
+        mostrarMensaje(root, `Devolución ${dev.folio} solicitada. Queda pendiente de aprobación${dev.requiereAdministrador ? ' de un administrador (entrega un producto a menos de su precio)' : ''}.`, 'ok');
         setTimeout(() => pantallaDevoluciones(), 1200);
       } catch (err) {
         mostrarMensaje(root, err.network ? 'Sin conexión con el servidor.' : err.message, 'error');
@@ -6593,6 +6623,8 @@ async function pantallaDevolucionDetalle(id) {
     return;
   }
 
+  // un cambio con un producto a menos de su precio solo lo aprueba un administrador
+  const soloAdmin = d.requiereAdministrador && !['ROOT', 'ADMIN'].includes(s && s.rol);
   root.innerHTML = `
     ${cabeceraPantalla(ic('undo-2') + ' ' + escapar(d.folio), 'Detalle de la devolución')}
     <div class="tarjeta">
@@ -6618,7 +6650,7 @@ async function pantallaDevolucionDetalle(id) {
         <h2>Lo que se lleva el cliente</h2>
         ${d.cambio.map(l => `
           <div class="detalle-fila">
-            <span class="k">${escapar(l.nombreProducto)}${l.imei ? ' · IMEI ' + escapar(l.imei) : ''} × ${l.cantidad}</span>
+            <span class="k">${escapar(l.nombreProducto)}${l.imei ? ' · IMEI ' + escapar(l.imei) : ''} × ${l.cantidad}${l.precioEspecial ? ` · <b>precio especial</b> (lista ${formatoDinero(l.precioLista)}, se entrega en ${formatoDinero(l.precioUnitario)})` : ''}</span>
             <span class="v">${formatoDinero(l.subtotal)}</span>
           </div>`).join('')}
         <div class="detalle-fila" style="font-weight:800;">
@@ -6632,17 +6664,18 @@ async function pantallaDevolucionDetalle(id) {
     ${d.estado === 1 && Sesion.tiene('DEVOLUCION_APROBAR') ? `
       <div class="tarjeta">
         <h2 style="margin-top:0;">Resolver</h2>
+        ${soloAdmin ? '<div class="mensaje info">Este cambio entrega un producto a menos de su precio: solo un administrador lo aprueba. Tú puedes rechazarlo.</div>' : ''}
         <label>Comentario</label>
-        <textarea id="dv-comentario" placeholder="Opcional para aprobar; obligatorio para rechazar"></textarea>
+        <textarea id="dv-comentario" placeholder="${soloAdmin ? 'Obligatorio para rechazar' : 'Opcional para aprobar; obligatorio para rechazar'}"></textarea>
         <div class="fila">
-          <button id="dv-aprobar" class="btn btn-verde">${ic('check')} Aprobar</button>
+          ${soloAdmin ? '' : `<button id="dv-aprobar" class="btn btn-verde">${ic('check')} Aprobar</button>`}
           <button id="dv-rechazar" class="btn btn-rojo">${ic('x')} Rechazar</button>
         </div>
       </div>` : ''}
     <button class="btn btn-gris" onclick="navegar('#/devoluciones')" style="margin-top:10px;">Volver</button>`;
 
   if (d.estado === 1 && Sesion.tiene('DEVOLUCION_APROBAR')) {
-    document.getElementById('dv-aprobar').onclick = async (e) => {
+    if (document.getElementById('dv-aprobar')) document.getElementById('dv-aprobar').onclick = async (e) => {
       e.target.disabled = true;
       try {
         await api('POST', `/api/devoluciones/${id}/aprobar`, { comentario: document.getElementById('dv-comentario').value.trim() || null });

@@ -66,6 +66,7 @@ public class DevolucionService {
     private final MovimientoInventarioService    movimientoInventarioService;
     private final VentaService                   ventaService;
     private final ConfiguracionNegocioService    configuracionNegocioService;
+    private final DescuentoService                descuentoService;
 
     // ── Consultar qué se puede devolver de una venta ─────────────────────────
 
@@ -182,7 +183,8 @@ public class DevolucionService {
                 nuevo = nuevo.add(c.getPrecioUnitarioFinal().multiply(BigDecimal.valueOf(c.getCantidad())));
                 cambio.add(DevolucionCambioLinea.builder().idprodmaster(c.getIdprodmaster()).codpro(trimOrNull(c.getCodpro()))
                         .nombreProducto(m.getNombreBase()).imei(trimOrNull(c.getImei())).cantidad(c.getCantidad())
-                        .precioUnitario(c.getPrecioUnitarioFinal()).build());
+                        .precioUnitario(c.getPrecioUnitarioFinal())
+                        .precioLista(precioDeLista(m, trimOrNull(c.getCodpro()), trimOrNull(c.getImei()), venta.getTienda().getCodti())).build());
             }
             if (nuevo.compareTo(total) < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -224,6 +226,11 @@ public class DevolucionService {
         // Puede haber cambiado algo desde que se solicitó (p. ej. la venta se canceló)
         if (venta.getEstado() == null || venta.getEstado() != VENTA_COMPLETADA) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "La venta " + venta.getIdventa() + " ya no está vigente: rechace la devolución.");
+        }
+        // Entregar un producto por menos de lo que cuesta es cambiar un precio: eso lo autoriza solo un administrador
+        if (d.getTipo() == TIPO_CAMBIO && !esSuperior(usuario) && hayPrecioEspecial(d)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Este cambio entrega un producto a menos de su precio: solo un administrador lo puede aprobar.");
         }
 
         List<DevolucionDetalle> detalles = detalleRepository.findByDevolucion_IddevolucionOrderByIddetalle(id);
@@ -309,6 +316,32 @@ public class DevolucionService {
             productoRepository.save(producto);
             movimientoInventarioService.registrar(producto, antes, "DEVOLUCION", "Devolución de venta", d.getFolio());
         }
+    }
+
+    /** ¿Algún producto del cambio se entrega por menos de lo que cuesta en el sistema? */
+    private boolean hayPrecioEspecial(Devolucion d) {
+        return cambioRepository.findByDevolucion_IddevolucionOrderByIdlinea(d.getIddevolucion()).stream()
+                .anyMatch(DevolucionCambioLinea::esPrecioEspecial);
+    }
+
+    /**
+     * Lo que cuesta hoy el producto del cambio en la tienda de la venta (precio de lista menos el descuento automático vigente), igual
+     * que lo calcularía una venta normal. null si no se puede saber (no se bloquea: la venta del cambio falla si el producto no existe).
+     */
+    private BigDecimal precioDeLista(ProductoMaster m, String codpro, String imei, Integer codti) {
+        BigDecimal lista;
+        if (m.getTipo() == TipoProducto.CELULAR || m.getTipo() == TipoProducto.TABLET) {
+            ProductoImei unidad = imei == null ? null : productoImeiRepository.findByImei(imei.toUpperCase()).orElse(null);
+            lista = unidad != null ? unidad.getPrecioVenta() : null;
+        } else {
+            Producto p = codpro != null
+                    ? productoRepository.findByCodproAndTienda_Codti(codpro, codti).orElse(null)
+                    : productoRepository.findByProductoMaster_IdprodmasterAndTienda_CodtiAndActivoTrue(m.getIdprodmaster(), codti).stream().findFirst().orElse(null);
+            lista = p != null ? p.getPreciopub() : null;
+        }
+        if (lista == null || lista.signum() <= 0) return null;
+        BigDecimal descuento = descuentoService.calcularDescuento(m, codti, lista, LocalDateTime.now());
+        return (descuento == null ? lista : lista.subtract(descuento)).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     /** La venta nueva de un cambio: lo devuelto cuenta como crédito y, si hace falta, se paga la diferencia. */
@@ -455,7 +488,8 @@ public class DevolucionService {
         List<DevolucionResponseDto.CambioLineaDto> cambio = cambioRepository.findByDevolucion_IddevolucionOrderByIdlinea(d.getIddevolucion()).stream()
                 .map(x -> DevolucionResponseDto.CambioLineaDto.builder()
                         .codpro(x.getCodpro()).nombreProducto(x.getNombreProducto()).imei(x.getImei()).cantidad(x.getCantidad())
-                        .precioUnitario(x.getPrecioUnitario()).subtotal(x.getPrecioUnitario().multiply(BigDecimal.valueOf(x.getCantidad()))).build())
+                        .precioUnitario(x.getPrecioUnitario()).subtotal(x.getPrecioUnitario().multiply(BigDecimal.valueOf(x.getCantidad())))
+                        .precioLista(x.getPrecioLista()).precioEspecial(x.esPrecioEspecial()).build())
                 .collect(Collectors.toList());
         BigDecimal totalCambio = cambio.isEmpty() ? null : cambio.stream().map(DevolucionResponseDto.CambioLineaDto::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
         return DevolucionResponseDto.builder()
@@ -468,6 +502,7 @@ public class DevolucionService {
                 .metodoReembolso(d.getMetodoReembolso()).descripcionMetodoReembolso(descripcionMetodo(d.getMetodoReembolso()))
                 .totalCambio(totalCambio).diferencia(totalCambio != null ? totalCambio.subtract(d.getTotalDevuelto()) : null)
                 .metodoDiferencia(d.getMetodoDiferencia())
+                .requiereAdministrador(cambio.stream().anyMatch(c -> Boolean.TRUE.equals(c.getPrecioEspecial())))
                 .idventaCambio(d.getVentaCambio() != null ? d.getVentaCambio().getIdventa() : null)
                 .nombreSolicita(d.getUsuarioSolicita().getNombreCompleto())
                 .nombreResuelve(d.getUsuarioResuelve() != null ? d.getUsuarioResuelve().getNombreCompleto() : null)

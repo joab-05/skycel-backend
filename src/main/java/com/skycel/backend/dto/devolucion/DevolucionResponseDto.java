@@ -30,6 +30,8 @@ public class DevolucionResponseDto {
     private BigDecimal totalCambio;
     private BigDecimal diferencia;
     private Byte    metodoDiferencia;
+    /** Cambio con algún producto entregado a menos de su precio: lo aprueba un administrador. */
+    private Boolean requiereAdministrador;
     private Integer idventaCambio;
     private String  nombreSolicita;
     private String  nombreResuelve;
@@ -61,5 +63,9 @@ public class DevolucionResponseDto {
         private Short      cantidad;
         private BigDecimal precioUnitario;
         private BigDecimal subtotal;
+        /** Lo que cuesta hoy en el sistema; null si no se conoce. */
+        private BigDecimal precioLista;
+        /** true: se entrega por menos que su precio (solo un administrador lo aprueba). */
+        private Boolean    precioEspecial;
     }
 }
