@@ -131,6 +131,7 @@ La ventana de cierre te guía con **tres cuadros numerados** y un resumen:
 4. Mientras escribes, el cuadro de abajo te dice **cuánto se retira del cajón** y **cuánto se queda**. Si el fondo es mayor a lo que contaste, avisa en rojo y el botón **Cerrar caja y generar corte** no se activa. Antes de cerrar te pregunta una última vez con las cifras.
 5. Se abre el **corte**: ahí ves el efectivo esperado, lo contado y si **cuadra**, hay **faltante** o hay **sobrante**.
 
+
 ### Cortes anteriores
 **Cortes** guarda el historial. Abre cualquiera para ver su detalle (ventas por forma de pago, movimientos, quién abrió y quién cerró) e **imprimirlo**. Si después de cerrar llegan ventas hechas sin conexión con fecha de ese turno, el corte avisa que fue **modificado después del cierre**.
 

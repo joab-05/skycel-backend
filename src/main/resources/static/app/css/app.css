@@ -928,7 +928,12 @@ h1 .ic { color: var(--oscuro); opacity: 0.75; }
 .ayuda-tema p, .ayuda-tema li, #ay-impresion p, #ay-impresion li { font-size: 14.5px; }
 .ayuda-tema li, #ay-impresion li { margin: 4px 0; }
 .ayuda-tema code, #ay-impresion code { background: var(--gris-claro); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
-.ayuda-tema blockquote, #ay-impresion blockquote { margin: 14px 0; padding: 10px 14px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px; color: #78350f; font-size: 14px; }
+.ayuda-tema blockquote, #ay-impresion blockquote { margin: 14px 0; padding: 10px 14px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px; color: #78350f; font-size: 14px; }
+/* Pasos numerados en tarjetas, como en un tutorial */
+.ayuda-tema ol, #ay-impresion ol { list-style: none; counter-reset: paso; padding: 0; margin: 10px 0; }
+.ayuda-tema ol > li, #ay-impresion ol > li { counter-increment: paso; position: relative; background: #f8fafc; border: 1px solid var(--borde); border-radius: 12px; padding: 10px 14px 10px 52px; margin: 8px 0; }
+.ayuda-tema ol > li::before, #ay-impresion ol > li::before { content: counter(paso); position: absolute; left: 13px; top: 10px; width: 26px; height: 26px; border-radius: 50%; background: var(--oscuro); color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.ayuda-tema h3, #ay-impresion h3 { border-left: 4px solid var(--oscuro); padding-left: 10px; color: inherit; }
 .man-tabla { overflow-x: auto; margin: 12px 0; }
 .man-tabla table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 .man-tabla th, .man-tabla td { border: 1px solid var(--borde); padding: 7px 10px; text-align: left; vertical-align: top; }

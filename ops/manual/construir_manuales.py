@@ -1,3 +1,4 @@
+import re
 # Genera los dos manuales (JSystem y web) a partir de capítulos comunes y variantes.
 # Reglas del lector: nada de viñetas con sangría; cada paso en una sola línea; los títulos «## » no se renombran (F1 los usa).
 import io
@@ -48,6 +49,18 @@ PRIMEROS_JS = PRIMEROS_COMUN.format(
 - En el menú de la izquierda los grupos (**Ventas, Inventario, Finanzas…**) se **abren y se cierran** con un clic en su nombre y se recuerda cuáles dejaste abiertos; el grupo de la pantalla en la que estás siempre está abierto. Ctrl + 1 … 9 siguen abriendo las primeras secciones aunque su grupo esté cerrado. Para cambiar tu contraseña: pulsa la llave, escribe la actual y la nueva dos veces (mínimo 8 caracteres).
 - Cuando hay una **actualización** de JSystem lista, sale un recuadro en la esquina: haz clic para instalarla en ese momento (se cierra y se vuelve a abrir solo) o déjala: se instala al cerrar el programa.
 - Si arriba no aparece ningún aviso de color, todo va bien. Si aparece uno, se perdió la conexión o hay ventas esperando enviarse.
+
+@@IMG inicio.png | La pantalla de inicio de JSystem. Haz clic en la imagen para verla más grande.@@
+@@L - **①** **El menú de la izquierda.** Los grupos (Ventas, Inventario, Finanzas…) se abren y se cierran con un clic.
+@@L - **②** **Accesos rápidos** a las pantallas que más usas.
+@@L - **③** **Los números del día:** ventas, tickets, existencias bajas, traspasos, cuentas por pagar y órdenes en el taller. Haz clic en uno para abrir su pantalla.
+@@L - **④** **Ventas de los últimos 7 días.** Hoy es la barra azul fuerte.
+@@L - **⑤** **Saldo de caja** de la tienda, con lo que entró y salió.
+@@L - **⑥** **Ayuda, avisos, configuración, tema, contraseña y salir.**
+
+> **Consejo:** si trabajas de noche o con poca luz, pulsa la **luna** (⑥) y todo el programa pasa al **tema oscuro**; con el **sol** vuelves al claro.
+
+@@IMG pos-oscuro.png | El mismo punto de venta con el tema oscuro. El botón del sol cambia de vuelta al tema claro.@@
 """)
 
 PRIMEROS_WEB = PRIMEROS_COMUN.format(
@@ -110,6 +123,21 @@ La caja de tu tienda debe estar **abierta**. Si está cerrada, el sistema te pid
 3. Cuando el carrito esté listo pulsa **Cobrar** (o **F9**): se abre la **ventana de cobro** con el total a cobrar.
 4. Elige la **forma de pago**: Efectivo, Transferencia o Mixto (el cliente paga una parte de cada forma: escribe cuánto va en cada una y solo deja cobrar cuando cuadra con el total). La tarjeta aparece solo si el administrador la habilita.
 5. En efectivo el cursor ya está en **Monto recibido**: escribe lo que recibes (o pulsa **Exacto** si paga justo). El sistema muestra el **cambio**: en verde si alcanza, en rojo si falta dinero. Pulsa **Enter** (o **Confirmar cobro**) y entrega el ticket. Si das doble clic por error, el sistema cobra **una sola vez**.
+
+@@IMG pos.png | El punto de venta: el catálogo a la izquierda; el carrito, el cliente y el botón de cobrar a la derecha.@@
+@@L - **①** **Buscador** (tecla **F2**): escribe parte del nombre o el código, o pasa el lector.
+@@L - **②** **El producto.** Un clic o **Enter** lo agrega al carrito; a la derecha ves cuántos hay.
+@@L - **③** **El carrito:** **−** y **+** cambian la cantidad, la etiqueta pide un descuento y el bote quita el renglón.
+@@L - **④** **Cobrar** (tecla **F9**) abre la ventana de cobro; muestra el total.
+
+@@IMG pos-cobro.png | La ventana de cobro: el cursor ya está en «Monto recibido».@@
+@@L - **①** **Método de pago:** Efectivo, Transferencia o Mixto.
+@@L - **②** **Monto recibido:** escribe lo que te dan; el cursor ya está aquí.
+@@L - **③** **Exacto:** cuando el cliente paga justo.
+@@L - **④** **Cambio:** verde si alcanza, rojo si falta.
+@@L - **⑤** **Confirmar cobro** (o **Enter**): registra la venta y saca el ticket.
+
+> **Consejo:** para cobrar sin tocar el ratón: **F2** busca, **Enter** agrega, **F9** cobra, escribes el monto y **Enter** confirma.
 
 Los precios ya **incluyen IVA**. Los descuentos que define el administrador se aplican solos.
 
@@ -228,6 +256,11 @@ La ventana de cierre te guía con **tres cuadros numerados** y un resumen:
 4. Mientras escribes, el cuadro de abajo te dice **cuánto se retira del cajón** y **cuánto se queda**. Si el fondo es mayor a lo que contaste, avisa en rojo y el botón **Cerrar caja y generar corte** no se activa. Antes de cerrar te pregunta una última vez con las cifras.
 5. Se abre el **corte**: ahí ves el efectivo esperado, lo contado y si **cuadra**, hay **faltante** o hay **sobrante**.
 
+@@IMG corte.png | El corte de caja de un turno ya cerrado.@@
+@@L - **①** **Esperado, contado y diferencia:** si la diferencia es **cero**, el corte cuadró; en rojo hay **faltante** y en ámbar, **sobrante**.
+@@L - **②** **Ver ventas y movimientos:** cada venta y cada movimiento de efectivo del turno.
+@@L - **③** **Corregir cierre** (solo administrador): cambia lo contado o lo que se dejó para mañana, y queda registrado quién y por qué.
+
 ### Cortes anteriores
 **Cortes** guarda el historial. Abre cualquiera para ver su detalle (ventas por forma de pago, movimientos, quién abrió y quién cerró) e **imprimirlo**.{resumen}
 
@@ -295,10 +328,21 @@ Muestra los productos de **tu tienda**: existencia, precio y el mínimo que conv
 ### Qué muestra
 Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Por omisión la lista **no muestra los artículos agotados** (el filtro de existencias dice **Con stock**): para verlos elige **Sin Stock** (solo los agotados) o **Todos** (todo). Los **servicios** no tienen existencia: muestran **∞** y no entran en «Sin stock» ni «Stock bajo». Al pie de la tabla ves el conteo de lo que se muestra. **Valorización** da el valor del inventario a costo y a precio de venta, y **Exportar** lo saca a Excel.
 
+@@IMG inventario.png | El inventario de la tienda de esta computadora.@@
+@@L - **①** **Buscador** por nombre o código.
+@@L - **②** **Filtros** de categoría y de existencias. Por omisión la lista dice **Con stock** y no muestra lo agotado; elige **Sin Stock** o **Todos** para verlo.
+@@L - **③** **Nuevo producto** (administrador).
+@@L - **④** **Acciones de cada renglón:** copiar el código, imprimir etiquetas, editar, **+** entrada, **−** salida e historial de cambios.
+@@L - **⑤** **La existencia:** verde es normal, amarillo está baja y rojo se agotó.
+
 ### Inventario general: dónde hay cada artículo
 Son **dos vistas separadas** en el menú: **Inventario** (la tienda de esta computadora: ver, editar, entradas y salidas) e **Inventario general** (todas las tiendas y la bodega). En el general escribe el nombre, el código o el IMEI y la tabla muestra en qué sucursales hay y cuánto. Con **Solicitar traspaso** (en las demás tiendas) eliges la cantidad y la solicitud le llega a esa tienda. Necesita conexión.
 
 Un **administrador** también puede corregir las existencias de un accesorio en cualquiera de esas tiendas (la propia incluida), sin tenerla configurada en su equipo: en la fila de la tienda están los botones **+** (entrada) y **−** (salida); se pide el motivo, como siempre, y al terminar la búsqueda se repite para ver la existencia nueva. Los equipos (celulares y tablets) se siguen manejando por IMEI en **Equipos**.
+@@IMG general.png | El inventario general: dónde hay un artículo en todas las tiendas y la bodega.@@
+@@L - **①** **Buscador:** escribe al menos dos letras del nombre, el código o el IMEI.
+@@L - **②** **Solicitar traspaso** a la tienda que tiene el artículo (no sale en tu propia tienda).
+@@L - **③** **+** y **−** (administrador): corrige la existencia de un accesorio en esa tienda; pide el motivo.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
@@ -747,6 +791,13 @@ Abre las ventas **por ticket** (cada venta, para reimprimir o revisar) o **por a
 ### Reportes de Gerencia
 Para administradores (todas las sucursales o la que elijan). Arriba eliges el **periodo** (Hoy, 7 días, Este mes, Mes pasado o un rango de fechas) y la **sucursal**; cada pestaña responde con eso. **Historial de ventas** abre el detalle de cada ticket.
 
+@@IMG reportes.png | El resumen de Gerencia, con sus gráficas.@@
+@@L - **①** **El periodo:** elige las fechas o pulsa **Hoy**, **7 días**, **Este mes** o **Mes pasado**.
+@@L - **②** **La sucursal:** una o todas.
+@@L - **③** **Las pestañas:** cada una responde una pregunta distinta (resumen, resultados, ventas por día…).
+@@L - **④** **Los números principales** del periodo.
+@@L - **⑤** **Las gráficas:** pasa el cursor sobre una barra o una rebanada para ver la cifra completa.
+
 | Pestaña | Para qué sirve |
 |---|---|
 | Resumen | Ventas, utilidad y margen; comparativo por sucursal, lo que más se vende y el valor del inventario, con gráficas |
@@ -823,6 +874,10 @@ Los datos de **esta computadora** (servidor, sucursal, impresoras) y del negocio
 - **Etiquetas:** la impresora y el tamaño de las etiquetas con código de barras (ver abajo).
 - **Negocio** (administrador): logo, datos del negocio, pie del ticket, plazo de **devoluciones** y **formas de pago** (por ejemplo, habilitar la tarjeta).
 - **Sucursales:** nombre, domicilio y teléfono que salen en el ticket de cada sucursal, el **encargado actual** (se elige entre los empleados con rol «Encargado de tienda»; quien deja de serlo ya no tiene tienda) y si es el **taller** de los técnicos (solo uno). Solo un administrador los cambia.
+
+@@IMG sucursales.png | Los datos de una sucursal: aquí se elige a su encargado y si es el taller.@@
+@@L - **①** **Encargado actual:** se elige entre los empleados con rol «Encargado de tienda». Quien deja de serlo ya no tiene tienda.
+@@L - **②** **Es el taller:** marca la sucursal donde trabajan los técnicos (solo una).
 - **Sistema:** versión del programa y datos para soporte. El administrador ve además **Computadoras con JSystem**: cada computadora con su última sesión, su **versión** y si está **al día**, con la actualización **descargada** (falta cerrar el programa), **desactualizada**, con **error** o **sin reportar** (más de un día). Cada computadora reporta sola cada pocos minutos con la sesión abierta; si alguna aparece mal, ábrela y pulsa **Buscar actualizaciones**. Aquí también está **Actualizaciones**: el programa se actualiza solo (revisa al abrirse y cada 4 horas, baja la versión nueva y la instala **al cerrar** el programa). Si quieres instalarla de inmediato, pulsa **Buscar actualizaciones** y luego **Cerrar e instalar la actualización**; el programa se vuelve a abrir solo.
 
 ### Respaldo y limpieza automáticos (los hace el servidor)
@@ -984,17 +1039,30 @@ La barra de conexión de arriba lo indica. Si dice que hay pendientes, se envía
 """)
 
 
-def armar(*partes):
-    texto = "\n".join(p.strip("\n") + "\n" for p in partes)
-    return texto.replace("\r\n", "\n")
+def armar(*partes, web=False):
+    """Une las secciones. Las imágenes (@@IMG archivo | pie@@) y sus leyendas (@@L ...) solo van en el manual de JSystem."""
+    texto = "\n".join(p.strip("\n") + "\n" for p in partes).replace("\r\n", "\n")
+    salida = []
+    for linea in texto.split("\n"):
+        if linea.startswith("@@L "):
+            if not web:
+                salida.append(linea[4:])
+            continue
+        m = re.match(r"^@@IMG (.+?) \| (.*)@@$", linea)
+        if m:
+            if not web:
+                salida.append("![%s](img/%s)" % (m.group(2).strip(), m.group(1).strip()))
+            continue
+        salida.append(linea)
+    return "\n".join(salida)
 
 
 JS = armar(INTRO, PRIMEROS_JS, ROLES, POS_JS, CAJA_JS, DEVOLUCIONES, INVENTARIO_JS, EQUIPOS_JS, INVFIS_JS, MERMAS, TRASPASOS_JS,
            CLIENTES, GARANTIAS_JS, ORDENES_JS, SERV_JS, COMPRAS_JS, DESCUENTOS_JS, REPORTES_JS, FINANZAS_TALLER_JS, EMPLEADOS_JS, CONFIG_JS, AVISOS_JS,
            OFFLINE_JS, ATAJOS_JS, RUTINA, FAQ_JS)
-WEB = armar(INTRO, PRIMEROS_WEB, ROLES, POS_WEB, CAJA_WEB, DEVOLUCIONES, INVENTARIO_WEB, EQUIPOS_WEB, INVFIS_WEB, MERMAS, TRASPASOS_WEB,
+WEB = armar(web=True, *(INTRO, PRIMEROS_WEB, ROLES, POS_WEB, CAJA_WEB, DEVOLUCIONES, INVENTARIO_WEB, EQUIPOS_WEB, INVFIS_WEB, MERMAS, TRASPASOS_WEB,
             CLIENTES, GARANTIAS_WEB, ORDENES_WEB, SERV_WEB, COMPRAS_WEB, DESCUENTOS_WEB, REPORTES_WEB, EMPLEADOS_WEB,
-            OFFLINE_WEB, ATAJOS_WEB, RUTINA, FAQ_WEB)
+            OFFLINE_WEB, ATAJOS_WEB, RUTINA, FAQ_WEB))
 
 for ruta, texto in ((RUTA_JS, JS), (RUTA_WEB, WEB)):
     with io.open(ruta, "w", encoding="utf-8", newline="\n") as f:
