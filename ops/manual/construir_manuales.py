@@ -500,6 +500,13 @@ Mueven mercancía entre sucursales (y la bodega). Los manejan encargados y admin
 
 Cada traspaso tiene **un solo folio**: cuando una solicitud se acepta y se genera su envío, los dos llevan el mismo número, así que se siguen como uno solo.
 
+@@IMG traspasos.png | La lista de traspasos de una tienda.@@
+@@L - **①** **Nueva solicitud:** pides mercancía a otra tienda.
+@@L - **②** **Nuevo envío:** mandas mercancía a otra tienda.
+@@L - **③** **Tienda:** el administrador elige de cuál tienda ver los traspasos.
+@@L - **④** **Pestañas:** los traspasos y los **faltantes por resolver**.
+@@L - **⑤** **La lista:** número, tipo, si te lo piden o sale de tu tienda, origen, destino, productos y estado.
+
 ### Enviar mercancía
 1. Entra a **Traspasos** y pulsa **Nuevo envío**.
 2. Elige la tienda destino y agrega los productos{buscar}. Escribe la cantidad o, en equipos, elige los **IMEI** que viajan. Si **escaneas** (o escribes completo) el IMEI de un equipo, se **agrega solo** a la lista: ya no hay que buscarlo entre los IMEI disponibles.
@@ -513,6 +520,11 @@ Con **Nueva solicitud** le pides a otra tienda que te surta algo. En equipos eli
 1. Abre el traspaso que llegó y pulsa **Recibir**.
 2. Compara lo que llegó con lo que dice el traspaso. Si todo llegó, pulsa **Confirmar recepción**.
 3. Si falta algo, captura lo que sí llegó: lo que faltó queda como **faltante**.
+
+@@IMG traspaso-detalle.png | El detalle de una solicitud pendiente.@@
+@@L - **①** **La ruta** (de qué tienda a cuál) y quién lo creó.
+@@L - **②** **Los productos** con su cantidad (los equipos, con su IMEI).
+@@L - **③** **Las acciones** según el estado: **Aceptar y enviar**, **Rechazar**, **Editar solicitud** o **Anular**.
 
 ### Faltantes
 **Faltantes por resolver** lista lo que no llegó. Cada faltante se resuelve de una de estas formas:
@@ -536,6 +548,13 @@ Guarda el nombre, el teléfono y el correo de quien compra, y su **historial de 
 - **Nuevo cliente** y **editar**: encargados y administradores. Los vendedores solo consultan.
 - Un cliente se **desactiva** (no se borra) para conservar su historial; solo lo hace un administrador.
 - Al vender, escribir el teléfono de un cliente existente trae su registro.
+
+@@IMG clientes.png | La lista de clientes.@@
+@@L - **①** **Nuevo cliente:** lo da de alta con su teléfono (10 dígitos).
+@@L - **②** **Buscador** por nombre, teléfono o correo.
+@@L - **③** **Tipo:** regular, frecuente, VIP… según sus compras.
+@@L - **④** **Acciones:** ver el detalle, editar y desactivar.
+@@L - **⑤** **Exportar** la lista a Excel.
 
 ## Cuentas por Cobrar
 
@@ -564,6 +583,13 @@ Registra los reclamos de garantía de productos vendidos y su viaje hasta el pro
 
 > Si el producto se vendió con el **sistema anterior**, {anterior} captura la fecha de compra, el nombre del producto y los días de garantía (que aún deben estar vigentes) y, si los tienes, el IMEI, el folio y el proveedor.
 
+@@IMG garantias.png | La lista de garantías.@@
+@@L - **①** **Nueva garantía:** registra el reclamo de un cliente.
+@@L - **②** **Filtros:** sucursal, búsqueda por folio, producto, IMEI, cliente o teléfono, y estado.
+@@L - **③** **La lista:** folio, producto, cliente, falla, fecha límite y días que quedan.
+@@L - **④** **Estado:** recibida, en proveedor, resuelta…
+@@L - **⑤** **Los totales:** abiertas, vencidas, con el proveedor y listas para entregar.
+
 ### El recorrido
 | Paso | Quién lo registra |
 |---|---|
@@ -576,6 +602,12 @@ Registra los reclamos de garantía de productos vendidos y su viaje hasta el pro
 | Listo para entrega → Entregado | La sucursal |
 
 Una garantía **rechazada** puede volver al cliente directamente (Listo para entrega) o con un viaje de retorno. El plazo para resolver una garantía es de **30 días hábiles** (lunes a viernes); la que se pasa aparece como vencida.
+@@IMG garantia-detalle.png | El detalle de una garantía y su seguimiento.@@
+@@L - **①** **El folio y el estado** actual.
+@@L - **②** **Los datos:** la venta original, el producto con su IMEI, el cliente, quién la recibió, la falla, el proveedor y la fecha límite.
+@@L - **③** **Seguimiento:** cada paso queda con su fecha y quién lo hizo.
+@@L - **④** **El botón del siguiente paso** (por ejemplo, «Recibido en bodega»).
+
 """
 GARANTIAS_JS = GARANTIAS_COMUN.format(
     pasos="""1. Entra a **Garantías** y pulsa **Nueva garantía**.
@@ -748,6 +780,18 @@ COMPRAS_JS = COMPRAS.format(
     donde="Está en **Finanzas › Compras**.",
     pago="Un pago en **efectivo** sale de la caja que elijas (por omisión, la principal de la sucursal); con tarjeta o transferencia no toca la caja.",
     catalogos="""
+@@IMG compras.png | Las compras y lo que se debe a proveedores.@@
+@@L - **①** **Registrar compra:** da de alta una compra a un proveedor.
+@@L - **②** **Solo con saldo:** muestra únicamente las que todavía se deben.
+@@L - **③** **La lista:** proveedor, sucursal, folio, fecha de vencimiento, días, total y saldo.
+@@L - **④** **Estado:** en rojo **Vencida**, en ámbar **Por pagar**.
+@@L - **⑤** **El ojo** abre el detalle para registrar un pago.
+
+@@IMG compra-detalle.png | El detalle de una compra: se registran los pagos aquí.@@
+@@L - **①** **Resumen:** monto total, pagado y saldo, con la fecha de vencimiento.
+@@L - **②** **Registrar pago:** monto, método y, si es en efectivo, de qué caja sale.
+@@L - **③** **Historial de pagos** de esa compra.
+
 ### Catálogos
 En **Inventario › Catálogos** el administrador mantiene los **colores** (renombrar uno lo cambia en todos los artículos que lo llevan), las **secciones** de cada sucursal y las **descripciones** de cada categoría. No se puede eliminar lo que algún artículo usa.
 
@@ -898,11 +942,36 @@ Aquí se da de alta a quien va a usar el sistema: su **rol** y su contraseña (t
 4. **Pagar**: elige de qué caja sale el dinero y confirma.
 5. Cuando todos estén pagados, **Cerrar período**. **Períodos anteriores** guarda el historial.
 
+@@IMG nomina.png | La nómina del período abierto.@@
+@@L - **①** **Traer faltantes de caja:** agrega como deducción el faltante de cada corte cerrado en el período.
+@@L - **②** **Períodos anteriores:** el historial de períodos ya cerrados.
+@@L - **③** **Cerrar período:** se activa cuando ya se pagó a todos.
+@@L - **④** **Cada empleado** con lo que gana, lo que se le descuenta y su neto. Con doble clic se abre su línea.
+@@L - **⑤** **El ojo** abre la línea del empleado para ver o cambiar sus conceptos.
+
+@@IMG nomina-linea.png | La línea de un empleado: lo que gana, lo que se le descuenta y lo que se le paga.@@
+@@L - **①** **Percepciones:** el sueldo y lo que se le suma.
+@@L - **②** **Deducciones:** descuentos, como un faltante de caja o un préstamo.
+@@L - **③** **Neto a pagar:** abajo está el botón para **pagarle** desde una caja.
+
 ### Comisiones
 Elige el **mes**. **Encargados** muestra su comisión (un porcentaje de lo que vendió su sucursal, sin PayJoy) y **PayJoy** la de cada equipo, para quien lo vendió. **Marcar pagada** la congela. **Tasas** cambia los porcentajes.
 
+@@IMG comisiones.png | Las comisiones del mes.@@
+@@L - **①** **Mes y año** que se consultan.
+@@L - **②** **Tasas:** cambia el porcentaje de la comisión de los encargados y los de PayJoy.
+@@L - **③** **Encargados (mensual):** su comisión sobre la venta de su sucursal en el mes.
+@@L - **④** **Marcar pagada:** cuando ya se pagó, la comisión deja de recalcularse.
+@@L - **⑤** **PayJoy (por equipo):** la comisión por los equipos a crédito vendidos.
+
 ### Descansos y préstamos
 Cada empleado acumula días de descanso con un **máximo**; la lista avisa a quien lo excede. Por empleado puedes **registrar un descanso**, ver su historial y (administrador) **fijar su saldo inicial** o hacer un **ajuste**. Ahí mismo se otorga un **préstamo**: sale del efectivo de una caja, solo puede haber uno activo por empleado y se descuenta en la nómina.
+@@IMG descansos.png | Los descansos del personal y su saldo.@@
+@@L - **①** **Sucursal y fechas** de los descansos que quieres ver; pulsa **Buscar**.
+@@L - **②** **Saldo por empleado:** lo acumulado contra el máximo; un saldo negativo es que tomó de más.
+@@L - **③** **Acciones:** **+** registra un descanso, el lápiz abre su saldo (ajustes y saldo inicial) y el billete registra un préstamo.
+@@L - **④** **Descansos tomados** en el rango de fechas.
+
 """
 EMPLEADOS_WEB = """## Empleados, nómina y comisiones
 

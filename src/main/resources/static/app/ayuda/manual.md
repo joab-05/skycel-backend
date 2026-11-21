@@ -269,6 +269,7 @@ Mueven mercancía entre sucursales (y la bodega). Los manejan encargados y admin
 
 Cada traspaso tiene **un solo folio**: cuando una solicitud se acepta y se genera su envío, los dos llevan el mismo número, así que se siguen como uno solo.
 
+
 ### Enviar mercancía
 1. Entra a **Traspasos** y pulsa **Nuevo envío**.
 2. Elige la tienda destino y agrega los productos. Escribe la cantidad o, en equipos, elige los **IMEI** que viajan. Si **escaneas** (o escribes completo) el IMEI de un equipo, se **agrega solo** a la lista: ya no hay que buscarlo entre los IMEI disponibles.
@@ -283,6 +284,7 @@ Con **Nueva solicitud** le pides a otra tienda que te surta algo. En equipos eli
 2. Compara lo que llegó con lo que dice el traspaso. Si todo llegó, pulsa **Confirmar recepción**.
 3. Si falta algo, captura lo que sí llegó: lo que faltó queda como **faltante**.
 
+
 ### Faltantes
 **Faltantes por resolver** lista lo que no llegó. Cada faltante se resuelve de una de estas formas:
 - **Recibido tarde**: apareció y se da de alta en la tienda.
@@ -296,6 +298,7 @@ Guarda el nombre, el teléfono y el correo de quien compra, y su **historial de 
 - **Nuevo cliente** y **editar**: encargados y administradores. Los vendedores solo consultan.
 - Un cliente se **desactiva** (no se borra) para conservar su historial; solo lo hace un administrador.
 - Al vender, escribir el teléfono de un cliente existente trae su registro.
+
 
 ## Cuentas por Cobrar
 
@@ -323,6 +326,7 @@ Registra los reclamos de garantía de productos vendidos y su viaje hasta el pro
 > Un **equipo o accesorio de las existencias** (aún sin vender) con una falla también va con el proveedor. Elige «De las existencias», luego si es un **equipo** (su IMEI) o un **accesorio** (su código). No hay venta ni cliente. Mientras está fuera **no cuenta en la existencia** (de un accesorio sale **una pieza**) y vuelve cuando la garantía se entrega. Si el proveedor cambia un equipo por otro, captura el IMEI del equipo nuevo; un accesorio regresa con el mismo código.
 
 > Si el producto se vendió con el **sistema anterior**, elige «Venta anterior» y captura la fecha de compra, el nombre del producto y los días de garantía (que aún deben estar vigentes) y, si los tienes, el IMEI, el folio y el proveedor.
+
 
 ### El recorrido
 | Paso | Quién lo registra |
