@@ -107,6 +107,13 @@ Cada persona tiene un rol, y el sistema solo le muestra lo que le corresponde.
 > Un **encargado** solo ve la información de su tienda, y de fábrica **no ve costos ni proveedores** (eso es solo del administrador); el **técnico encargado** sí ve el costo de las refacciones de las órdenes que trabaja.
 > Un **encargado** ve solo su tienda. Un **administrador** puede cambiar de sucursal o ver todas. Un **técnico** solo ve las órdenes del taller.
 > El usuario **root** (y quien root autorice) puede cambiar lo que puede hacer cada rol en **Permisos** (sección Administración). La tabla de arriba es lo que trae el sistema de fábrica.
+
+@@IMG permisos.png | Permisos: qué puede hacer cada rol (solo root y quien root autorice).@@
+@@L - **①** **Aviso:** los cambios se guardan al momento y el servidor los aplica de inmediato; root siempre puede todo.
+@@L - **②** **Los roles:** una columna por cada tipo de usuario.
+@@L - **③** **Los grupos** de acciones: ventas, inventario, finanzas, taller…
+@@L - **④** **Las casillas:** marca lo que puede hacer cada rol. El menú de quien ya tiene la sesión abierta se actualiza cuando vuelve a entrar.
+
 """
 
 # ───────────────────────────── Punto de Venta ─────────────────────────────
@@ -235,6 +242,15 @@ El cliente es **opcional**: sin marcar **Registrar cliente**, la venta queda de 
 CAJA = """## Caja
 
 La caja es tu **turno de trabajo**: se **abre** al empezar el día con un fondo, se vende, y se **cierra** al terminar contando el efectivo. Al cerrar queda guardado un **corte** con todo el detalle. Cualquier empleado de la tienda puede abrir o cerrar la caja; solo puede haber un turno abierto por caja.
+
+@@IMG caja.png | La pantalla de Caja con el turno abierto.@@
+@@L - **①** **Nuevo movimiento:** registra dinero que entra o sale del cajón fuera de una venta (encargado y administrador).
+@@L - **②** **Cerrar caja:** termina el turno y genera el corte.
+@@L - **③** **Tienda, caja y período:** el administrador elige la tienda y la caja; por omisión se ve el día de hoy.
+@@L - **④** **El turno:** quién abrió la caja y desde cuándo.
+@@L - **⑤** **Las cifras:** el efectivo que debe haber en el cajón, las entradas, las salidas y cuántos movimientos hay.
+@@L - **⑥** **Motivos, Nueva caja, Resumen y Cortes:** el catálogo de motivos de los movimientos, dar de alta otra caja, un resumen del período y los cortes de turnos anteriores.
+@@L - **⑦** **Los movimientos:** las entradas en verde y las salidas en rojo, con su motivo y quién las hizo. Se pueden buscar y exportar.
 
 ### Abrir la caja
 1. Entra a **Caja** y pulsa **Abrir caja** (el punto de venta también lo ofrece si está cerrada).
@@ -384,6 +400,12 @@ Las **secciones** son los lugares donde se acomoda la mercancía (vitrina, mostr
 
 ### Cambiar precios de varios artículos (Precios, administrador)
 En **Finanzas › Precios** el administrador ve **todos los artículos** (accesorios, servicios y equipos) con su precio actual, su costo y su existencia. Busca por nombre o categoría y filtra por tipo.
+@@IMG precios.png | La pantalla de Precios: elige artículos y usa los botones de arriba.@@
+@@L - **①** **Cambiar precio, Descuento o liquidación y Quitar descuento:** se activan al elegir uno o varios artículos.
+@@L - **②** **Búsqueda y filtro** por nombre, categoría o tipo.
+@@L - **③** **La lista:** precio de venta (un rango si varía entre sucursales), costo y existencias.
+@@L - **④** **Descuento vigente:** lo que se aplicará solo al cobrar.
+
 1. Elige uno o varios artículos (con **Ctrl** o **Shift**).
 2. **Cambiar precio**: escribe un precio nuevo para todos, o sube o baja un **porcentaje** o una **cantidad en pesos**; puedes **redondear** (al peso, a $5 o a $10). Antes de aplicar ves cómo queda cada artículo y el sistema avisa si alguno quedaría **por debajo de su costo**.
 3. El precio llega a **todas las sucursales y a la bodega** (las existencias y los equipos disponibles). Las ventas ya hechas no cambian.
@@ -456,6 +478,12 @@ INVFIS = """## Inventario físico
 
 Es el conteo de lo que hay en el local, para compararlo con lo que dice el sistema. Lo hacen **dos personas**: el **encargado cuenta** y el **administrador confirma**. Contar **no cambia las existencias**: solo cambian cuando el administrador cierra el inventario. Está en **{donde}**.
 
+@@IMG fisico-inicio.png | Inventario físico de una sucursal sin conteo en curso.@@
+@@L - **①** **Sucursal:** el administrador elige de cuál ver el inventario.
+@@L - **②** **Aperturar inventario:** empieza un conteo nuevo.
+@@L - **③** **Inventarios anteriores:** su folio, fechas, lo que cubrió, quién contó y quién confirmó, su estado y cuántos faltantes y sobrantes tuvo.
+@@L - **④** **Ver:** abre el resumen de ese inventario.
+
 ### Qué se va a inventariar
 Al aperturar, el sistema pregunta qué cubre el inventario:
 - **Toda la tienda** (recomendado para un conteo completo o una entrega de tienda): todo lo que hay en el sistema y no escaneas queda como faltante.
@@ -469,12 +497,30 @@ Al aperturar, el sistema pregunta qué cubre el inventario:
 
 > Mientras cuentas, el sistema **no te dice cuántas piezas debería haber**: las diferencias se ven hasta que lo envías a revisión. Cuenta por zonas y evita vender o mover mercancía de esa zona mientras tanto.
 
+@@IMG fisico-conteo.png | El conteo en curso: el encargado escanea y la lista crece.@@
+@@L - **①** **Qué cubre:** el número del inventario, la sucursal, las categorías que se contarán y quién lo inició.
+@@L - **②** **Campo de lectura:** escanea el código del producto o el IMEI del equipo (o escríbelo).
+@@L - **③** **Cantidad y Contar:** normalmente es 1 pieza por lectura; pulsa **Contar** si no usas lector.
+@@L - **④** **Lo contado hasta ahora:** código, artículo, sección y cantidad. Aquí no se ve lo que el sistema espera.
+@@L - **⑤** **Corregir:** el lápiz cambia la cantidad de un accesorio; el icono del celular muestra los equipos contados.
+@@L - **⑥** **Enviar a revisión:** cuando termines de contar.
+@@L - **⑦** **Cancelar inventario:** descarta el conteo sin cambiar nada.
+
 ### El administrador confirma
 1. Abre el inventario (arriba aparece qué sucursales tienen uno **por revisar**). El resumen muestra, por artículo, su **código**, lo que dice el sistema, lo contado, la diferencia y su valor a costo. En los equipos, **Ver equipos** lista los IMEI que no se encontraron.
 2. Para cada diferencia elige **Ajustar** (las existencias se corrigen al cerrar) o **Justificar** (no se ajusta; no pide motivo). **Ajustar** solo **marca** la decisión («Se ajustará»): las existencias no cambian hasta **Confirmar y cerrar inventario**, y puedes deshacerla. **Ajustar todo lo pendiente** decide las que falten. Lo que ya revisaste pasa **al final** de la tabla (más tenue) y puedes ocultarlo con **Ocultar las ya revisadas**, así arriba siempre queda lo que falta por decidir. Un equipo que **sobra** no se da de alta solo: se justifica o se registra en **Equipos**.
 3. Si el encargado se equivocó en pocas piezas, pulsa **Corregir lo contado** (en un equipo, **Ver y corregir equipos** y marca **Sí estaba** o **No estaba**). Escribe la cantidad que hay **en físico ahora**; no pide motivo, pero queda registrado quién lo corrigió y cuánto había contado el encargado. Esa cantidad se compara con lo que el sistema tiene **hoy**, así que lo que se vendió desde que se contó no sale como faltante. Si lo que hay en físico es la misma cantidad que contaron, escríbela igual: se confirma y también se compara con lo de hoy. Si el sistema cambió desde que se escaneó (se vendió algo), la columna **Sistema** muestra los dos datos, por ejemplo «5 (hoy 3)»; si ya habías corregido la cantidad antes de esas ventas, pulsa **Poner al día** (las flechas circulares) para compararla con las existencias de hoy.
 4. Si hay muchos errores, **Devolver para recontar**: el conteo regresa al encargado y las decisiones se borran.
 5. Pulsa **Confirmar y cerrar inventario**. Se aplican los ajustes (a un accesorio se le suma o resta la diferencia; los equipos no encontrados se dan de baja) y queda en el **historial**.
+
+@@IMG fisico-revision.png | El resumen en revisión: el administrador decide qué se ajusta.@@
+@@L - **①** **Por revisar:** las sucursales que ya enviaron su conteo.
+@@L - **②** **Las cifras:** artículos contados, faltantes y sobrantes con su valor a costo, y cuántas diferencias faltan por decidir.
+@@L - **③** **Filtros:** ver solo las diferencias y ocultar las que ya revisaste.
+@@L - **④** **La tabla:** lo que dice el sistema, lo contado, la diferencia, su valor y la decisión tomada.
+@@L - **⑤** **Decidir:** ⇄ corrige la cantidad contada, ✓ marca para **ajustar** y el lápiz **justifica** (no se ajusta); la flecha de regreso deshace la decisión.
+@@L - **⑥** **Confirmar y cerrar inventario:** aplica los ajustes marcados.
+@@L - **⑦** **Ajustar todo lo pendiente**, **Devolver para recontar** y **Cancelar inventario.**
 
 El resumen se puede **imprimir** (con renglones de firma) y **exportar** a Excel. Un inventario sin terminar se puede **cancelar**: no cambia nada.
 """
@@ -491,6 +537,20 @@ Junta en un solo lugar todo lo que **cambió las existencias fuera de una venta,
 - **Vistas:** **Por motivo**, **Por persona**, **Por tienda** y **Detalle**. Arriba aparecen la **pérdida a costo**, los **ajustes al alza** y la **principal causa**.
 - **Todo cambio manual lleva su motivo:** al sacar, ajustar o dar de baja existencias hay que elegir un motivo. Sin motivo el sistema no lo registra.
 - **Aviso al administrador:** cuando un encargado saca o ajusta existencias, o da de baja un equipo, a los administradores les llega un aviso con quién, qué, cuánto y por qué.
+@@IMG mermas.png | El control de mermas del último mes, por motivo.@@
+@@L - **①** **Tienda y período** que se consultan.
+@@L - **②** **Las cifras:** la pérdida a costo, los ajustes al alza, los movimientos y la principal causa.
+@@L - **③** **Vistas:** por motivo, por persona, por tienda (administrador) y el detalle.
+@@L - **④** **La tabla** de la vista elegida: movimientos, piezas y valor a costo.
+@@L - **⑤** **Exportar a Excel** lo que ves.
+@@L - **⑥** **Qué cuenta y qué no:** las ventas, devoluciones y traspasos no aparecen aquí.
+
+@@IMG mermas-detalle.png | El detalle: cada movimiento con quién, qué y por qué.@@
+@@L - **①** **Detalle:** cada movimiento, uno por renglón.
+@@L - **②** **La lista:** fecha y hora, tienda, quién lo hizo y de qué artículo (con su código o IMEI).
+@@L - **③** **Cantidad y valor:** en verde lo que entró y en rojo lo que salió, con su valor a costo.
+@@L - **④** **Motivo y nota** que escribió quien lo registró.
+
 """
 
 # ───────────────────────────── Traspasos ─────────────────────────────
@@ -560,6 +620,13 @@ Guarda el nombre, el teléfono y el correo de quien compra, y su **historial de 
 
 Control de lo que los clientes le deben a la tienda y de sus pagos.
 
+@@IMG cxc.png | La lista de cuentas por cobrar.@@
+@@L - **①** **Nueva cuenta:** registra lo que un cliente debe.
+@@L - **②** **Las cifras:** lo que está pendiente, lo vencido y cuántas cuentas siguen abiertas.
+@@L - **③** **Buscador y filtro** por cliente, factura o estado.
+@@L - **④** **Estado:** en rojo **Vencida**, en ámbar **Por cobrar**. Los días van en rojo cuando ya se pasó la fecha.
+@@L - **⑤** **Acciones:** el billete registra un pago, el ojo muestra el detalle y el reloj, el historial de pagos.
+
 ### Registrar una cuenta
 Pulsa **Nueva cuenta** y captura el cliente, el monto y el **número de factura** (hasta 20 caracteres).
 
@@ -567,6 +634,12 @@ Pulsa **Nueva cuenta** y captura el cliente, el monto y el **número de factura*
 1. Abre la cuenta con el icono del ojo y pulsa **abonar**.
 2. Escribe el monto y la forma de pago, y pulsa **Confirmar pago**.
 3. El abono queda en el historial de la cuenta (icono del reloj). Si es en efectivo, entra a la caja del turno.
+
+@@IMG cxc-pago.png | La ventana para registrar un pago.@@
+@@L - **①** **Saldo pendiente** de la cuenta.
+@@L - **②** **Monto** que el cliente abona ahora.
+@@L - **③** **Método de pago:** efectivo, transferencia (y tarjeta si el negocio la acepta).
+@@L - **④** **Confirmar pago:** lo guarda en el historial.
 
 Un abono hecho **sin conexión** se guarda en la computadora y se envía solo después.
 """
@@ -688,6 +761,15 @@ Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las 
 4. **Pedir autorización** al cliente cuando el costo esté listo (ver arriba).
 5. **Marcar lista** avisa a la sucursal que el equipo ya está listo en el taller y debe regresar. El botón **no se puede pulsar mientras la orden no tenga servicios ni refacciones**: agrega al menos un renglón. Si hace falta corregir algo, **Reabrir** (el equipo vuelve a quedar en reparación).
 
+@@IMG orden-detalle.png | El detalle de una orden en reparación (con doble clic en la lista).@@
+@@L - **①** **El folio, el equipo y su estado,** el cliente y el camino del equipo: quién recibe, quién repara y quién cobra.
+@@L - **②** **Autorización del cliente:** si ya autorizó el costo, quién lo registró y cuándo.
+@@L - **③** **Equipo y falla:** IMEI, accesorios que dejó, estado físico, la falla, el diagnóstico y las fechas de ingreso y entrega.
+@@L - **④** **Revisión al recibir:** lo que se probó al recibirlo y el código de desbloqueo (con **Mostrar**).
+@@L - **⑤** **Servicios y refacciones:** lo cotizado, con el total, los anticipos y lo que falta por cobrar. El técnico encargado y quien ve costos también ven el costo de cada refacción.
+@@L - **⑥** **Anticipos** que dejó el cliente.
+@@L - **⑦** **Acciones:** **Marcar lista**, **Editar / diagnóstico**, **Esperar refacción**, **No quedó**, **Agregar observación**, **Anticipo**, **Avisar por WhatsApp** y más. Cambian según el estado de la orden.
+
 ### Cuando falta una refacción
 Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Esperar refacción** y escribe cuál es (por ejemplo, «pantalla original, llega el jueves»).
 - La orden se ve como **Esperando refacción** en el taller y en las listas, y al cliente le aparece en su seguimiento que se espera una pieza. Desde **Avisar por WhatsApp** puedes mandarle el aviso ya escrito.
@@ -737,6 +819,16 @@ Los **saldos (recargas), pagos de servicios, pines y pagos de PayJoy** se operan
 4. Un **administrador** lo compara con los reportes del proveedor, {confirmar}. Si hay diferencias, debe escribir un comentario.
 5. Si hay que cambiar algo ya confirmado, un administrador usa **Reabrir para corregir**.
 
+@@IMG servicios.png | El corte de servicios del día, ya capturado.@@
+@@L - **①** **Pestañas:** el corte del día y el historial con el resumen.
+@@L - **②** **Sucursal y día:** el administrador puede capturar o revisar el de cualquier sucursal.
+@@L - **③** **Estado del corte:** quién lo capturó. Mientras no esté confirmado puedes corregirlo; ya confirmado, solo un administrador lo reabre.
+@@L - **④** **Operaciones e importe** de cada servicio: es lo único que se captura.
+@@L - **⑤** **Comisión y ganancia:** se calculan solas.
+@@L - **⑥** **Los totales del día:** lo vendido, las comisiones cobradas y la ganancia.
+@@L - **⑦** **Guardar corte.**
+@@L - **⑧** **Servicios y comisiones** (administrador): da de alta los servicios y define cómo se gana con cada uno.
+
 ### Cómo se calcula la ganancia
 - **Servicel** y **Tae Recargas**: un **porcentaje de lo vendido** (8.1 % y 7.6 %). Si vendes $10,000 en Servicel, ganas $810.
 - **Pagos de servicios**: se cobran **$15 al cliente** y el proveedor cobra **$4** por operación; quedan **$11** por cada pago.
@@ -744,6 +836,19 @@ Los **saldos (recargas), pagos de servicios, pines y pagos de PayJoy** se operan
 
 ### Cuánto se vende y cuánto queda
 {resumen}
+
+@@IMG servicios-historial.png | El historial y el resumen del período.@@
+@@L - **①** **Resumen del período:** lo vendido, la ganancia, los cortes, los que faltan por confirmar y los que tienen diferencias.
+@@L - **②** **Sucursal y período** que se consultan.
+@@L - **③** **Los cortes:** con doble clic se abre uno para ver el detalle, confirmarlo o reabrirlo.
+@@L - **④** **Estado:** **Capturado** (falta confirmar) o **Confirmado**.
+@@L - **⑤** **Por servicio:** más abajo, el resumen por sucursal y mes con mes.
+
+@@IMG servicios-detalle.png | El detalle de un corte por confirmar.@@
+@@L - **①** **El corte:** fecha, sucursal, estado y quién lo capturó.
+@@L - **②** **Por servicio:** operaciones, importe, comisión y ganancia. Al confirmar se agregan lo que dice el proveedor y la diferencia.
+@@L - **③** **Los totales** del corte.
+@@L - **④** **Confirmar con los reportes** (administrador): compara contra los reportes del proveedor; si hay diferencias, pide un comentario.
 
 El administrador da de alta los servicios y define cómo se gana con cada uno (porcentaje, comisión al cliente, lo que cobra el proveedor, o si solo se cuentan las operaciones) en **{donde}**. Un cambio aplica a los cortes nuevos; los ya capturados conservan lo que valía cuando se capturaron.{offline}
 """
@@ -809,6 +914,14 @@ DESCUENTOS = """## Descuentos
 El administrador define **reglas de descuento**. Cada regla puede limitarse a una **categoría** (una principal, que vale también para sus subcategorías, o solo una subcategoría), a un **tipo de producto**, a un **artículo específico** (un modelo de celular, un accesorio o un servicio) o a una **tienda**. También puede pedir un **monto mínimo** de compra, descontar un **porcentaje** o una **cantidad fija**, y valer solo ciertos **días de la semana** o entre dos **fechas**. El sistema las **aplica solo al cobrar**; el vendedor no captura descuentos a mano. Una regla se puede **activar o desactivar** sin borrarla.
 
 {articulo}
+
+@@IMG descuentos.png | La pantalla de descuentos con sus solicitudes, la promoción y las reglas.@@
+@@L - **①** **Nueva regla:** crea una regla de descuento.
+@@L - **②** **Solicitudes de descuento:** lo que piden vendedores y encargados desde el punto de venta, con su motivo.
+@@L - **③** **Resolver:** ✓ aprueba, el lápiz aprueba con **otro monto** y la ✕ rechaza.
+@@L - **④** **Promoción al vender un equipo:** un resumen de lo que se regala o se rebaja, y **Configurar** para cambiarlo.
+@@L - **⑤** **Las reglas:** su descuento, a qué aplican (categoría o artículo, sucursal, monto mínimo y cuándo) y si están activas.
+@@L - **⑥** **Acciones:** editar, activar o desactivar (el candado) y ver el historial de cambios.
 
 ### Solicitudes de descuento (administrador)
 Arriba de la pantalla aparecen las **solicitudes** que piden vendedores y encargados desde el punto de venta: sucursal, quién la pidió, el artículo, su precio, cuánto piden y el motivo. Puedes **aprobar** lo pedido, **aprobar con otro monto** o **rechazar** (con un motivo opcional). La lista se actualiza sola y también llega un aviso.
@@ -999,6 +1112,38 @@ Los datos de **esta computadora** (servidor, sucursal, impresoras) y del negocio
 @@L - **②** **Es el taller:** marca la sucursal donde trabajan los técnicos (solo una).
 - **Sistema:** versión del programa y datos para soporte. El administrador ve además **Computadoras con JSystem**: cada computadora con su última sesión, su **versión** y si está **al día**, con la actualización **descargada** (falta cerrar el programa), **desactualizada**, con **error** o **sin reportar** (más de un día). Cada computadora reporta sola cada pocos minutos con la sesión abierta; si alguna aparece mal, ábrela y pulsa **Buscar actualizaciones**. Aquí también está **Actualizaciones**: el programa se actualiza solo (revisa al abrirse y cada 4 horas, baja la versión nueva y la instala **al cerrar** el programa). Si quieres instalarla de inmediato, pulsa **Buscar actualizaciones** y luego **Cerrar e instalar la actualización**; el programa se vuelve a abrir solo.
 
+@@IMG config-equipo.png | Configuración › Este equipo.@@
+@@L - **①** **Las pestañas** de la configuración.
+@@L - **②** **Servidor:** la dirección del sistema; **Probar conexión** comprueba que responda.
+@@L - **③** **Sucursal y caja de esta computadora.**
+@@L - **④** **Nombre del equipo:** así aparece en la lista de computadoras de la pestaña Sistema.
+@@L - **⑤** **Guardar configuración:** aplica lo que cambiaste en cualquier pestaña.
+
+@@IMG config-ticket.png | Configuración › Ticket e impresora.@@
+@@L - **①** **Impresora de tickets.**
+@@L - **②** **Ancho del papel, ancho de impresión y copias.** Si el ticket sale cortado del lado derecho, baja el ancho de impresión.
+@@L - **③** **Logo:** si el ticket lleva el logo del negocio y de qué tamaño.
+@@L - **④** **Imprimir el ticket automáticamente** al terminar cada venta.
+@@L - **⑤** **Imprimir ticket de prueba:** con lo que ves en pantalla, aunque no hayas guardado.
+@@L - **⑥** **Guardar configuración.**
+
+@@IMG config-negocio.png | Configuración › Negocio (administrador).@@
+@@L - **①** **Logo del negocio:** el que sale en los tickets y en el programa.
+@@L - **②** **Datos del negocio:** nombre comercial, razón social, RFC, correo y sitio web.
+@@L - **③** **Pie y leyenda del ticket.** Más abajo, el plazo de devoluciones y las formas de pago.
+
+@@IMG config-sucursales.png | Configuración › Sucursales.@@
+@@L - **①** **La lista** de sucursales con su domicilio y teléfono.
+@@L - **②** **Encargado actual** de cada una.
+@@L - **③** **El lápiz** edita sus datos, su encargado y si es el taller.
+@@L - **④** **Nota:** estos datos salen en el ticket de cada sucursal.
+
+@@IMG config-sistema.png | Configuración › Sistema.@@
+@@L - **①** **Versión** del programa de esta computadora.
+@@L - **②** **Buscar actualizaciones:** revisa si hay una versión nueva; el programa también lo hace solo.
+@@L - **③** **Computadoras con JSystem** (administrador): cada una con su último usuario y versión.
+@@L - **④** **Estado:** al día, descargada (falta cerrar el programa), desactualizada o con error.
+
 ### Respaldo y limpieza automáticos (los hace el servidor)
 - **Respaldo diario:** cada noche a las 11:30 pm el servidor guarda una copia completa de la base de datos en dos discos. Se conservan las últimas 14 copias y una por mes. Si falla, llega un aviso a los administradores. Como el servidor se apaga a medianoche, si al encenderlo en la mañana no hay un respaldo de las últimas 26 horas, lo hace solo a los pocos minutos.
 - **Limpieza:** cada noche, después del respaldo, se borran las sesiones de entrada de más de 30 días, los avisos ya leídos de más de 90 días y el historial de cambios del catálogo de más de 24 meses. Las ventas, la caja, las compras y la nómina nunca se borran. Si la noche anterior no hubo respaldo, la limpieza no corre.
@@ -1007,6 +1152,14 @@ Los datos de **esta computadora** (servidor, sucursal, impresoras) y del negocio
 1. En **Etiquetas** elige la **impresora** y el **tipo de papel**: **rollo continuo** (como el ticket) o **etiqueta de tamaño fijo** con su ancho y alto en milímetros (por ejemplo, 30 × 14).
 2. Elige qué lleva la etiqueta: el nombre, el código escrito y el precio. A la derecha ves una **vista previa**: si algo se corta ahí, también se corta al imprimir.
 3. En **Imprimir etiquetas** (a la derecha) escribe el **código**, el nombre y el precio si quieres, y la **cantidad**; pulsa **Imprimir etiquetas** y léela con el lector para comprobar que el código se entiende. Sirve también para imprimir cualquier código aparte de la prueba. Luego **Guardar configuración**.
+
+@@IMG config-etiquetas.png | Configuración › Etiquetas.@@
+@@L - **①** **Impresora de etiquetas.**
+@@L - **②** **Tipo de papel:** rollo continuo o etiqueta de tamaño fijo.
+@@L - **③** **Lo que lleva la etiqueta:** nombre, código y precio.
+@@L - **④** **Vista previa** ampliada de la etiqueta.
+@@L - **⑤** **Imprimir etiquetas:** escribe el código, el nombre, el precio y la cantidad.
+@@L - **⑥** **Calibración de la impresión,** si la etiqueta sale corrida o cortada.
 
 Las etiquetas bajas (20 mm de alto o menos, como las de 30 × 14) salen en versión compacta: el nombre en un renglón, las barras con todo el alto posible y, abajo, el código a la izquierda y el precio a la derecha. Si el código es largo, las barras salen más finas: prueba con el lector; si no lee, quita el nombre o el código escrito.
 

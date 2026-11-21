@@ -63,6 +63,7 @@ Cada persona tiene un rol, y el sistema solo le muestra lo que le corresponde.
 > Un **encargado** ve solo su tienda. Un **administrador** puede cambiar de sucursal o ver todas. Un **técnico** solo ve las órdenes del taller.
 > El usuario **root** (y quien root autorice) puede cambiar lo que puede hacer cada rol en **Permisos** (sección Administración). La tabla de arriba es lo que trae el sistema de fábrica.
 
+
 ## Punto de Venta
 
 Aquí se cobra. En la computadora, a la izquierda está el **catálogo** y a la derecha el **carrito**, el **cliente** y el **pago**; en el celular van una debajo de la otra. En la web el punto de venta necesita conexión: sin internet, usa JSystem en la tienda.
@@ -110,6 +111,7 @@ El cliente es **opcional**: sin marcar **Registrar cliente**, la venta queda de 
 ## Caja
 
 La caja es tu **turno de trabajo**: se **abre** al empezar el día con un fondo, se vende, y se **cierra** al terminar contando el efectivo. Al cerrar queda guardado un **corte** con todo el detalle. Cualquier empleado de la tienda puede abrir o cerrar la caja; solo puede haber un turno abierto por caja.
+
 
 ### Abrir la caja
 1. Entra a **Caja** y pulsa **Abrir caja** (el punto de venta también lo ofrece si está cerrada).
@@ -232,6 +234,7 @@ En el **Punto de Venta** busca el equipo por su nombre o IMEI y toca la unidad. 
 
 Es el conteo de lo que hay en el local, para compararlo con lo que dice el sistema. Lo hacen **dos personas**: el **encargado cuenta** y el **administrador confirma**. Contar **no cambia las existencias**: solo cambian cuando el administrador cierra el inventario. Está en **Inventario físico (menú de la izquierda)**.
 
+
 ### Qué se va a inventariar
 Al aperturar, el sistema pregunta qué cubre el inventario:
 - **Toda la tienda** (recomendado para un conteo completo o una entrega de tienda): todo lo que hay en el sistema y no escaneas queda como faltante.
@@ -245,12 +248,14 @@ Al aperturar, el sistema pregunta qué cubre el inventario:
 
 > Mientras cuentas, el sistema **no te dice cuántas piezas debería haber**: las diferencias se ven hasta que lo envías a revisión. Cuenta por zonas y evita vender o mover mercancía de esa zona mientras tanto.
 
+
 ### El administrador confirma
 1. Abre el inventario (arriba aparece qué sucursales tienen uno **por revisar**). El resumen muestra, por artículo, su **código**, lo que dice el sistema, lo contado, la diferencia y su valor a costo. En los equipos, **Ver equipos** lista los IMEI que no se encontraron.
 2. Para cada diferencia elige **Ajustar** (las existencias se corrigen al cerrar) o **Justificar** (no se ajusta; no pide motivo). **Ajustar** solo **marca** la decisión («Se ajustará»): las existencias no cambian hasta **Confirmar y cerrar inventario**, y puedes deshacerla. **Ajustar todo lo pendiente** decide las que falten. Lo que ya revisaste pasa **al final** de la tabla (más tenue) y puedes ocultarlo con **Ocultar las ya revisadas**, así arriba siempre queda lo que falta por decidir. Un equipo que **sobra** no se da de alta solo: se justifica o se registra en **Equipos**.
 3. Si el encargado se equivocó en pocas piezas, pulsa **Corregir lo contado** (en un equipo, **Ver y corregir equipos** y marca **Sí estaba** o **No estaba**). Escribe la cantidad que hay **en físico ahora**; no pide motivo, pero queda registrado quién lo corrigió y cuánto había contado el encargado. Esa cantidad se compara con lo que el sistema tiene **hoy**, así que lo que se vendió desde que se contó no sale como faltante. Si lo que hay en físico es la misma cantidad que contaron, escríbela igual: se confirma y también se compara con lo de hoy. Si el sistema cambió desde que se escaneó (se vendió algo), la columna **Sistema** muestra los dos datos, por ejemplo «5 (hoy 3)»; si ya habías corregido la cantidad antes de esas ventas, pulsa **Poner al día** (las flechas circulares) para compararla con las existencias de hoy.
 4. Si hay muchos errores, **Devolver para recontar**: el conteo regresa al encargado y las decisiones se borran.
 5. Pulsa **Confirmar y cerrar inventario**. Se aplican los ajustes (a un accesorio se le suma o resta la diferencia; los equipos no encontrados se dan de baja) y queda en el **historial**.
+
 
 El resumen se puede **imprimir** (con renglones de firma) y **exportar** a Excel. Un inventario sin terminar se puede **cancelar**: no cambia nada.
 
@@ -262,6 +267,7 @@ Junta en un solo lugar todo lo que **cambió las existencias fuera de una venta,
 - **Vistas:** **Por motivo**, **Por persona**, **Por tienda** y **Detalle**. Arriba aparecen la **pérdida a costo**, los **ajustes al alza** y la **principal causa**.
 - **Todo cambio manual lleva su motivo:** al sacar, ajustar o dar de baja existencias hay que elegir un motivo. Sin motivo el sistema no lo registra.
 - **Aviso al administrador:** cuando un encargado saca o ajusta existencias, o da de baja un equipo, a los administradores les llega un aviso con quién, qué, cuánto y por qué.
+
 
 ## Traspasos
 
@@ -304,6 +310,7 @@ Guarda el nombre, el teléfono y el correo de quien compra, y su **historial de 
 
 Control de lo que los clientes le deben a la tienda y de sus pagos.
 
+
 ### Registrar una cuenta
 Pulsa **Nueva cuenta** y captura el cliente, el monto y el **número de factura** (hasta 20 caracteres).
 
@@ -311,6 +318,7 @@ Pulsa **Nueva cuenta** y captura el cliente, el monto y el **número de factura*
 1. Abre la cuenta con el icono del ojo y pulsa **abonar**.
 2. Escribe el monto y la forma de pago, y pulsa **Confirmar pago**.
 3. El abono queda en el historial de la cuenta (icono del reloj). Si es en efectivo, entra a la caja del turno.
+
 
 Un abono hecho **sin conexión** se guarda en la computadora y se envía solo después.
 
@@ -395,6 +403,7 @@ Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las 
 4. **Pedir autorización** al cliente cuando el costo esté listo (ver arriba).
 5. **Marcar lista** avisa a la sucursal que el equipo ya está listo en el taller y debe regresar. El botón **no se puede pulsar mientras la orden no tenga servicios ni refacciones**: agrega al menos un renglón. Si hace falta corregir algo, **Reabrir** (el equipo vuelve a quedar en reparación).
 
+
 ### Cuando falta una refacción
 Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Esperar refacción** y escribe cuál es (por ejemplo, «pantalla original, llega el jueves»).
 - La orden se ve como **Esperando refacción** en el taller y en las listas, y al cliente le aparece en su seguimiento que se espera una pieza. Desde **Avisar por WhatsApp** puedes mandarle el aviso ya escrito.
@@ -440,6 +449,7 @@ Los **saldos (recargas), pagos de servicios, pines y pagos de PayJoy** se operan
 4. Un **administrador** lo compara con los reportes del proveedor, escribe el importe de cada uno y pulsa **Confirmar corte**. Si hay diferencias, debe escribir un comentario.
 5. Si hay que cambiar algo ya confirmado, un administrador usa **Reabrir para corregir**.
 
+
 ### Cómo se calcula la ganancia
 - **Servicel** y **Tae Recargas**: un **porcentaje de lo vendido** (8.1 % y 7.6 %). Si vendes $10,000 en Servicel, ganas $810.
 - **Pagos de servicios**: se cobran **$15 al cliente** y el proveedor cobra **$4** por operación; quedan **$11** por cada pago.
@@ -447,6 +457,8 @@ Los **saldos (recargas), pagos de servicios, pines y pagos de PayJoy** se operan
 
 ### Cuánto se vende y cuánto queda
 Debajo del corte está el resumen del periodo (este mes, el mes pasado, los últimos 30 días o este año): **lo vendido y la ganancia** por servicio, por sucursal (administrador) y **mes con mes**. Lo de PayJoy aparece en su renglón, pero no suma a lo vendido.
+
+
 
 El administrador da de alta los servicios y define cómo se gana con cada uno (porcentaje, comisión al cliente, lo que cobra el proveedor, o si solo se cuentan las operaciones) en **Servicios**. Un cambio aplica a los cortes nuevos; los ya capturados conservan lo que valía cuando se capturaron. Para capturar el corte **sin conexión**, usa JSystem.
 
@@ -468,6 +480,7 @@ Esta sección la usan encargados y administradores.
 El administrador define **reglas de descuento**. Cada regla puede limitarse a una **categoría** (una principal, que vale también para sus subcategorías, o solo una subcategoría), a un **tipo de producto**, a un **artículo específico** (un modelo de celular, un accesorio o un servicio) o a una **tienda**. También puede pedir un **monto mínimo** de compra, descontar un **porcentaje** o una **cantidad fija**, y valer solo ciertos **días de la semana** o entre dos **fechas**. El sistema las **aplica solo al cobrar**; el vendedor no captura descuentos a mano. Una regla se puede **activar o desactivar** sin borrarla.
 
 La regla por artículo específico se arma desde JSystem. Para cambiar el **precio** de algo, usa Inventario: los precios son generales.
+
 
 ### Solicitudes de descuento (administrador)
 Arriba de la pantalla aparecen las **solicitudes** que piden vendedores y encargados desde el punto de venta: sucursal, quién la pidió, el artículo, su precio, cuánto piden y el motivo. Puedes **aprobar** lo pedido, **aprobar con otro monto** o **rechazar** (con un motivo opcional). La lista se actualiza sola y también llega un aviso.
