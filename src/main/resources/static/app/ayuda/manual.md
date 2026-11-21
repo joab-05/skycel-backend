@@ -164,6 +164,7 @@ La **bodega** también tiene su caja: ahí llega el **efectivo de las ventas de 
 
 Sirven para regresar un producto vendido: se le **reembolsa** al cliente o se le da **otro producto a cambio**. Hay un plazo para devolver (por omisión, 15 días; el administrador lo cambia en Configuración).
 
+
 ### Pedir una devolución
 1. Entra a **Devoluciones** y pulsa **Nueva devolución**.
 2. **Busca la venta** (por folio) y elige los artículos que regresan y la cantidad. En los equipos, elige cada IMEI.
@@ -174,6 +175,8 @@ Sirven para regresar un producto vendido: se le **reembolsa** al cliente o se le
    - Al elegir el producto se llena el **precio de entrega** con el que tiene hoy en el sistema. Si se debe **entregar a otro precio** (por ejemplo, el cliente recibió un artículo equivocado de $100 y el correcto cuesta $199, pero se le deja en $100), cámbialo en ese campo o pulsa **Dejarlo al precio de lo devuelto**. Aparece el aviso de **precio especial**.
    - Lo que se lleva sigue sin poder valer menos que lo devuelto.
 6. Pulsa **Solicitar devolución**.
+
+
 
 ### Aprobar o rechazar
 Un **encargado** o **administrador** revisa la solicitud y pulsa **Aprobar y ejecutar** (mueve el inventario y el dinero) o **Rechazar** (con el motivo). Hasta que se aprueba, no cambia nada.
@@ -210,6 +213,7 @@ Los **celulares y las tablets** no tienen un código por modelo: cada equipo se 
 
 ### Qué muestra
 Cada equipo con su IMEI, el artículo, su condición (**nuevo**, **seminuevo** o **reacondicionado**), su precio, su costo (si tu rol lo puede ver), los días que lleva en existencia, su **sección** y su estado. **Por artículo** resume cuántos hay de cada modelo.
+
 
 ### Registrar equipos
 1. Pulsa **Registrar equipos** y elige el **artículo**. Si es un modelo o color nuevo, primero se registra en Inventario › Nuevo producto, con la categoría Equipos.
@@ -336,6 +340,7 @@ Una garantía **rechazada** puede volver al cliente directamente (Listo para ent
 ## Órdenes de Servicio
 
 Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en el taller y se **entrega** al cliente.
+
 
 ### Recibir un equipo
 1. Entra a **Recibir equipo** y pulsa **Nueva orden**.

@@ -301,6 +301,12 @@ DEVOLUCIONES = """## Devoluciones
 
 Sirven para regresar un producto vendido: se le **reembolsa** al cliente o se le da **otro producto a cambio**. Hay un plazo para devolver (por omisión, 15 días; el administrador lo cambia en Configuración).
 
+@@IMG devoluciones.png | La lista de devoluciones. Con doble clic en una se abre su detalle.@@
+@@L - **①** **Nueva devolución:** abre el formulario para pedir una.
+@@L - **②** **Filtro de estado:** por omisión muestra solo las **Pendientes**; elige **Todas** para ver también las procesadas y las rechazadas.
+@@L - **③** **La lista:** folio, venta, cliente, tipo (reembolso o cambio), monto, motivo y estado (ámbar pendiente, verde procesada, rojo rechazada).
+@@L - **④** **Los totales:** pendientes de aprobar, procesadas, monto devuelto y rechazadas.
+
 ### Pedir una devolución
 1. Entra a **Devoluciones** y pulsa **Nueva devolución**.
 2. **Busca la venta** (por folio) y elige los artículos que regresan y la cantidad. En los equipos, elige cada IMEI.
@@ -311,6 +317,19 @@ Sirven para regresar un producto vendido: se le **reembolsa** al cliente o se le
    - Al elegir el producto se llena el **precio de entrega** con el que tiene hoy en el sistema. Si se debe **entregar a otro precio** (por ejemplo, el cliente recibió un artículo equivocado de $100 y el correcto cuesta $199, pero se le deja en $100), cámbialo en ese campo o pulsa **Dejarlo al precio de lo devuelto**. Aparece el aviso de **precio especial**.
    - Lo que se lleva sigue sin poder valer menos que lo devuelto.
 6. Pulsa **Solicitar devolución**.
+
+@@IMG devolucion-nueva.png | El formulario para pedir una devolución, ya con la venta buscada.@@
+@@L - **①** **Venta:** escribe el número del ticket y pulsa **Buscar**. En verde dice hasta cuándo se puede devolver.
+@@L - **②** **Qué se devuelve:** marca cada artículo, la cantidad y si regresa **en buen estado**.
+@@L - **③** **Cómo se resuelve:** **Reembolso** (se devuelve el dinero) o **Cambio** (se lleva otro producto).
+@@L - **④** **Motivo:** obligatorio; queda registrado.
+@@L - **⑤** **Solicitar devolución:** la manda a aprobación.
+
+@@IMG devolucion-detalle.png | El detalle de una devolución pendiente, con su cambio a precio especial.@@
+@@L - **①** **Lo que se devuelve y lo que se lleva el cliente,** renglón por renglón.
+@@L - **②** **Precio especial:** el producto que se lleva sale por menos de su precio de lista; solo un **administrador** puede aprobarlo.
+@@L - **③** **Aprobar y ejecutar:** hace el reembolso o el cambio (y genera la venta nueva).
+@@L - **④** **Rechazar:** pide el motivo del rechazo.
 
 ### Aprobar o rechazar
 Un **encargado** o **administrador** revisa la solicitud y pulsa **Aprobar y ejecutar** (mueve el inventario y el dinero) o **Rechazar** (con el motivo). Hasta que se aprueba, no cambia nada.
@@ -407,6 +426,13 @@ Los **celulares y las tablets** no tienen un código por modelo: cada equipo se 
 
 ### Qué muestra
 Cada equipo con su IMEI, el artículo, su condición (**nuevo**, **seminuevo** o **reacondicionado**), su precio, su costo (si tu rol lo puede ver), los días que lleva en existencia, su **sección** y su estado. **Por artículo** resume cuántos hay de cada modelo.
+
+@@IMG equipos.png | Los equipos de la sucursal, cada uno con su IMEI o número de serie.@@
+@@L - **①** **Buscador** por IMEI, serie o nombre.
+@@L - **②** **Filtros** de estado (por omisión, **Disponibles**) y de categoría.
+@@L - **③** **Registrar equipos:** da de alta unidades nuevas (un IMEI por línea).
+@@L - **④** **Acciones de cada equipo:** copiar el IMEI, editar (administrador), marcar como **rezagado** y dar de baja.
+@@L - **⑤** **Por artículo:** el resumen de cuántos hay de cada modelo.
 
 ### Registrar equipos
 1. Pulsa **Registrar equipos** y elige el **artículo**. Si es un modelo o color nuevo, primero se registra en Inventario › Nuevo producto, con la categoría Equipos.
@@ -569,6 +595,13 @@ ORDENES = """## Órdenes de Servicio
 
 Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en el taller y se **entrega** al cliente.
 
+@@IMG ordenes.png | La lista de órdenes de servicio. Con doble clic en una se ve su detalle y se trabaja.@@
+@@L - **①** **Nueva orden:** recibe un equipo.
+@@L - **②** **Los números:** recibidas, en reparación, listas para entrega y saldo por cobrar.
+@@L - **③** **Filtros:** sucursal, búsqueda por folio, cliente, teléfono o equipo, estado y fecha de ingreso.
+@@L - **④** **Estado:** azul recibida, ámbar en reparación, verde lista para entrega.
+@@L - **⑤** **Por recoger:** los equipos listos que el cliente no ha pasado a recoger.
+
 ### Recibir un equipo
 1. Entra a **{entrada}** y pulsa **Nueva orden**.
 2. Busca o captura al **cliente** (nombre y teléfono).
@@ -579,6 +612,11 @@ Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en e
 5. Si el cliente deja un **anticipo**, regístralo con su forma de pago. En efectivo entra a la caja del turno.
 6. Pulsa **Recibir equipo**. Se genera el folio **OS-…** que se le entrega al cliente.
 7. **Imprime el comprobante** y entrégaselo al cliente (el programa te lo ofrece al terminar; también está en el botón **Comprobante** o **Imprimir comprobante** de la orden). Lleva el folio, el equipo, la falla, el anticipo, la fecha prometida, un **código QR** para seguir la reparación desde su celular y las condiciones del servicio. Que el cliente lo **firme**. Sale bien en impresoras de **58 mm** y de **80 mm**: en la web elige el papel arriba del comprobante (se recuerda en esa computadora); si el ticket es largo, JSystem lo reparte en varias hojas sin cortar el QR.
+@@IMG orden-nueva.png | El formulario para recibir un equipo.@@
+@@L - **①** **Cliente:** escribe el teléfono y pulsa **Buscar**; si no existe, captura su nombre.
+@@L - **②** **Equipo:** marca, modelo, IMEI, accesorios que deja, estado físico y la falla.
+@@L - **③** **Revisión rápida:** marca **Bien**, **Falla** o **No probado** en cada punto; queda constancia para la entrega.
+@@L - **④** **Recibir equipo:** genera el folio **OS-…** que se le da al cliente.
 8. **Toma fotos del equipo** en la misma orden (sección **Fotos del equipo**): golpes, rayones o la pantalla, antes de trabajarlo. Puedes subir hasta 8; en el celular hay un botón para **tomar la foto** y otro para **elegirla de la galería**. Se borran solas 90 días después de que la orden se entrega o cancela.
 
 La recepción también funciona **sin conexión** en JSystem: el comprobante sale con un folio provisional y sin QR; el definitivo (OS-…) se le da cuando se envíe al servidor.
@@ -840,6 +878,18 @@ Sección de administración (los descansos también los ve el encargado).
 
 ### Empleados
 Aquí se da de alta a quien va a usar el sistema: su **rol** y su contraseña (también se cambia aquí si la olvidó). **El empleado ya no trae tienda:** al **encargado** lo designa la tienda (en **Configuración › Sucursales**, campo **Encargado actual**), los **técnicos** trabajan en el **taller** (la sucursal marcada como taller) y los vendedores y administradores trabajan en la sucursal de la computadora donde inician sesión. En la lista, la columna **Sucursal** solo se llena para el encargado (su tienda) y el técnico (el taller). Los técnicos se marcan con su rol; uno de ellos puede ser el **técnico encargado**, que reparte las órdenes del taller.
+
+@@IMG empleados.png | La lista de empleados.@@
+@@L - **①** **Nuevo empleado:** da de alta a quien va a usar el sistema.
+@@L - **②** **Filtros** por rol y por estado.
+@@L - **③** **Rol:** Administrador, Encargado, Vendedor, Técnico (y Técnico encargado).
+@@L - **④** **Sucursal:** solo se llena para el **encargado** (su tienda) y el **técnico** (el taller); el resto no tiene tienda fija.
+@@L - **⑤** **Acciones:** ver el detalle, editar, desactivar e historial de cambios.
+
+@@IMG empleado-form.png | El formulario de un empleado nuevo: ya no pide sucursal.@@
+@@L - **①** **Rol:** de él dependen las pantallas que verá la persona.
+@@L - **②** **Sucursal:** el formulario solo explica de dónde sale su tienda; no se elige aquí.
+@@L - **③** **Crear empleado:** guarda el usuario con su contraseña.
 
 ### Nómina
 1. **Abrir período**: elige desde, hasta y la fecha de pago. Cada empleado activo entra con su sueldo.
