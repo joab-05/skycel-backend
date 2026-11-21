@@ -20,4 +20,7 @@ public class TiendaCreateDto {
 
     /** true si es un almacén sin venta al público (sin caja propia). Por defecto, false. */
     private Boolean esAlmacen;
+
+    /** Marca la sucursal nueva como el taller de los técnicos. */
+    private Boolean esTaller;
 }

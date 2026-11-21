@@ -25,6 +25,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final UsuarioSesionRepository usuarioSesionRepository;
     private final PermisoService permisoService;
+    private final com.skycel.backend.repository.TiendaRepository tiendaRepository;
 
     @Transactional
     public LoginResponseDto authenticate(LoginRequestDto requestDto, HttpServletRequest request) {
@@ -42,7 +43,8 @@ public class AuthService {
         // Registramos la sesión física en MySQL (Para poder denegar remotamente después si es necesario)
         UsuarioSesion sesion = UsuarioSesion.builder()
                 .usuario(usuario)
-                .tiendaTerminal(usuario.getTienda()) // Asumiremos que el login se hace desde la tienda default del usuario, o un valor enviado por la app. 
+                // quien no tiene tienda (un administrador o un vendedor) inicia sesión desde la primera sucursal: es solo el registro de la sesión
+                .tiendaTerminal(usuario.getTienda() != null ? usuario.getTienda() : tiendaRepository.findAll().stream().findFirst().orElse(null)) // Asumiremos que el login se hace desde la tienda default del usuario, o un valor enviado por la app. 
                 .tokenUuid(tokenUuid)
                 .ipPublica(getClientIP(request))
                 .userAgent(request.getHeader("User-Agent"))
@@ -59,7 +61,7 @@ public class AuthService {
                 .username(usuario.getUsername())
                 .nombreCompleto(usuario.getNombreCompleto())
                 .rol(usuario.getRol().name())
-                .codti(usuario.getTienda().getCodti())
+                .codti(usuario.getTienda() != null ? usuario.getTienda().getCodti() : null)
                 .tecnicoEncargado(Boolean.TRUE.equals(usuario.getTecnicoEncargado()))
                 .permisos(permisoService.deUsuario(usuario))
                 .build();

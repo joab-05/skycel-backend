@@ -15,7 +15,7 @@ public class UsuarioUpdateDto {
     // ── Usuario ───────────────────────────────────────────────────────────────
     private String  nombreCompleto;
     private String  password;       // null o vacío = no cambia la contraseña
-    private Integer codti;          // cambiar de sucursal
+    private Integer codti;          // ya no se usa: el encargado se designa en la tienda; se ignora si llega
     private String  rol;            // cambiar rol
     private String  telefono;
     private String  email;

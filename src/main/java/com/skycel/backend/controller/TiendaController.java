@@ -25,6 +25,7 @@ public class TiendaController {
 
     private final TiendaRepository tiendaRepository;
     private final com.skycel.backend.service.ProductoService productoService;
+    private final com.skycel.backend.service.TiendaService tiendaService;
 
     /**
      * GET /api/tiendas
@@ -37,7 +38,7 @@ public class TiendaController {
                 .stream()
                 .filter(t -> Boolean.TRUE.equals(t.getActivo()))
                 .toList();
-        return ResponseEntity.ok(tiendas);
+        return ResponseEntity.ok(tiendaService.conNombres(tiendas));
     }
 
     /**
@@ -56,6 +57,7 @@ public class TiendaController {
                 .build();
         Tienda creada = tiendaRepository.save(t);
         productoService.completarServiciosEnTodasLasSucursales();   // la sucursal nueva ya puede cobrar los servicios
+        if (Boolean.TRUE.equals(request.getEsTaller())) creada = tiendaService.marcarTaller(creada.getCodti(), true);
         return ResponseEntity.status(HttpStatus.CREATED).body(creada);
     }
 
@@ -71,7 +73,19 @@ public class TiendaController {
         t.setNombre(request.getNombre().trim());
         t.setUbicacion(request.getUbicacion() == null || request.getUbicacion().isBlank() ? null : request.getUbicacion().trim());
         t.setTelefono(request.getTelefono() == null || request.getTelefono().isBlank() ? null : request.getTelefono().trim());
-        return ResponseEntity.ok(tiendaRepository.save(t));
+        Tienda guardada = tiendaRepository.save(t);
+        if (request.getEsTaller() != null) guardada = tiendaService.marcarTaller(codti, request.getEsTaller());
+        return ResponseEntity.ok(tiendaService.conNombre(guardada));
+    }
+
+    /**
+     * PUT /api/tiendas/{codti}/encargado
+     * Designa al encargado actual de la tienda (idusuario null = sin encargado). Solo ROOT y ADMIN.
+     */
+    @PutMapping("/{codti}/encargado")
+    @PreAuthorize("@permisos.tiene('NEGOCIO_CONFIG')")
+    public ResponseEntity<Tienda> asignarEncargado(@PathVariable Integer codti, @RequestBody java.util.Map<String, Integer> cuerpo) {
+        return ResponseEntity.ok(tiendaService.asignarEncargado(codti, cuerpo == null ? null : cuerpo.get("idusuario")));
     }
 
     /**
@@ -81,6 +95,6 @@ public class TiendaController {
     @GetMapping("/todas")
     @PreAuthorize("@permisos.tiene('NEGOCIO_CONFIG')")
     public ResponseEntity<List<Tienda>> listarTodas() {
-        return ResponseEntity.ok(tiendaRepository.findAll());
+        return ResponseEntity.ok(tiendaService.conNombres(tiendaRepository.findAll()));
     }
 }

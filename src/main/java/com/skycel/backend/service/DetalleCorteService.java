@@ -72,8 +72,10 @@ public class DetalleCorteService {
         Integer idCaja = s.getCaja().getIdCaja();
 
         // el efectivo que cada venta dejó en el cajón: las entradas «Venta #n» del turno
+        // El retiro del cierre se registra unos instantes después de la hora de cierre: se busca un poco más allá y solo ese se conserva
         List<MovimientoCaja> delTurno = new ArrayList<>(
-                movimientoCajaRepository.findByCaja_IdCajaAndFechaMovBetweenOrderByFechaMovDesc(idCaja, desde, hasta));
+                movimientoCajaRepository.findByCaja_IdCajaAndFechaMovBetweenOrderByFechaMovDesc(idCaja, desde, abierta ? hasta : hasta.plusSeconds(10)));
+        if (!abierta) delTurno.removeIf(m -> m.getFechaMov().isAfter(hasta) && !RETIRO_CIERRE.equals(m.getMotivo().getNombre()));
         delTurno.sort(Comparator.comparing(MovimientoCaja::getFechaMov));
         Map<Integer, BigDecimal> efectivoPorVenta = new HashMap<>();
         for (MovimientoCaja m : delTurno) {
@@ -150,7 +152,9 @@ public class DetalleCorteService {
                     .motivo(motivo).origen(origen).monto(m.getMonto())
                     .usuario(m.getUsuarioEncargado() != null ? m.getUsuarioEncargado().getNombreCompleto() : null)
                     .observaciones(m.getObservaciones())
-                    .editable(!MotivoCajaService.esDelSistema(motivo))
+                    // lo que capturó una persona y lo que registran la apertura y el cierre del turno lo corrige el administrador;
+                    // las ventas, los abonos y demás movimientos automáticos no se tocan aquí
+                    .editable(!MotivoCajaService.esDelSistema(motivo) || MOTIVOS_DE_TURNO.contains(motivo))
                     .build());
         }
 

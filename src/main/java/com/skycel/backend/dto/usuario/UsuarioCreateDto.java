@@ -15,7 +15,7 @@ public class UsuarioCreateDto {
     private String username;        // obligatorio, único
     private String password;        // obligatorio — se hashea con BCrypt en el service
     private String nombreCompleto;  // obligatorio
-    private Integer codti;          // obligatorio — ID de la tienda asignada
+    private Integer codti;          // ya no se usa: el encargado se designa en la tienda; se ignora si llega
     private Boolean tecnicoEncargado;   // solo si el rol es TECNICO
     private String rol;             // obligatorio — ROOT, ADMIN, ENCARGADO_TIENDA, VENDEDOR
     private String telefono;        // opcional

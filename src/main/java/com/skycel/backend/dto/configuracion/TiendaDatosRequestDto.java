@@ -17,4 +17,7 @@ public class TiendaDatosRequestDto {
 
     @Size(max = 20, message = "El teléfono no puede exceder los 20 caracteres")
     private String telefono;
+
+    /** Marca esta tienda como el taller de los técnicos (null = no cambia). */
+    private Boolean esTaller;
 }

@@ -30,6 +30,7 @@ public class UsuarioService {
     private final UsuarioRepository        usuarioRepository;
     private final EmpleadoPerfilRepository empleadoPerfilRepository;
     private final TiendaRepository         tiendaRepository;
+    private final TiendaService            tiendaService;
     private final PasswordEncoder          passwordEncoder;
 
     // ── Listar ────────────────────────────────────────────────────────────────
@@ -89,13 +90,12 @@ public class UsuarioService {
                     HttpStatus.CONFLICT, "El username '" + dto.getUsername() + "' ya está en uso.");
         }
 
-        // Validar tienda
-        Tienda tienda = tiendaRepository.findById(dto.getCodti())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Tienda no encontrada: " + dto.getCodti()));
-
         // Parsear rol
         Rol rol = parseRol(dto.getRol());
+
+        // El empleado ya no trae tienda: al encargado se la da la tienda (Configuración de tiendas), los técnicos trabajan en el taller
+        // y los vendedores y administradores trabajan donde indique el equipo
+        Tienda tienda = rol == Rol.TECNICO ? tiendaService.tallerActual() : null;
 
         // Crear usuario
         Usuario usuario = Usuario.builder()
@@ -144,15 +144,14 @@ public class UsuarioService {
         if (dto.getPassword() != null && !dto.getPassword().isBlank())
             usuario.setPassword(passwordEncoder.encode(dto.getPassword()));
 
-        if (dto.getCodti() != null) {
-            Tienda tienda = tiendaRepository.findById(dto.getCodti())
-                    .orElseThrow(() -> new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST, "Tienda no encontrada: " + dto.getCodti()));
-            usuario.setTienda(tienda);
-        }
+        // La tienda ya no se cambia aquí (dto.codti se ignora): al encargado lo designa la tienda y los técnicos van al taller
 
-        if (dto.getRol() != null)
-            usuario.setRol(parseRol(dto.getRol()));
+        if (dto.getRol() != null) {
+            Rol nuevoRol = parseRol(dto.getRol());
+            if (nuevoRol != usuario.getRol() && usuario.getRol() == Rol.ENCARGADO_TIENDA) tiendaService.liberarComoEncargado(usuario);
+            usuario.setRol(nuevoRol);
+            if (nuevoRol == Rol.TECNICO && usuario.getTienda() == null) usuario.setTienda(tiendaService.tallerActual());
+        }
 
         if (dto.getTecnicoEncargado() != null)
             usuario.setTecnicoEncargado(dto.getTecnicoEncargado());
@@ -165,8 +164,10 @@ public class UsuarioService {
         if (dto.getEmail() != null)
             usuario.setEmail(dto.getEmail());
 
-        if (dto.getActivo() != null)
+        if (dto.getActivo() != null) {
             usuario.setActivo(dto.getActivo());
+            if (!dto.getActivo() && usuario.getRol() == Rol.ENCARGADO_TIENDA) tiendaService.liberarComoEncargado(usuario);
+        }
 
         usuario = usuarioRepository.save(usuario);
 
@@ -210,6 +211,7 @@ public class UsuarioService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Usuario no encontrado: " + id));
         usuario.setActivo(false);
+        if (usuario.getRol() == Rol.ENCARGADO_TIENDA) tiendaService.liberarComoEncargado(usuario);
         usuarioRepository.save(usuario);
 
         empleadoPerfilRepository.findByUsuarioIdusuario(id)
@@ -229,8 +231,9 @@ public class UsuarioService {
                 .activo(u.getActivo())
                 .tecnicoEncargado(Boolean.TRUE.equals(u.getTecnicoEncargado()))
                 .fechaAlta(u.getFechaAlta())
-                .codti(u.getTienda() != null ? u.getTienda().getCodti() : null)
-                .nombreTienda(u.getTienda() != null ? u.getTienda().getNombre() : null);
+                // la tienda solo se muestra de quien la tiene por su cargo: el encargado (su tienda) y el técnico (el taller)
+                .codti(u.getTienda() != null && tieneTiendaPorCargo(u) ? u.getTienda().getCodti() : null)
+                .nombreTienda(u.getTienda() != null && tieneTiendaPorCargo(u) ? u.getTienda().getNombre() : null);
 
         empleadoPerfilRepository.findByUsuarioIdusuario(u.getIdusuario())
                 .ifPresent(p -> builder
@@ -241,6 +244,10 @@ public class UsuarioService {
                         .acumuladoFondoInventario(p.getAcumuladoFondoInventario()));
 
         return builder.build();
+    }
+
+    private static boolean tieneTiendaPorCargo(Usuario u) {
+        return u.getRol() == Rol.ENCARGADO_TIENDA || u.getRol() == Rol.TECNICO;
     }
 
     // ── Utilidades ────────────────────────────────────────────────────────────

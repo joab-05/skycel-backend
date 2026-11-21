@@ -298,14 +298,23 @@ public class SesionCajaService {
         SesionCaja sesion = corteCerrado(idsesion);
         String porque = motivoDeLaCorreccion(dto);
         MovimientoCaja m = movimientoDelCorte(sesion, idmovimiento);
-        com.skycel.backend.domain.entity.CatMotivo motivo = dto.getIdmotivo() != null ? movimientoCajaService.motivoManual(dto.getIdmotivo()) : m.getMotivo();
+        boolean deTurno = esDeTurno(m);
+        // lo que registran la apertura y el cierre conserva su motivo: solo cambia el monto (y la nota)
+        if (deTurno && dto.getIdmotivo() != null && !dto.getIdmotivo().equals(m.getMotivo().getIdmotivo()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "«" + m.getMotivo().getNombre() + "» lo registra la apertura o el cierre del turno: se cambia su monto, no su motivo.");
+        com.skycel.backend.domain.entity.CatMotivo motivo = deTurno ? m.getMotivo()
+                : dto.getIdmotivo() != null ? movimientoCajaService.motivoManual(dto.getIdmotivo()) : m.getMotivo();
         BigDecimal monto = dto.getMonto() != null ? montoDelMovimiento(dto.getMonto()) : m.getMonto();
         String antes = descripcion(m.getTipo(), m.getMotivo().getNombre(), m.getMonto());
         BigDecimal efectoViejo = efecto(m.getTipo(), m.getMonto());
         String nota = dto.getObservaciones() != null ? notaDelMovimiento(dto.getObservaciones(), sesion, admin, porque) : m.getObservaciones();
+        boolean retiro = esRetiroDeCierre(m);
+        if (retiro) cambiarRetiroDelCierre(sesion, monto);
 
         movimientoCajaService.cambiarMovimiento(m, motivo, monto, nota);
-        return aplicarCambioDeMovimientos(sesion, efecto(motivo.getTipoMov(), monto).subtract(efectoViejo), admin,
+        // el retiro del cierre se registra después de calcular lo esperado: cambiarlo no mueve el esperado ni la diferencia del corte
+        BigDecimal cambioEnEsperado = retiro ? BigDecimal.ZERO : efecto(motivo.getTipoMov(), monto).subtract(efectoViejo);
+        return aplicarCambioDeMovimientos(sesion, cambioEnEsperado, admin,
                 "Cambió " + antes + " por " + descripcion(motivo.getTipoMov(), motivo.getNombre(), monto) + " — " + porque);
     }
 
@@ -320,8 +329,32 @@ public class SesionCajaService {
         String quitado = descripcion(m.getTipo(), m.getMotivo().getNombre(), m.getMonto());
         BigDecimal efectoViejo = efecto(m.getTipo(), m.getMonto());
 
+        boolean retiro = esRetiroDeCierre(m);
+        if (retiro) cambiarRetiroDelCierre(sesion, BigDecimal.ZERO);
         movimientoCajaService.quitarMovimiento(m);
-        return aplicarCambioDeMovimientos(sesion, efectoViejo.negate(), admin, "Quitó " + quitado + " — " + motivoCorreccion.trim());
+        return aplicarCambioDeMovimientos(sesion, retiro ? BigDecimal.ZERO : efectoViejo.negate(), admin, "Quitó " + quitado + " — " + motivoCorreccion.trim());
+    }
+
+    /** Lo que registran la apertura (fondo, ajuste) y el cierre (retiro) del turno. */
+    private static boolean esDeTurno(MovimientoCaja m) {
+        String n = m.getMotivo().getNombre();
+        return FONDO_APERTURA.equals(n) || AJUSTE_APERTURA.equals(n) || RETIRO_CIERRE.equals(n);
+    }
+
+    private static boolean esRetiroDeCierre(MovimientoCaja m) {
+        return RETIRO_CIERRE.equals(m.getMotivo().getNombre());
+    }
+
+    /**
+     * Cambiar lo que se retiró al cerrar cambia lo que queda en la caja para mañana: el fondo siguiente es lo contado menos el retiro.
+     * No puede retirarse más de lo que se contó.
+     */
+    private static void cambiarRetiroDelCierre(SesionCaja sesion, BigDecimal retiroNuevo) {
+        BigDecimal contado = sesion.getEfectivoContado() != null ? sesion.getEfectivoContado() : BigDecimal.ZERO;
+        if (retiroNuevo.compareTo(contado) > 0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El retiro ($" + retiroNuevo.toPlainString() + ") no puede ser mayor a lo contado al cerrar ($" + contado.toPlainString() + ").");
+        sesion.setRetiroCierre(retiroNuevo);
+        sesion.setFondoSiguiente(contado.subtract(retiroNuevo));
     }
 
     /**
@@ -370,15 +403,17 @@ public class SesionCajaService {
         return sesion;
     }
 
-    /** Un movimiento que pertenece a este turno y que una persona capturó (no una venta, un abono ni lo del turno). */
+    /** Un movimiento que pertenece a este turno y que una persona capturó, o que registran la apertura y el cierre (no una venta ni un abono). */
     private MovimientoCaja movimientoDelCorte(SesionCaja sesion, Integer idmovimiento) {
         MovimientoCaja m = movimientoCajaRepository.findById(idmovimiento)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Movimiento no encontrado: " + idmovimiento));
+        // el retiro del cierre se registra unos instantes después de la hora de cierre
+        LocalDateTime limite = esRetiroDeCierre(m) ? sesion.getFechaCierre().plusSeconds(10) : sesion.getFechaCierre();
         boolean delTurno = m.getCaja().getIdCaja().equals(sesion.getCaja().getIdCaja()) && m.getFechaMov() != null
-                && !m.getFechaMov().isBefore(sesion.getFechaApertura()) && !m.getFechaMov().isAfter(sesion.getFechaCierre());
+                && !m.getFechaMov().isBefore(sesion.getFechaApertura()) && !m.getFechaMov().isAfter(limite);
         if (!delTurno) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ese movimiento no es de este turno.");
-        if (MotivoCajaService.esDelSistema(m.getMotivo().getNombre()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "«" + m.getMotivo().getNombre() + "» lo registra el sistema (una venta, un abono, la apertura o el cierre): "
+        if (MotivoCajaService.esDelSistema(m.getMotivo().getNombre()) && !esDeTurno(m))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "«" + m.getMotivo().getNombre() + "» lo registra el sistema (una venta, un abono, una devolución...): "
                     + "no se cambia aquí. Si hay un error en la venta, se corrige la venta; si el efectivo no cuadra, agrega un movimiento que lo compense.");
         return m;
     }

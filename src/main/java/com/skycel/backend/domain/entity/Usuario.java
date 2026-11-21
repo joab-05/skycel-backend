@@ -33,8 +33,8 @@ public class Usuario {
     private String nombreCompleto;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "codti", nullable = false)
-    private Tienda tienda;
+    @JoinColumn(name = "codti")
+    private Tienda tienda;   // el encargado, la de su tienda; los técnicos, el taller; vendedores y administradores nuevos, ninguna
 
     @Enumerated(EnumType.ORDINAL)
     @Column(name = "rol", nullable = false, columnDefinition = "TINYINT")

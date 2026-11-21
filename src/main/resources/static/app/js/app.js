@@ -1030,11 +1030,14 @@ async function cargarAuditoriaCorte(idsesion, cont, puedeCorregir) {
     caja.classList.remove('oculto');
     caja.innerHTML = '<div class="vacio">Cargando motivos...</div>';
     let motivos = [];
-    try { motivos = (await api('GET', '/api/motivos-caja')).filter(x => !x.delSistema); }
+    // lo que registran la apertura y el cierre del turno (fondo, ajuste, retiro) conserva su motivo: solo se cambia su monto
+    const deTurno = !!m && m.origen === 'TURNO';
+    try { motivos = (await api('GET', '/api/motivos-caja')).filter(x => deTurno ? x.nombre === m.motivo : !x.delSistema); }
     catch (err) { caja.innerHTML = `<div class="mensaje error">${escapar(err.message)}</div>`; return; }
+    const esRetiro = deTurno && m.motivo === 'Retiro por cierre de caja';
     caja.innerHTML = `<h2>${m ? 'Cambiar movimiento' : 'Agregar un movimiento que faltó registrar en este turno'}</h2>
       <label class="obligatorio">Motivo</label>
-      <select id="mv-motivo"><option value="">Elige el motivo</option>${motivos.map(x => `<option value="${x.idmotivo}" data-tipo="${x.tipoMov}"${m && x.nombre === m.motivo ? ' selected' : ''}>${escapar(x.nombre)} (${x.tipoMov === 1 ? 'entrada' : 'salida'})</option>`).join('')}</select>
+      <select id="mv-motivo"${deTurno ? ' disabled' : ''}><option value="">Elige el motivo</option>${motivos.map(x => `<option value="${x.idmotivo}" data-tipo="${x.tipoMov}"${m && x.nombre === m.motivo ? ' selected' : ''}>${escapar(x.nombre)} (${x.tipoMov === 1 ? 'entrada' : 'salida'})</option>`).join('')}</select>
       <label class="obligatorio">Monto</label>
       <input id="mv-monto" type="number" min="0.01" step="0.01" inputmode="decimal" data-moneda value="${m ? Number(m.monto).toFixed(2) : ''}">
       <label>Nota</label>
@@ -1046,7 +1049,9 @@ async function cargarAuditoriaCorte(idsesion, cont, puedeCorregir) {
     const efecto = () => {
       const op = document.getElementById('mv-motivo').selectedOptions[0];
       const monto = Number(document.getElementById('mv-monto').value);
-      document.getElementById('mv-efecto').textContent = op && op.value && monto > 0
+      document.getElementById('mv-efecto').textContent = esRetiro && monto > 0
+        ? 'Lo que se retira cambia lo que queda en la caja para mañana (lo contado menos el retiro). El esperado y la diferencia del corte no cambian.'
+        : op && op.value && monto > 0
         ? (op.dataset.tipo === '1' ? 'Es una ENTRADA: el efectivo esperado del corte sube ' : 'Es una SALIDA: el efectivo esperado del corte baja ') + formatoDinero(monto) + '.' : '';
     };
     document.getElementById('mv-motivo').onchange = efecto;
@@ -5700,9 +5705,6 @@ async function pantallaEmpleados() {
 }
 
 async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
-  let tiendas = [];
-  try { tiendas = await api('GET', '/api/tiendas'); } catch { /* sin conexión: se deja vacío */ }
-
   cont.innerHTML = `
     <div class="tarjeta">
       <h2>${empleado ? 'Editar empleado' : 'Nuevo empleado'}</h2>
@@ -5717,9 +5719,7 @@ async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
       <input id="ef-nombre" value="${escapar(empleado?.nombreCompleto || '')}">
       <label class="obligatorio">Rol</label>
       <select id="ef-rol">${ROLES_STAFF.map(r => `<option value="${r}" ${empleado?.rol === r ? 'selected' : ''}>${ROL_ETIQUETA[r]}</option>`).join('')}</select>
-      <label class="obligatorio" id="ef-tienda-et">Sucursal</label>
-      <select id="ef-tienda">${tiendas.map(t => `<option value="${t.codti}" ${empleado?.codti === t.codti ? 'selected' : ''}>${escapar(t.nombre)}</option>`).join('')}</select>
-      <div class="ayuda oculto" id="ef-tienda-nota">Solo de referencia (nómina): puede trabajar en cualquier sucursal.</div>
+      <div class="ayuda" id="ef-tienda-nota"></div>
       <div id="ef-tecnico-cont" class="oculto">
         <label style="display:flex; align-items:center; gap:8px; font-weight:400; text-transform:none;">
           <input type="checkbox" id="ef-tec-encargado" style="width:auto;" ${empleado?.tecnicoEncargado ? 'checked' : ''}> Técnico encargado
@@ -5738,25 +5738,24 @@ async function dibujarFormularioEmpleado(cont, empleado, alGuardar) {
 
   const selRol = document.getElementById('ef-rol');
   const contTec = document.getElementById('ef-tecnico-cont');
-  // Solo el encargado (y el técnico, que trabaja en su taller) está ligado a su tienda; un apoyo (vendedor) o un administrador cubre la que se necesite
+  // El empleado ya no trae tienda: al encargado lo designa la tienda (Configuración › Sucursales en JSystem), los técnicos trabajan en el taller
+  // y los vendedores y administradores trabajan en la sucursal que elijan al entrar
   const actualizarTec = () => {
     contTec.classList.toggle('oculto', selRol.value !== 'TECNICO');
-    const ligada = selRol.value === 'ENCARGADO_TIENDA' || selRol.value === 'TECNICO';
-    document.getElementById('ef-tienda-et').textContent = ligada ? (selRol.value === 'TECNICO' ? 'Taller' : 'Sucursal') : 'Sucursal base';
-    document.getElementById('ef-tienda-nota').classList.toggle('oculto', ligada);
+    document.getElementById('ef-tienda-nota').textContent = selRol.value === 'ENCARGADO_TIENDA'
+      ? 'Su tienda se designa en Configuración › Sucursales (JSystem): ahí se elige quién es el encargado actual.'
+      : selRol.value === 'TECNICO' ? 'Trabaja en el taller (se marca en Configuración › Sucursales de JSystem).'
+      : 'No tiene tienda fija: trabaja en la sucursal que elige al entrar.';
   };
   selRol.onchange = actualizarTec;
   actualizarTec();
 
   document.getElementById('ef-guardar').onclick = async (e) => {
     const nombreCompleto = document.getElementById('ef-nombre').value.trim();
-    const codti = Number(document.getElementById('ef-tienda').value);
     if (!nombreCompleto) { mostrarMensaje(root, 'El nombre es obligatorio.', 'error'); return; }
-    if (!codti) { mostrarMensaje(root, 'Indica la sucursal.', 'error'); return; }
 
     const payload = {
       nombreCompleto,
-      codti,
       rol: selRol.value,
       tecnicoEncargado: selRol.value === 'TECNICO' ? document.getElementById('ef-tec-encargado').checked : null,
       telefono: document.getElementById('ef-tel').value.trim() || null,

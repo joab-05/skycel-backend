@@ -29,7 +29,7 @@ public class JwtUtil {
     public String generateToken(UserDetailsImpl userDetails, String tokenUuid) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("rol", userDetails.getUsuario().getRol().name());
-        claims.put("codti", userDetails.getUsuario().getTienda().getCodti());
+        if (userDetails.getUsuario().getTienda() != null) claims.put("codti", userDetails.getUsuario().getTienda().getCodti());
         claims.put("uuid", tokenUuid);
         return createToken(claims, userDetails.getUsername());
     }

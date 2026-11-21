@@ -469,6 +469,56 @@ class SesionCajaServiceTest {
         verify(movimientoCajaService, never()).quitarMovimiento(any());
     }
 
+    private MovimientoCaja deTurno(int id, String motivo, byte tipo, String monto, LocalDateTime fecha) {
+        MovimientoCaja m = MovimientoCaja.builder().idmovimiento(id).caja(caja).usuarioEncargado(luis).tipo(tipo).monto(new BigDecimal(monto))
+                .motivo(CatMotivo.builder().idmotivo(50 + id).nombre(motivo).tipoMov(tipo).build()).fechaMov(fecha).build();
+        when(movimientoCajaRepository.findById(id)).thenReturn(Optional.of(m));
+        return m;
+    }
+
+    @Test
+    @DisplayName("el administrador corrige lo que registró la apertura: el esperado se mueve por la diferencia; el motivo no cambia")
+    void cambiarMovimientoDeApertura() {
+        int id = cerrarContando("2751");
+        SesionCaja sesion = sesiones.get(0);
+        MovimientoCaja ajuste = deTurno(910, AJUSTE_APERTURA, SALIDA, "100", sesion.getFechaApertura());
+
+        // el ajuste de apertura era de $60, no de $100: el esperado sube $40
+        SesionCajaResponseDto r = service.cambiarMovimientoDeCorte(id, 910, cambioDeMovimiento(null, "60", null, "Se contó mal el fondo al abrir"), "root");
+        assertThat(r.getEfectivoEsperado()).isEqualByComparingTo("2791");
+        assertThat(r.getDiferencia()).isEqualByComparingTo("-40");
+        verify(movimientoCajaService).cambiarMovimiento(eq(ajuste), eq(ajuste.getMotivo()), argThat(m -> m.compareTo(new BigDecimal("60.00")) == 0), any());
+
+        // no se le cambia el motivo por otro
+        assertThatThrownBy(() -> service.cambiarMovimientoDeCorte(id, 910, cambioDeMovimiento(7, "60", null, "x"), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no su motivo");
+    }
+
+    @Test
+    @DisplayName("cambiar el retiro del cierre no mueve el esperado ni la diferencia, y deja en el fondo para mañana lo contado menos el retiro")
+    void cambiarRetiroDelCierre() {
+        int id = cerrarContando("2800");                                    // retira 1,300 y deja 1,500
+        SesionCaja sesion = sesiones.get(0);
+        MovimientoCaja retiro = deTurno(911, RETIRO_CIERRE, SALIDA, "1300", sesion.getFechaCierre().plusNanos(5_000_000));   // se registra un instante después del cierre
+
+        SesionCajaResponseDto r = service.cambiarMovimientoDeCorte(id, 911, cambioDeMovimiento(null, "1000", null, "Se retiró de menos"), "root");
+
+        assertThat(r.getEfectivoEsperado()).isEqualByComparingTo("2751");
+        assertThat(r.getDiferencia()).isEqualByComparingTo("49");
+        assertThat(sesion.getRetiroCierre()).isEqualByComparingTo("1000");
+        assertThat(sesion.getFondoSiguiente()).isEqualByComparingTo("1800");
+
+        // no se puede retirar más de lo que se contó
+        assertThatThrownBy(() -> service.cambiarMovimientoDeCorte(id, 911, cambioDeMovimiento(null, "3000", null, "x"), "root"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("no puede ser mayor a lo contado");
+
+        // y si en realidad no hubo retiro, se quita: todo lo contado queda para mañana
+        service.quitarMovimientoDeCorte(id, 911, "No se retiró nada", "root");
+        assertThat(sesion.getRetiroCierre()).isEqualByComparingTo("0");
+        assertThat(sesion.getFondoSiguiente()).isEqualByComparingTo("2800");
+        verify(movimientoCajaService).quitarMovimiento(retiro);
+    }
+
     @Test
     @DisplayName("solo un administrador; el motivo de la corrección es obligatorio; no en un turno abierto")
     void movimientosDeCorte_validaciones() {

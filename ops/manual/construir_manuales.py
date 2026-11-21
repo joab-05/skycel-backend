@@ -43,7 +43,9 @@ PRIMEROS_JS = PRIMEROS_COMUN.format(
     formato="Los teléfonos se ven agrupados, por ejemplo **757-123-4567**.",
     cambio="Si un administrador te cambia de sucursal o de puesto mientras trabajas, JSystem lo detecta en un minuto y te avisa: pulsa **Volver a entrar ahora**. Si estás cobrando, termina la venta y elige **Más tarde** (te vuelve a avisar en 5 minutos). Un vendedor o un administrador usa la **sucursal que tiene configurada la computadora** (ver «Configuración»).",
     moverse="""- **F1** abre esta ayuda en el tema de la pantalla donde estás. **Ctrl + 1 … 9** abre las primeras secciones del menú.
-- Arriba a la derecha están **Ayuda**, **Avisos** (el número rojo son los que no has leído), **Configuración** de esta computadora, **Cambiar mi contraseña** (la llave) y **Cerrar sesión**. Para cambiar tu contraseña: pulsa la llave, escribe la actual y la nueva dos veces (mínimo 8 caracteres).
+- Arriba a la derecha están **Ayuda**, **Avisos** (el número rojo son los que no has leído), **Configuración** de esta computadora, el **tema** (la luna o el sol), **Cambiar mi contraseña** (la llave) y **Cerrar sesión**.
+- **Tema claro u oscuro:** pulsa la luna para pasar al tema oscuro (descansa la vista en un local con poca luz) y el sol para volver al claro. Se recuerda en esta computadora y la pantalla en la que estás se vuelve a abrir con los colores nuevos.
+- En el menú de la izquierda los grupos (**Ventas, Inventario, Finanzas…**) se **abren y se cierran** con un clic en su nombre y se recuerda cuáles dejaste abiertos; el grupo de la pantalla en la que estás siempre está abierto. Ctrl + 1 … 9 siguen abriendo las primeras secciones aunque su grupo esté cerrado. Para cambiar tu contraseña: pulsa la llave, escribe la actual y la nueva dos veces (mínimo 8 caracteres).
 - Cuando hay una **actualización** de JSystem lista, sale un recuadro en la esquina: haz clic para instalarla en ese momento (se cierra y se vuelve a abrir solo) o déjala: se instala al cerrar el programa.
 - Si arriba no aparece ningún aviso de color, todo va bien. Si aparece uno, se perdió la conexión o hay ventas esperando enviarse.
 """)
@@ -236,7 +238,7 @@ Si quien cerró se equivocó al contar o al decidir lo que deja para mañana, ab
 - Si el faltante de ese corte **ya se descontó en una nómina**, la nómina se **regulariza sola**: si la línea sigue pendiente, el descuento cambia al faltante nuevo (o se quita si ya no hay faltante); si ya se pagó, la diferencia va a la línea del mismo empleado en la **nómina abierta** (un descuento extra o una devolución). Si no hay período abierto, el sistema lo avisa y no cambia nada: abre el período y vuelve a corregir.
 - Si el corte no tenía faltante y ahora sí, el sistema avisa: se cobra con la nómina del período que incluye su fecha de cierre; si ese período ya se cerró, agrégalo como deducción en Nómina.
 - Un corte de **servicios** ya confirmado se corrige con **Reabrir**.
-- **Agregar, cambiar o quitar movimientos de efectivo del corte** (solo administrador): en el detalle del corte, pestaña **Movimientos de efectivo**, pulsa **Agregar movimiento**; elige el motivo (es una entrada o una salida), el monto, una nota y **por qué** se corrige. **Cambiar** y **Quitar** funcionan sobre lo que registró una persona; las ventas, los abonos y el fondo y el retiro del turno no se tocan aquí. El **efectivo esperado** y la **diferencia** se recalculan y, si el faltante ya estaba en la nómina, la nómina se ajusta.
+- **Agregar, cambiar o quitar movimientos de efectivo del corte** (solo administrador): en el detalle del corte, pestaña **Movimientos de efectivo**, pulsa **Agregar movimiento**; elige el motivo (es una entrada o una salida), el monto, una nota y **por qué** se corrige. **Cambiar** y **Quitar** funcionan sobre lo que registró una persona **y sobre lo que registran la apertura y el cierre del turno** (**Fondo de apertura**, **Ajuste de apertura** y **Retiro por cierre de caja**; de esos solo cambia el monto, no el motivo). Si cambias el **retiro del cierre**, lo que queda en la caja para mañana se ajusta (lo contado menos el retiro) y el esperado y la diferencia del corte no cambian. Las ventas, los abonos y las devoluciones no se tocan aquí. El **efectivo esperado** y la **diferencia** se recalculan y, si el faltante ya estaba en la nómina, la nómina se ajusta.
 - Ejemplo: se cobró la entrega de una reparación pero se registró en el sistema hasta el día siguiente. El primer turno tuvo un **sobrante** y el segundo un **faltante**. Agrega una **entrada** al primer corte (por lo que se cobró) y una **salida** al segundo (el cobro que ya se había contado antes): los dos cuadran y en total no cambia el dinero de la caja.
 
 ### Revisar un corte a detalle (encargado y administrador)
@@ -293,10 +295,10 @@ Muestra los productos de **tu tienda**: existencia, precio y el mínimo que conv
 ### Qué muestra
 Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Por omisión la lista **no muestra los artículos agotados** (el filtro de existencias dice **Con stock**): para verlos elige **Sin Stock** (solo los agotados) o **Todos** (todo). Los **servicios** no tienen existencia: muestran **∞** y no entran en «Sin stock» ni «Stock bajo». Al pie de la tabla ves el conteo de lo que se muestra. **Valorización** da el valor del inventario a costo y a precio de venta, y **Exportar** lo saca a Excel.
 
-### Buscar en todas las tiendas
-Activa **Todas las tiendas** junto al buscador y escribe el nombre, el código o el IMEI. La tabla muestra en qué otras sucursales (y en la bodega) hay. Con **Solicitar traspaso** eliges la cantidad y la solicitud le llega a esa tienda. Necesita conexión.
+### Inventario general: dónde hay cada artículo
+Son **dos vistas separadas** en el menú: **Inventario** (la tienda de esta computadora: ver, editar, entradas y salidas) e **Inventario general** (todas las tiendas y la bodega). En el general escribe el nombre, el código o el IMEI y la tabla muestra en qué sucursales hay y cuánto. Con **Solicitar traspaso** (en las demás tiendas) eliges la cantidad y la solicitud le llega a esa tienda. Necesita conexión.
 
-Un **administrador** también puede corregir las existencias de un accesorio en cualquiera de esas tiendas, sin tenerla configurada en su equipo: en la fila de la tienda están los botones **+** (entrada) y **−** (salida); se pide el motivo, como siempre, y al terminar la búsqueda se repite para ver la existencia nueva. Los equipos (celulares y tablets) se siguen manejando por IMEI en **Equipos**.
+Un **administrador** también puede corregir las existencias de un accesorio en cualquiera de esas tiendas (la propia incluida), sin tenerla configurada en su equipo: en la fila de la tienda están los botones **+** (entrada) y **−** (salida); se pide el motivo, como siempre, y al terminar la búsqueda se repite para ver la existencia nueva. Los equipos (celulares y tablets) se siguen manejando por IMEI en **Equipos**.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
@@ -735,7 +737,7 @@ Cada técnico gana un **porcentaje de la ganancia neta** del mes (por ejemplo, e
 
 REPORTES_JS = """## Reportes
 
-En JSystem hay **dos** pantallas: **Reportes** (para encargados y administradores) y **Reportes de Gerencia** (solo administradores).
+En JSystem hay una sola entrada en el menú, **Reportes**. Un administrador entra al **resumen de Gerencia** (con un botón **Historial de ventas** para ver cada ticket); un encargado entra a las **ventas de su tienda** por ticket y por artículo (y el administrador llega a ellas desde ese botón, y de vuelta con **Resumen de Gerencia**).
 
 Casi todas las pestañas de **Reportes de Gerencia** traen **gráficas** (barras, líneas y pastel): pasa el cursor sobre una barra, un punto o una rebanada para ver la cifra completa.
 
@@ -786,7 +788,7 @@ EMPLEADOS_JS = """## Empleados, nómina y comisiones
 Sección de administración (los descansos también los ve el encargado).
 
 ### Empleados
-Aquí se da de alta a quien va a usar el sistema: su sucursal, su **rol** y su contraseña (también se cambia aquí si la olvidó). La sucursal solo **liga** al **encargado** (y al técnico, que trabaja en su taller); para un vendedor (apoyo) o un administrador es su **«sucursal base»**, de referencia (nómina): pueden trabajar en cualquiera. **Si cambias la sucursal de alguien**, JSystem le avisa y le pide volver a entrar. Los técnicos se marcan con su rol; uno de ellos puede ser el **técnico encargado**, que reparte las órdenes del taller.
+Aquí se da de alta a quien va a usar el sistema: su **rol** y su contraseña (también se cambia aquí si la olvidó). **El empleado ya no trae tienda:** al **encargado** lo designa la tienda (en **Configuración › Sucursales**, campo **Encargado actual**), los **técnicos** trabajan en el **taller** (la sucursal marcada como taller) y los vendedores y administradores trabajan en la sucursal de la computadora donde inician sesión. En la lista, la columna **Sucursal** solo se llena para el encargado (su tienda) y el técnico (el taller). Los técnicos se marcan con su rol; uno de ellos puede ser el **técnico encargado**, que reparte las órdenes del taller.
 
 ### Nómina
 1. **Abrir período**: elige desde, hasta y la fecha de pago. Cada empleado activo entra con su sueldo.
@@ -805,7 +807,7 @@ EMPLEADOS_WEB = """## Empleados, nómina y comisiones
 
 Sección de administración (los descansos también los ve el encargado).
 
-- **Empleados**: personal, sucursal y **rol**. Aquí se da de alta a quien va a usar el sistema y se cambia su contraseña si la olvidó. La sucursal solo **liga** al encargado (y al técnico); para un vendedor o un administrador es su «sucursal base» y pueden trabajar en cualquiera. Los técnicos se marcan con su rol; uno de ellos puede ser el **técnico encargado**, que reparte las órdenes del taller.
+- **Empleados**: personal, sucursal y **rol**. Aquí se da de alta a quien va a usar el sistema y se cambia su contraseña si la olvidó. La tienda ya no se asigna por empleado: al encargado lo designa la tienda (Configuración › Sucursales) y los técnicos trabajan en el taller. Los técnicos se marcan con su rol; uno de ellos puede ser el **técnico encargado**, que reparte las órdenes del taller.
 - **Nómina**: períodos de pago con las **percepciones** y **deducciones** de cada empleado y su pago. **Historial de nómina** guarda los períodos anteriores. Los **faltantes de caja** se descuentan solos: el sistema agrega como deducción el faltante de cada corte cerrado en el período, a quien cerró el turno. **Traer faltantes de caja** los actualiza. Si quitas esa deducción, el faltante queda **perdonado**. Los sobrantes no se compensan.
 - **Comisiones**: comisiones por ventas del periodo y su pago.
 - **Descansos**: descansos y vacaciones del personal, con su saldo.
@@ -820,7 +822,7 @@ Los datos de **esta computadora** (servidor, sucursal, impresoras) y del negocio
 - **Ticket e impresora:** la impresora de tickets y el texto del ticket.
 - **Etiquetas:** la impresora y el tamaño de las etiquetas con código de barras (ver abajo).
 - **Negocio** (administrador): logo, datos del negocio, pie del ticket, plazo de **devoluciones** y **formas de pago** (por ejemplo, habilitar la tarjeta).
-- **Sucursales:** nombre, domicilio y teléfono que salen en el ticket de cada sucursal. Solo un administrador los cambia.
+- **Sucursales:** nombre, domicilio y teléfono que salen en el ticket de cada sucursal, el **encargado actual** (se elige entre los empleados con rol «Encargado de tienda»; quien deja de serlo ya no tiene tienda) y si es el **taller** de los técnicos (solo uno). Solo un administrador los cambia.
 - **Sistema:** versión del programa y datos para soporte. El administrador ve además **Computadoras con JSystem**: cada computadora con su última sesión, su **versión** y si está **al día**, con la actualización **descargada** (falta cerrar el programa), **desactualizada**, con **error** o **sin reportar** (más de un día). Cada computadora reporta sola cada pocos minutos con la sesión abierta; si alguna aparece mal, ábrela y pulsa **Buscar actualizaciones**. Aquí también está **Actualizaciones**: el programa se actualiza solo (revisa al abrirse y cada 4 horas, baja la versión nueva y la instala **al cerrar** el programa). Si quieres instalarla de inmediato, pulsa **Buscar actualizaciones** y luego **Cerrar e instalar la actualización**; el programa se vuelve a abrir solo.
 
 ### Respaldo y limpieza automáticos (los hace el servidor)
@@ -846,7 +848,7 @@ Las etiquetas bajas (20 mm de alto o menos, como las de 30 × 14) salen en versi
 AVISOS_JS = """## Avisos e historial de cambios
 
 ### Avisos
-En el menú de la izquierda, **Avisos** muestra lo que el sistema te informa: un traspaso que llegó, el avance de una garantía, un inventario listo para revisar, un ajuste de inventario hecho por un encargado… El número rojo son los que no has leído. Haz clic en uno para abrir la pantalla a la que se refiere; **Marcar todas como leídas** los limpia.
+El botón de la campana, arriba a la derecha de cada pantalla, abre **Avisos** y muestra lo que el sistema te informa: un traspaso que llegó, el avance de una garantía, un inventario listo para revisar, un ajuste de inventario hecho por un encargado… El número rojo son los que no has leído. Haz clic en uno para abrir la pantalla a la que se refiere; **Marcar todas como leídas** los limpia.
 
 **Llegan solos:** mientras tengas la sesión abierta, el sistema revisa cada 20 segundos. Cuando llega un aviso nuevo **suena una campanita**, sale un recuadro en la esquina de la pantalla (haz clic en él para abrir los avisos) y el número rojo se actualiza en todas las pantallas. Puedes **elegir el sonido** (Campana, Cristal, Suave, Din-don u OK) en esa misma pantalla: al escogerlo suena, y **Probar** lo repite. Si no quieres sonido, quita la casilla **Sonido al llegar un aviso** (cada computadora guarda su propia elección). En la versión web pasa lo mismo, con la página abierta; el celular solo suena si el navegador ya permitió el sonido (basta con haber tocado la pantalla una vez).
 
