@@ -105,9 +105,9 @@ La caja de tu tienda debe estar **abierta**. Si está cerrada, el sistema te pid
 ### Cómo vender
 1. Pulsa **F2** y escribe parte del nombre o el código del artículo (o pasa el lector de códigos). También puedes elegir una categoría: **Todos, Equipos, Accesorios o Servicios**; con las flechas **←** y **→** del teclado cambias de categoría.
 2. Pulsa **Enter** o haz clic en el producto: se agrega al carrito. Con el lector de códigos se agrega solo.
-3. Elige la **forma de pago**: Efectivo, Transferencia o Mixto (el cliente paga una parte de cada forma: escribe cuánto va en cada una y solo deja cobrar cuando cuadra con el total). La tarjeta aparece solo si el administrador la habilita.
-4. En efectivo escribe lo que **recibes**. El sistema muestra el **cambio**: en verde si alcanza, en rojo si falta dinero.
-5. Pulsa **Procesar venta** (o **F9**) y entrega el ticket. Si das doble clic por error, el sistema cobra **una sola vez**.
+3. Cuando el carrito esté listo pulsa **Cobrar** (o **F9**): se abre la **ventana de cobro** con el total a cobrar.
+4. Elige la **forma de pago**: Efectivo, Transferencia o Mixto (el cliente paga una parte de cada forma: escribe cuánto va en cada una y solo deja cobrar cuando cuadra con el total). La tarjeta aparece solo si el administrador la habilita.
+5. En efectivo el cursor ya está en **Monto recibido**: escribe lo que recibes (o pulsa **Exacto** si paga justo). El sistema muestra el **cambio**: en verde si alcanza, en rojo si falta dinero. Pulsa **Enter** (o **Confirmar cobro**) y entrega el ticket. Si das doble clic por error, el sistema cobra **una sola vez**.
 
 Los precios ya **incluyen IVA**. Los descuentos que define el administrador se aplican solos.
 
@@ -291,10 +291,12 @@ INVENTARIO_JS = """## Inventario
 Muestra los productos de **tu tienda**: existencia, precio y el mínimo que conviene tener.
 
 ### Qué muestra
-Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞** y no entran en «Sin stock» ni «Stock bajo». Al pie de la tabla ves el conteo de lo que se muestra. **Valorización** da el valor del inventario a costo y a precio de venta, y **Exportar** lo saca a Excel.
+Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Por omisión la lista **no muestra los artículos agotados** (el filtro de existencias dice **Con stock**): para verlos elige **Sin Stock** (solo los agotados) o **Todos** (todo). Los **servicios** no tienen existencia: muestran **∞** y no entran en «Sin stock» ni «Stock bajo». Al pie de la tabla ves el conteo de lo que se muestra. **Valorización** da el valor del inventario a costo y a precio de venta, y **Exportar** lo saca a Excel.
 
 ### Buscar en todas las tiendas
 Activa **Todas las tiendas** junto al buscador y escribe el nombre, el código o el IMEI. La tabla muestra en qué otras sucursales (y en la bodega) hay. Con **Solicitar traspaso** eliges la cantidad y la solicitud le llega a esa tienda. Necesita conexión.
+
+Un **administrador** también puede corregir las existencias de un accesorio en cualquiera de esas tiendas, sin tenerla configurada en su equipo: en la fila de la tienda están los botones **+** (entrada) y **−** (salida); se pide el motivo, como siempre, y al terminar la búsqueda se repite para ver la existencia nueva. Los equipos (celulares y tablets) se siguen manejando por IMEI en **Equipos**.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
@@ -735,6 +737,8 @@ REPORTES_JS = """## Reportes
 
 En JSystem hay **dos** pantallas: **Reportes** (para encargados y administradores) y **Reportes de Gerencia** (solo administradores).
 
+Casi todas las pestañas de **Reportes de Gerencia** traen **gráficas** (barras, líneas y pastel): pasa el cursor sobre una barra, un punto o una rebanada para ver la cifra completa.
+
 ### Reportes (ventas)
 Abre las ventas **por ticket** (cada venta, para reimprimir o revisar) o **por artículo vendido**: cuántas piezas de cada artículo se vendieron y por cuánto, con **Resumen por artículo** y el desglose renglón por renglón (como en el sistema anterior). Elige el periodo y la sucursal (un encargado solo ve la suya) y se puede imprimir o exportar.
 
@@ -743,10 +747,10 @@ Para administradores (todas las sucursales o la que elijan). Arriba eliges el **
 
 | Pestaña | Para qué sirve |
 |---|---|
-| Resumen | Ventas, utilidad y margen; comparativo por sucursal, lo que más se vende y el valor del inventario |
+| Resumen | Ventas, utilidad y margen; comparativo por sucursal, lo que más se vende y el valor del inventario, con gráficas |
 | Estado de resultados | Ventas, devoluciones, costo, utilidad bruta, gastos y utilidad neta, comparados con el periodo anterior |
-| Ventas por día | Cuánto se vendió cada día, con gráfica |
-| Por categoría | Qué categorías venden más y cuánto dejan |
+| Ventas por día | Cuánto se vendió cada día, con gráfica (barras si son pocos días, líneas si es un mes o más) |
+| Por categoría | Qué categorías venden más y cuánto dejan, con reparto en pastel y barras |
 | Sin movimiento | Accesorios con existencia que no se han vendido en los días que elijas, y el dinero que tienen parado |
 | Equipos rezagados | Equipos que llevan mucho tiempo sin venderse, con su costo |
 | Caja de todas las sucursales (administrador) | El efectivo y los movimientos de hoy de todas las cajas |
