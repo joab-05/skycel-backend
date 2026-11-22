@@ -3790,9 +3790,11 @@ function parsearManual(md) {
     if (!esLista && !num) cerrarLista();
     if (!esNota) cerrarNota();
     if (!esTabla) cerrarTabla();
-    const sigue = linea !== '' && !esLista && !num && !esNota && !esTabla && !linea.startsWith('#');
+    const esImg = /^!\[(.*)\]\((.+)\)$/.exec(linea);
+    const sigue = linea !== '' && !esLista && !num && !esNota && !esTabla && !esImg && !linea.startsWith('#');
     if (!sigue) cerrarParrafo();
-    if (linea.startsWith('### ')) actual?.bloques.push({ t: 'h3', x: linea.slice(4).trim() });
+    if (esImg) actual?.bloques.push({ t: 'i', x: esImg[1], src: esImg[2] });
+    else if (linea.startsWith('### ')) actual?.bloques.push({ t: 'h3', x: linea.slice(4).trim() });
     else if (linea.startsWith('## ')) { actual = { titulo: linea.slice(3).trim(), bloques: [] }; actual.slug = slugTema(actual.titulo); temas.push(actual); }
     else if (linea.startsWith('# ')) titulo = linea.slice(2).trim();
     else if (esLista) { if (lista.length && numerada) cerrarLista(); numerada = false; lista.push(linea.slice(2).trim()); }
@@ -3813,6 +3815,7 @@ function temaHtml(t) {
   return `<h2>${escapar(t.titulo)}</h2>` + t.bloques.map(b => {
     if (b.t === 'h3') return `<h3>${textoManualHtml(b.x)}</h3>`;
     if (b.t === 'p') return `<p>${textoManualHtml(b.x)}</p>`;
+    if (b.t === 'i') return `<figure class="man-fig"><img src="/app/ayuda/${escapar(b.src)}" alt="${escapar(b.x)}" loading="lazy"><figcaption>${escapar(b.x)}</figcaption></figure>`;
     if (b.t === 'n') return `<blockquote>${textoManualHtml(b.x)}</blockquote>`;
     if (b.t === 'l') { const e = b.n ? 'ol' : 'ul'; return `<${e}>${b.x.map(i => `<li>${textoManualHtml(i)}</li>`).join('')}</${e}>`; }
     return `<div class="man-tabla"><table><thead><tr>${b.cab.map(c => `<th>${textoManualHtml(c)}</th>`).join('')}</tr></thead><tbody>${
@@ -3894,6 +3897,14 @@ async function pantallaAyuda(param) {
   function pintarTema() {
     const el = document.getElementById('ay-tema');
     el.innerHTML = temaHtml(actual);
+    // Tocar una captura la muestra grande
+    el.querySelectorAll('.man-fig img').forEach(im => im.onclick = () => {
+      const v = document.createElement('div');
+      v.className = 'man-visor';
+      v.innerHTML = `<img src="${im.src}" alt="${escapar(im.alt)}">`;
+      v.onclick = () => v.remove();
+      document.body.appendChild(v);
+    });
     el.scrollTop = 0;
     if (history.replaceState) history.replaceState(null, '', '#/ayuda/' + actual.slug);
     window.scrollTo(0, 0);

@@ -1011,3 +1011,11 @@ input.moneda { padding-left: 28px; background-repeat: no-repeat; background-posi
 .cierre .v-retira { color: #0f766e; }
 .error-texto { color: #dc2626; font-weight: 700; }
 .cierre .campo-grande.moneda { padding-left: 32px; background-size: 12px 18px; }
+
+/* Capturas del manual */
+.man-fig { margin: 16px auto 8px; max-width: 380px; text-align: center; }
+.man-fig img { width: 100%; height: auto; border: 1px solid var(--borde); border-radius: 14px; box-shadow: 0 2px 10px rgba(15,23,42,.12); cursor: zoom-in; display: block; }
+.man-fig figcaption { font-size: 12.5px; color: var(--gris); margin-top: 6px; font-style: italic; }
+.man-visor { position: fixed; inset: 0; z-index: 9999; background: rgba(15,23,42,.88); display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 16px; cursor: zoom-out; }
+.man-visor img { max-width: min(100%, 520px); height: auto; border-radius: 12px; background: #fff; }
+@media print { .man-fig { break-inside: avoid; max-width: 300px; } .man-fig img { box-shadow: none; } }

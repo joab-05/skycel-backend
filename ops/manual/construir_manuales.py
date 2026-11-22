@@ -25,6 +25,11 @@ Todo lo que se captura (ventas, inventario, caja) se guarda en un **servidor** e
 3. Solo verás las secciones que tu rol permite.
 4. Al terminar, **cierra sesión** ({salir}). Así cada venta queda a nombre de quien la hizo.
 
+@@WEB web-login.png | La pantalla de acceso.@@
+@@WL - **①** **Usuario:** el que te dio el administrador.
+@@WL - **②** **Contraseña.**
+@@WL - **③** **Entrar.**
+
 > No compartas tu contraseña. Si la olvidas, un administrador la cambia en **Empleados**.
 
 ### Escribir montos y teléfonos
@@ -71,6 +76,17 @@ PRIMEROS_WEB = PRIMEROS_COMUN.format(
     moverse="""- En el celular hay un acceso rápido abajo: **Inicio, Vender, Inventario y Caja**.
 - **Ajustes** sirve para cambiar tu contraseña; el administrador también define ahí las formas de pago y el logo del negocio.
 - El indicador de conexión te dice si estás en línea o si hay cosas guardadas esperando enviarse.
+
+@@WEB web-menu.png | El inicio en el celular.@@
+@@WL - **①** **Ayuda, avisos, ajustes y salir.** El número rojo de la campana son los avisos que no has leído.
+@@WL - **②** **Nueva venta,** si tu rol vende.
+@@WL - **③** **Los números del día** (ventas, tickets, bajo stock, traspasos, por pagar y órdenes en el taller, según tu rol). Toca uno para abrir su pantalla.
+@@WL - **④** **El acceso rápido de abajo:** Inicio, Vender, Inventario y Caja.
+
+@@WEB web-ajustes.png | Ajustes: tu contraseña y, para el administrador, las formas de pago y el logo.@@
+@@WL - **①** **Cambiar mi contraseña:** escribe la actual y la nueva (mínimo 8 caracteres).
+@@WL - **②** **Formas de pago** (administrador): si el negocio acepta tarjeta.
+
 """)
 
 # ───────────────────────────── Roles ─────────────────────────────
@@ -207,6 +223,23 @@ La caja de tu tienda debe estar **abierta**. Si está cerrada, aparece el formul
 4. En efectivo escribe lo que **recibes**; el sistema calcula el **cambio**.
 5. Pulsa **Cobrar**. Si tocas dos veces por error, el sistema cobra **una sola vez**.
 
+@@WEB web-pos.png | El punto de venta: busca y toca el producto para agregarlo.@@
+@@WL - **①** **Buscador:** por nombre, código, modelo o IMEI.
+@@WL - **②** **Categorías** para filtrar el catálogo.
+@@WL - **③** **El producto:** toca para agregarlo al carrito. Si trae descuento, ves el precio de lista tachado y el que se cobra.
+@@WL - **④** **Cerrar caja:** termina el turno y genera el corte.
+
+@@WEB web-pos-carrito.png | El carrito de compra.@@
+@@WL - **①** **Cada renglón:** su cantidad y su precio. El precio tiene candado: no se cambia a mano.
+@@WL - **②** **Pedir descuento** para ese artículo.
+@@WL - **③** **El total** de la venta.
+
+@@WEB web-pos-cobro.png | Cliente, forma de pago y cobro.@@
+@@WL - **①** **Cliente** (opcional): sin marcarlo, la venta es de mostrador.
+@@WL - **②** **Forma de pago:** efectivo, transferencia o mixto.
+@@WL - **③** **Monto recibido** en efectivo; abajo ves lo que falta por cobrar y el cambio.
+@@WL - **④** **Cobrar:** guarda la venta y genera el ticket.
+
 Con pago **Mixto**, el cliente paga una parte de cada forma: escribe cuánto va en efectivo y cuánto en transferencia. El sistema te dice cuánto falta o cuánto se pasa y solo deja cobrar cuando **cuadra** con el total. En el cajón entra únicamente lo que se pagó en efectivo.
 
 Los precios ya **incluyen IVA** y los descuentos del administrador se aplican solos.
@@ -252,6 +285,11 @@ La caja es tu **turno de trabajo**: se **abre** al empezar el día con un fondo,
 @@L - **⑥** **Motivos, Nueva caja, Resumen y Cortes:** el catálogo de motivos de los movimientos, dar de alta otra caja, un resumen del período y los cortes de turnos anteriores.
 @@L - **⑦** **Los movimientos:** las entradas en verde y las salidas en rojo, con su motivo y quién las hizo. Se pueden buscar y exportar.
 
+@@WEB web-caja.png | La pantalla de Caja con el turno abierto.@@
+@@WL - **①** **Nuevo movimiento:** una entrada o salida de efectivo fuera de una venta (encargado y administrador).
+@@WL - **②** **El turno:** quién abrió la caja y el efectivo que debe haber, con cómo se calcula.
+@@WL - **③** **Cerrar caja (corte):** termina el turno.
+
 ### Abrir la caja
 1. Entra a **Caja** y pulsa **Abrir caja** (el punto de venta también lo ofrece si está cerrada).
 2. Cuenta el efectivo del cajón y captúralo como **fondo inicial**. El sistema sugiere lo que se dejó al cerrar ayer (con un enlace para usarlo).
@@ -271,6 +309,12 @@ La ventana de cierre te guía con **tres cuadros numerados** y un resumen:
 3. **Observaciones** (opcional): por ejemplo, un billete roto o un retiro que no se anotó.
 4. Mientras escribes, el cuadro de abajo te dice **cuánto se retira del cajón** y **cuánto se queda**. Si el fondo es mayor a lo que contaste, avisa en rojo y el botón **Cerrar caja y generar corte** no se activa. Antes de cerrar te pregunta una última vez con las cifras.
 5. Se abre el **corte**: ahí ves el efectivo esperado, lo contado y si **cuadra**, hay **faltante** o hay **sobrante**.
+
+@@WEB web-caja-cierre.png | El cierre de caja, en tres pasos.@@
+@@WL - **①** **Efectivo contado:** el total de billetes y monedas del cajón.
+@@WL - **②** **Cuánto se queda para mañana:** el fondo del siguiente turno.
+@@WL - **③** **Observaciones** (opcional).
+@@WL - **④** **Cerrar caja y generar corte:** se activa cuando lo contado alcanza para dejar ese fondo.
 
 @@IMG corte.png | El corte de caja de un turno ya cerrado.@@
 @@L - **①** **Esperado, contado y diferencia:** si la diferencia es **cero**, el corte cuadró; en rojo hay **faltante** y en ámbar, **sobrante**.
@@ -322,6 +366,10 @@ Sirven para regresar un producto vendido: se le **reembolsa** al cliente o se le
 @@L - **②** **Filtro de estado:** por omisión muestra solo las **Pendientes**; elige **Todas** para ver también las procesadas y las rechazadas.
 @@L - **③** **La lista:** folio, venta, cliente, tipo (reembolso o cambio), monto, motivo y estado (ámbar pendiente, verde procesada, rojo rechazada).
 @@L - **④** **Los totales:** pendientes de aprobar, procesadas, monto devuelto y rechazadas.
+
+@@WEB web-devoluciones.png | La pantalla de devoluciones.@@
+@@WL - **①** **Solicitar devolución:** escribe el número de venta (está en el ticket) y pulsa **Consultar**.
+@@WL - **②** **Historial:** las devoluciones pendientes de aprobar o todas.
 
 ### Pedir una devolución
 1. Entra a **Devoluciones** y pulsa **Nueva devolución**.
@@ -422,6 +470,12 @@ INVENTARIO_WEB = """## Inventario
 
 Muestra los productos de **tu tienda**: existencia, precio y el mínimo que conviene tener.
 
+@@WEB web-inventario.png | El inventario de la sucursal.@@
+@@WL - **①** **Equipos (IMEI):** los celulares y tablets, uno por uno.
+@@WL - **②** **Nuevo producto** (administrador).
+@@WL - **③** **Buscador** por nombre, código, marca o modelo.
+@@WL - **④** **Un producto:** su código, categoría, precio y existencias. Tócalo para ver su detalle.
+
 ### Qué muestra
 Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞**. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay; con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
 
@@ -456,6 +510,11 @@ Cada equipo con su IMEI, el artículo, su condición (**nuevo**, **seminuevo** o
 @@L - **④** **Acciones de cada equipo:** copiar el IMEI, editar (administrador), marcar como **rezagado** y dar de baja.
 @@L - **⑤** **Por artículo:** el resumen de cuántos hay de cada modelo.
 
+@@WEB web-equipos.png | Los equipos de la sucursal.@@
+@@WL - **①** **Registrar equipos:** da de alta uno o varios por su IMEI o serie.
+@@WL - **②** **Buscador** por IMEI, serie o nombre.
+@@WL - **③** **Un equipo:** su estado, precio, costo, días en existencia y sección. Sus botones sirven para ver su historial, corregirlo, marcarlo rezagado o darlo de baja.
+
 ### Registrar equipos
 1. Pulsa **Registrar equipos** y elige el **artículo**. Si es un modelo o color nuevo, primero se registra en Inventario › Nuevo producto, con la categoría Equipos.
 2. Escribe los IMEI, **uno por línea**. Para un seminuevo con su propio costo y precio: `350000000000029; seminuevo; 800; 1500`.
@@ -484,6 +543,10 @@ Es el conteo de lo que hay en el local, para compararlo con lo que dice el siste
 @@L - **③** **Inventarios anteriores:** su folio, fechas, lo que cubrió, quién contó y quién confirmó, su estado y cuántos faltantes y sobrantes tuvo.
 @@L - **④** **Ver:** abre el resumen de ese inventario.
 
+@@WEB web-fisico.png | El inventario físico de una sucursal sin conteo en curso.@@
+@@WL - **①** **Aperturar inventario:** empieza un conteo nuevo.
+@@WL - **②** **Inventarios anteriores:** con **Ver** abres el resumen de cada uno.
+
 ### Qué se va a inventariar
 Al aperturar, el sistema pregunta qué cubre el inventario:
 - **Toda la tienda** (recomendado para un conteo completo o una entrega de tienda): todo lo que hay en el sistema y no escaneas queda como faltante.
@@ -506,6 +569,12 @@ Al aperturar, el sistema pregunta qué cubre el inventario:
 @@L - **⑥** **Enviar a revisión:** cuando termines de contar.
 @@L - **⑦** **Cancelar inventario:** descarta el conteo sin cambiar nada.
 
+@@WEB web-fisico-conteo.png | El conteo en curso.@@
+@@WL - **①** **Qué cubre** este inventario y quién lo inició.
+@@WL - **②** **Campo de lectura:** escanea el código del producto o el IMEI del equipo.
+@@WL - **③** **Contar:** suma la pieza si no usas lector.
+@@WL - **④** **Lo contado hasta ahora:** con el lápiz corriges la cantidad. Aquí no ves lo que el sistema espera.
+
 ### El administrador confirma
 1. Abre el inventario (arriba aparece qué sucursales tienen uno **por revisar**). El resumen muestra, por artículo, su **código**, lo que dice el sistema, lo contado, la diferencia y su valor a costo. En los equipos, **Ver equipos** lista los IMEI que no se encontraron.
 2. Para cada diferencia elige **Ajustar** (las existencias se corrigen al cerrar) o **Justificar** (no se ajusta; no pide motivo). **Ajustar** solo **marca** la decisión («Se ajustará»): las existencias no cambian hasta **Confirmar y cerrar inventario**, y puedes deshacerla. **Ajustar todo lo pendiente** decide las que falten. Lo que ya revisaste pasa **al final** de la tabla (más tenue) y puedes ocultarlo con **Ocultar las ya revisadas**, así arriba siempre queda lo que falta por decidir. Un equipo que **sobra** no se da de alta solo: se justifica o se registra en **Equipos**.
@@ -521,6 +590,17 @@ Al aperturar, el sistema pregunta qué cubre el inventario:
 @@L - **⑤** **Decidir:** ⇄ corrige la cantidad contada, ✓ marca para **ajustar** y el lápiz **justifica** (no se ajusta); la flecha de regreso deshace la decisión.
 @@L - **⑥** **Confirmar y cerrar inventario:** aplica los ajustes marcados.
 @@L - **⑦** **Ajustar todo lo pendiente**, **Devolver para recontar** y **Cancelar inventario.**
+
+@@WEB web-fisico-revision.png | El resumen en revisión.@@
+@@WL - **①** **Por revisar:** las sucursales que ya enviaron su conteo.
+@@WL - **②** **Las cifras:** artículos contados, faltantes y sobrantes con su valor, y las diferencias por decidir.
+@@WL - **③** **Solo las diferencias:** oculta lo que cuadró.
+
+@@WEB web-fisico-cierre.png | Al final del resumen: confirmar y cerrar.@@
+@@WL - **①** **Confirmar y cerrar inventario:** aplica los ajustes marcados.
+@@WL - **②** **Ajustar todo lo pendiente.**
+@@WL - **③** **Devolver para recontar.**
+@@WL - **④** **Cancelar inventario.**
 
 El resumen se puede **imprimir** (con renglones de firma) y **exportar** a Excel. Un inventario sin terminar se puede **cancelar**: no cambia nada.
 """
@@ -551,6 +631,11 @@ Junta en un solo lugar todo lo que **cambió las existencias fuera de una venta,
 @@L - **③** **Cantidad y valor:** en verde lo que entró y en rojo lo que salió, con su valor a costo.
 @@L - **④** **Motivo y nota** que escribió quien lo registró.
 
+@@WEB web-mermas.png | El control de mermas.@@
+@@WL - **①** **Tienda y período** que se consultan.
+@@WL - **②** **Por motivo:** y también por persona, por tienda (administrador) y el detalle.
+@@WL - **③** **Detalle:** cada movimiento con quién, qué y por qué.
+
 """
 
 # ───────────────────────────── Traspasos ─────────────────────────────
@@ -566,6 +651,12 @@ Cada traspaso tiene **un solo folio**: cuando una solicitud se acepta y se gener
 @@L - **③** **Tienda:** el administrador elige de cuál tienda ver los traspasos.
 @@L - **④** **Pestañas:** los traspasos y los **faltantes por resolver**.
 @@L - **⑤** **La lista:** número, tipo, si te lo piden o sale de tu tienda, origen, destino, productos y estado.
+
+@@WEB web-traspasos.png | La pantalla de traspasos.@@
+@@WL - **①** **Enviar mercancía:** mandas mercancía a otra tienda.
+@@WL - **②** **Pedir mercancía:** la solicitas a otra tienda.
+@@WL - **③** **Faltantes por resolver.**
+@@WL - **④** **Un traspaso:** su número, si es envío o solicitud, de dónde a dónde va y su estado.
 
 ### Enviar mercancía
 1. Entra a **Traspasos** y pulsa **Nuevo envío**.
@@ -627,6 +718,10 @@ Control de lo que los clientes le deben a la tienda y de sus pagos.
 @@L - **④** **Estado:** en rojo **Vencida**, en ámbar **Por cobrar**. Los días van en rojo cuando ya se pasó la fecha.
 @@L - **⑤** **Acciones:** el billete registra un pago, el ojo muestra el detalle y el reloj, el historial de pagos.
 
+@@WEB web-cxc.png | Las cuentas por cobrar.@@
+@@WL - **①** **Buscador** por cliente o factura.
+@@WL - **②** **Una cuenta:** su estado (vencida o por cobrar), lo que se debe y los días. Tócala para ver el detalle y abonar.
+
 ### Registrar una cuenta
 Pulsa **Nueva cuenta** y captura el cliente, el monto y el **número de factura** (hasta 20 caracteres).
 
@@ -662,6 +757,11 @@ Registra los reclamos de garantía de productos vendidos y su viaje hasta el pro
 @@L - **③** **La lista:** folio, producto, cliente, falla, fecha límite y días que quedan.
 @@L - **④** **Estado:** recibida, en proveedor, resuelta…
 @@L - **⑤** **Los totales:** abiertas, vencidas, con el proveedor y listas para entregar.
+
+@@WEB web-garantias.png | La lista de garantías.@@
+@@WL - **①** **Recibir garantía:** registra el reclamo de un cliente.
+@@WL - **②** **Buscador** por folio, producto, IMEI o cliente.
+@@WL - **③** **Una garantía:** su estado y los días que quedan. Tócala para ver su detalle.
 
 ### El recorrido
 | Paso | Quién lo registra |
@@ -726,6 +826,11 @@ Cubre las reparaciones: se **recibe** el equipo en la tienda, se **repara** en e
 
 La recepción también funciona **sin conexión** en JSystem: el comprobante sale con un folio provisional y sin QR; el definitivo (OS-…) se le da cuando se envíe al servidor.
 
+@@WEB web-recepcion.png | Recibir un equipo.@@
+@@WL - **①** **Sucursal y cliente:** si ya es cliente, escribe su teléfono y pulsa **Buscar**; si es nuevo, captura sus datos.
+@@WL - **②** **Buscar:** trae al cliente por su teléfono.
+@@WL - **③** **El equipo:** marca, modelo, IMEI o serie, accesorios que deja y estado físico.
+
 ### Avisar al cliente por WhatsApp
 En cualquier orden pulsa **Avisar por WhatsApp**. El sistema escribe el mensaje por ti y abre WhatsApp con el teléfono del cliente: solo revisa y pulsa **enviar**. Por omisión elige el aviso que corresponde al momento, o puedes escoger otro de la lista:
 - **Equipo recibido:** con su folio, la fecha prometida y el enlace para seguir la reparación.
@@ -769,6 +874,9 @@ Los técnicos trabajan en un solo taller y atienden las órdenes de **todas las 
 @@L - **⑤** **Servicios y refacciones:** lo cotizado, con el total, los anticipos y lo que falta por cobrar. El técnico encargado y quien ve costos también ven el costo de cada refacción.
 @@L - **⑥** **Anticipos** que dejó el cliente.
 @@L - **⑦** **Acciones:** **Marcar lista**, **Editar / diagnóstico**, **Esperar refacción**, **No quedó**, **Agregar observación**, **Anticipo**, **Avisar por WhatsApp** y más. Cambian según el estado de la orden.
+
+@@WEB web-taller.png | El taller: órdenes abiertas.@@
+@@WL - **①** **Una orden:** su folio, el equipo, el cliente, su estado y el técnico. Tócala para trabajarla.
 
 ### Cuando falta una refacción
 Si la reparación no puede seguir porque hay que esperar una pieza, pulsa **Esperar refacción** y escribe cuál es (por ejemplo, «pantalla original, llega el jueves»).
@@ -828,6 +936,11 @@ Los **saldos (recargas), pagos de servicios, pines y pagos de PayJoy** se operan
 @@L - **⑥** **Los totales del día:** lo vendido, las comisiones cobradas y la ganancia.
 @@L - **⑦** **Guardar corte.**
 @@L - **⑧** **Servicios y comisiones** (administrador): da de alta los servicios y define cómo se gana con cada uno.
+
+@@WEB web-servicios.png | El corte de servicios del día.@@
+@@WL - **①** **Servicios** (administrador): da de alta los servicios y cómo se gana con cada uno.
+@@WL - **②** **Sucursal y día** del corte.
+@@WL - **③** **El corte:** por cada servicio, las operaciones y el importe vendido; la ganancia se calcula sola.
 
 ### Cómo se calcula la ganancia
 - **Servicel** y **Tae Recargas**: un **porcentaje de lo vendido** (8.1 % y 7.6 %). Si vendes $10,000 en Servicel, ganas $810.
@@ -923,6 +1036,11 @@ El administrador define **reglas de descuento**. Cada regla puede limitarse a un
 @@L - **⑤** **Las reglas:** su descuento, a qué aplican (categoría o artículo, sucursal, monto mínimo y cuándo) y si están activas.
 @@L - **⑥** **Acciones:** editar, activar o desactivar (el candado) y ver el historial de cambios.
 
+@@WEB web-descuentos.png | Los descuentos.@@
+@@WL - **①** **Nueva regla.**
+@@WL - **②** **Solicitudes de descuento:** **Aprobar**, **Otro monto** o **Rechazar**.
+@@WL - **③** **Configurar** la promoción al vender un equipo.
+
 ### Solicitudes de descuento (administrador)
 Arriba de la pantalla aparecen las **solicitudes** que piden vendedores y encargados desde el punto de venta: sucursal, quién la pidió, el artículo, su precio, cuánto piden y el motivo. Puedes **aprobar** lo pedido, **aprobar con otro monto** o **rechazar** (con un motivo opcional). La lista se actualiza sola y también llega un aviso.
 
@@ -1017,6 +1135,11 @@ REPORTES_WEB = """## Reportes
 | Rezagados | Equipos que llevan mucho tiempo sin venderse |
 | Caja (administrador) | El saldo y los movimientos de hoy de todas las cajas |
 
+@@WEB web-reportes.png | Reportes de ventas.@@
+@@WL - **①** **El tipo de reporte:** Ventas, Resultados, Gerencial, Rezagados y Caja.
+@@WL - **②** **Sucursal** (administrador).
+@@WL - **③** **Período:** hoy, 7 días o este mes.
+
 ### Resultados
 Elige la **sucursal** (si eres administrador) y el **periodo** (Hoy, Ayer, 7 días, Este mes, Mes pasado u otras fechas).
 - **Estado de resultados**: ventas, menos devoluciones, menos el costo de lo vendido, igual a la **utilidad bruta**; menos los **gastos de caja**, igual a la **utilidad neta**. Se compara con el periodo anterior.
@@ -1094,6 +1217,12 @@ Sección de administración (los descansos también los ve el encargado).
 - **Nómina**: períodos de pago con las **percepciones** y **deducciones** de cada empleado y su pago. **Historial de nómina** guarda los períodos anteriores. Los **faltantes de caja** se descuentan solos: el sistema agrega como deducción el faltante de cada corte cerrado en el período, a quien cerró el turno. **Traer faltantes de caja** los actualiza. Si quitas esa deducción, el faltante queda **perdonado**. Los sobrantes no se compensan.
 - **Comisiones**: comisiones por ventas del periodo y su pago.
 - **Descansos**: descansos y vacaciones del personal, con su saldo.
+
+@@WEB web-empleados.png | La lista de empleados.@@
+@@WL - **①** **Nuevo empleado:** da de alta a quien va a usar el sistema.
+@@WL - **②** **Buscador** por nombre o usuario.
+@@WL - **③** **Un empleado:** su rol y su sucursal (solo el encargado y el técnico tienen una). Tócalo para ver su detalle.
+
 """
 
 # ───────────────────────────── Configuración (solo JSystem) ─────────────────────────────
@@ -1320,10 +1449,14 @@ def armar(*partes, web=False):
             if not web:
                 salida.append(linea[4:])
             continue
-        m = re.match(r"^@@IMG (.+?) \| (.*)@@$", linea)
+        if linea.startswith("@@WL "):
+            if web:
+                salida.append(linea[5:])
+            continue
+        m = re.match(r"^@@(IMG|WEB) (.+?) \| (.*)@@$", linea)
         if m:
-            if not web:
-                salida.append("![%s](img/%s)" % (m.group(2).strip(), m.group(1).strip()))
+            if (m.group(1) == "WEB") == web:
+                salida.append("![%s](img/%s)" % (m.group(3).strip(), m.group(2).strip()))
             continue
         salida.append(linea)
     return "\n".join(salida)
