@@ -20,7 +20,7 @@ async function pantallaPermisos() {
   document.getElementById('pm-lista').innerHTML = grupos.map(g => `
     <div class="tarjeta">
       <h2 style="margin-top:0;">${escapar(g)}</h2>
-      <div class="tabla-cont"><table class="tabla">
+      <div class="tabla-cont" style="display:block;"><table class="tabla">
         <thead><tr><th>Acción</th>${roles.map(r => `<th style="text-align:center;">${escapar(PERMISOS_ROL_NOMBRE[r] || r)}</th>`).join('')}</tr></thead>
         <tbody>${cat.permisos.filter(p => p.grupo === g).map(p => `
           <tr>

@@ -79,6 +79,12 @@ Cada persona tiene un rol, y el sistema solo le muestra lo que le corresponde.
 > El usuario **root** (y quien root autorice) puede cambiar lo que puede hacer cada rol en **Permisos** (sección Administración). La tabla de arriba es lo que trae el sistema de fábrica.
 
 
+
+![Permisos (solo root y quien root autorice). En pantallas angostas la tabla se desliza hacia un lado.](img/web-permisos.png)
+- **①** **Aviso:** los cambios se guardan al instante; la persona los ve al abrir o recargar la pantalla.
+- **②** **Un grupo de acciones** (Ventas, Inventario, Finanzas, Taller), con una columna por rol.
+- **③** **Casilla:** marca lo que ese rol puede hacer.
+
 ## Punto de Venta
 
 Aquí se cobra. En la computadora, a la izquierda está el **catálogo** y a la derecha el **carrito**, el **cliente** y el **pago**; en el celular van una debajo de la otra. En la web el punto de venta necesita conexión: sin internet, usa JSystem en la tienda.
@@ -381,6 +387,11 @@ Con **Nueva solicitud** le pides a otra tienda que te surta algo. En equipos eli
 3. Si falta algo, captura lo que sí llegó: lo que faltó queda como **faltante**.
 
 
+![El detalle de una solicitud pendiente.](img/web-traspaso-detalle.png)
+- **①** **El traspaso:** su estado, la ruta (de qué tienda a cuál), los productos con su cantidad y quién lo creó.
+- **②** **Aceptar y enviar:** la tienda que surte acepta la solicitud y manda la mercancía.
+- **③** **Rechazar:** escribe el motivo si no se puede surtir. Más abajo, **Anular solicitud**.
+
 ### Faltantes
 **Faltantes por resolver** lista lo que no llegó. Cada faltante se resuelve de una de estas formas:
 - **Recibido tarde**: apareció y se da de alta en la tienda.
@@ -395,6 +406,17 @@ Guarda el nombre, el teléfono y el correo de quien compra, y su **historial de 
 - Un cliente se **desactiva** (no se borra) para conservar su historial; solo lo hace un administrador.
 - Al vender, escribir el teléfono de un cliente existente trae su registro.
 
+
+![La lista de clientes.](img/web-clientes.png)
+- **①** **Nuevo cliente:** lo da de alta con su teléfono (10 dígitos).
+- **②** **Buscador** por nombre o teléfono.
+- **③** **Un cliente:** su tipo (regular, frecuente o VIP). Tócalo para ver su detalle.
+
+![El detalle de un cliente.](img/web-cliente-detalle.png)
+- **①** **Sus compras,** lo que ha gastado y sus puntos.
+- **②** **Datos del cliente:** teléfono, correo y dirección.
+- **③** **Editar** sus datos.
+- **④** **Desactivar:** ya no aparece en la lista.
 
 ## Cuentas por Cobrar
 
@@ -413,6 +435,11 @@ Pulsa **Nueva cuenta** y captura el cliente, el monto y el **número de factura*
 2. Escribe el monto y la forma de pago, y pulsa **Confirmar pago**.
 3. El abono queda en el historial de la cuenta (icono del reloj). Si es en efectivo, entra a la caja del turno.
 
+
+![El detalle de una cuenta por cobrar.](img/web-cuenta-detalle.png)
+- **①** **Los montos:** total, pagado y saldo pendiente.
+- **②** **Información de la cuenta:** el cliente y las fechas de emisión y vencimiento.
+- **③** **Registrar abono:** monto, método de pago y notas.
 
 Un abono hecho **sin conexión** se guarda en la computadora y se envía solo después.
 
@@ -447,6 +474,12 @@ Registra los reclamos de garantía de productos vendidos y su viaje hasta el pro
 | Listo para entrega → Entregado | La sucursal |
 
 Una garantía **rechazada** puede volver al cliente directamente (Listo para entrega) o con un viaje de retorno. El plazo para resolver una garantía es de **30 días hábiles** (lunes a viernes); la que se pasa aparece como vencida.
+
+
+![El detalle de una garantía.](img/web-garantia-detalle.png)
+- **①** **Información de la garantía:** la venta, el producto con su IMEI, el contacto, la falla, el proveedor y la fecha límite.
+- **②** **Avanzar estado:** el botón del siguiente paso (por ejemplo, «Recibido en bodega»).
+- **③** **Bitácora:** cada paso con su fecha y quién lo hizo.
 
 ## Órdenes de Servicio
 
@@ -491,6 +524,14 @@ Para que no haya sorpresas al cobrar, el costo se **cotiza y el cliente lo autor
 3. Mientras falte la autorización, **no se puede marcar la orden como lista ni entregarla**. Si el cliente no autoriza, se cancela la orden o se cambia la cotización y se vuelve a pedir.
 4. Si **después de autorizado** se agrega o quita un servicio y el total cambia, la autorización **vuelve a quedar pendiente** y el sistema avisa en la tienda («cambió el precio de $A a $B»): hay que avisarle al cliente del cambio y registrar su respuesta.
 
+![El detalle de una orden en reparación.](img/web-orden-detalle.png)
+- **①** **Los importes:** el total, los anticipos y lo que falta por cobrar.
+- **②** **Autorización del cliente:** si ya autorizó el costo, quién lo registró y cuándo.
+- **③** **Avisar al cliente:** abre WhatsApp con el mensaje ya escrito, o imprime el comprobante.
+
+![Más abajo: lo cotizado y los datos de la orden.](img/web-orden-detalle2.png)
+- **①** **Servicios y refacciones:** cada renglón con su precio, el total y el botón **Agregar servicio o refacción**. Con la ✕ se quita un renglón.
+
 ### El camino de un equipo
 1. La **sucursal** recibe el equipo, lo registra y, si el cliente decide dejar un **anticipo**, lo cobra ahí mismo.
 2. La sucursal **manda el equipo al taller**; el técnico lo registra con **Recibir en el taller**.
@@ -527,6 +568,9 @@ Si el técnico revisa el equipo y la reparación **no es posible** (no se consig
 
 ### Ver las órdenes de todas las sucursales
 El **administrador** ve por omisión las órdenes de **todas las sucursales**; con el selector de sucursal puede quedarse con una sola. Para ver, por ejemplo, **lo que se recibió hoy**, deja el estado en **Todas** y elige **Recibidas hoy** en el filtro de fecha (también hay **Últimos 7 días** y **Este mes**). Cada orden indica en qué sucursal se recibió.
+
+![Equipos por recoger. La tabla se desliza hacia un lado.](img/web-por-recoger.png)
+- **①** **La lista:** folio, cliente, equipo, días sin recoger, último recordatorio y lo que falta por pagar, con el botón **Avisar** o **Recordar** por WhatsApp.
 
 ### Equipos listos que nadie recoge
 Entra a **Equipos por recoger**: muestra las reparaciones **listas que esperan al cliente**, las más viejas primero, con **dónde está** el equipo (en el taller o ya en la tienda), los **días sin recoger** (cuentan desde que regresó a la tienda), cuándo fue el último recordatorio y cuánto queda por pagar. Con **Avisar / recordar por WhatsApp** mandas el mensaje ya escrito.
@@ -656,6 +700,17 @@ Sección de administración (los descansos también los ve el encargado).
 - **①** **Nuevo empleado:** da de alta a quien va a usar el sistema.
 - **②** **Buscador** por nombre o usuario.
 - **③** **Un empleado:** su rol y su sucursal (solo el encargado y el técnico tienen una). Tócalo para ver su detalle.
+
+
+![La nómina del período abierto.](img/web-nomina.png)
+- **①** **El período:** cuántos empleados hay, cuántos faltan por pagar y el total neto. **Cerrar período** se activa cuando ya se pagó a todos, y **Ver períodos anteriores** abre el historial.
+- **②** **Traer faltantes de caja:** agrega como deducción el faltante de cada corte cerrado en el período.
+- **③** **Cada empleado:** sus percepciones, deducciones y su neto. Tócalo para ver su línea.
+
+![La línea de un empleado.](img/web-nomina-linea.png)
+- **①** **Percepciones:** el sueldo y lo que se le suma.
+- **②** **Deducciones:** descuentos, como un faltante de caja o un préstamo.
+- **③** **Neto a pagar:** de aquí se le paga desde una caja.
 
 ## Trabajar sin conexión
 

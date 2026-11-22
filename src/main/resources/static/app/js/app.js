@@ -1602,7 +1602,7 @@ async function pantallaPorRecoger() {
       const ordenes = await api('GET', '/api/ordenes-servicio/por-recoger' + (todas ? '' : '?codti=' + s.codti));
       if (!ordenes.length) { cont.innerHTML = '<div class="vacio">No hay equipos listos esperando al cliente.</div>'; return; }
       const nivel = (d) => d >= 30 ? 'rojo' : d >= 7 ? 'ambar' : 'ok';
-      cont.innerHTML = `<div class="tabla-cont"><table class="tabla">
+      cont.innerHTML = `<div class="tabla-cont" style="display:block;"><table class="tabla">
         <thead><tr><th>Folio</th><th>Cliente</th><th>Equipo</th>${todas ? '<th>Sucursal</th>' : ''}<th>Días sin recoger</th><th>Último recordatorio</th><th>Por pagar</th><th></th></tr></thead>
         <tbody>${ordenes.map(o => `<tr>
           <td><button class="enlace pr-abrir" data-id="${o.idorden}">${escapar(o.folio)}</button></td>
@@ -1688,12 +1688,12 @@ async function pantallaReporteTaller() {
           <div class="detalle-fila"><span class="k">Listas sin recoger hoy</span><span class="v">${r.listasSinRecoger}${r.listasMasDe30Dias ? ` (${r.listasMasDe30Dias} con más de 30 días)` : ''}</span></div>
           <p class="ayuda">El tiempo de taller no cuenta las horas que la reparación estuvo detenida esperando una pieza.</p>
         </div>
-        <div class="tarjeta"><h2>Retrasadas</h2>${r.retrasadas.length ? `<div class="tabla-cont"><table class="tabla">
+        <div class="tarjeta"><h2>Retrasadas</h2>${r.retrasadas.length ? `<div class="tabla-cont" style="display:block;"><table class="tabla">
           <thead><tr><th>Folio</th><th>Equipo</th><th>Cliente</th><th>Técnico</th><th>Retraso</th></tr></thead>
           <tbody>${r.retrasadas.map(x => `<tr><td>${escapar(x.folio)}</td><td>${escapar(x.equipo)}</td><td>${escapar(x.cliente || '')}</td><td>${escapar(x.tecnico || 'Sin técnico')}</td>
             <td>${textoHoras(x.horasDeRetraso)}${x.esperandoRefaccion ? ' · espera refacción' : ''}</td></tr>`).join('')}</tbody></table></div>`
           : '<div class="vacio">Ninguna reparación abierta pasó su fecha prometida.</div>'}</div>
-        <div class="tarjeta"><h2>Por técnico</h2>${r.porTecnico.length ? `<div class="tabla-cont"><table class="tabla">
+        <div class="tarjeta"><h2>Por técnico</h2>${r.porTecnico.length ? `<div class="tabla-cont" style="display:block;"><table class="tabla">
           <thead><tr><th>Técnico</th><th>Terminadas</th><th>Tiempo promedio</th><th>A tiempo</th></tr></thead>
           <tbody>${r.porTecnico.map(x => `<tr><td>${escapar(x.tecnico)}</td><td>${x.terminadas}</td><td>${textoHoras(x.promedioHorasTaller)}</td><td>${x.aTiempo} de ${x.conFechaPrometida}</td></tr>`).join('')}</tbody></table></div>`
           : '<div class="vacio">Sin reparaciones terminadas en el periodo.</div>'}</div>`;

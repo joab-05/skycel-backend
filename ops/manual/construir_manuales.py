@@ -130,6 +130,12 @@ Cada persona tiene un rol, y el sistema solo le muestra lo que le corresponde.
 @@L - **③** **Los grupos** de acciones: ventas, inventario, finanzas, taller…
 @@L - **④** **Las casillas:** marca lo que puede hacer cada rol. El menú de quien ya tiene la sesión abierta se actualiza cuando vuelve a entrar.
 
+
+@@WEB web-permisos.png | Permisos (solo root y quien root autorice). En pantallas angostas la tabla se desliza hacia un lado.@@
+@@WL - **①** **Aviso:** los cambios se guardan al instante; la persona los ve al abrir o recargar la pantalla.
+@@WL - **②** **Un grupo de acciones** (Ventas, Inventario, Finanzas, Taller), con una columna por rol.
+@@WL - **③** **Casilla:** marca lo que ese rol puede hacer.
+
 """
 
 # ───────────────────────────── Punto de Venta ─────────────────────────────
@@ -677,6 +683,11 @@ Con **Nueva solicitud** le pides a otra tienda que te surta algo. En equipos eli
 @@L - **②** **Los productos** con su cantidad (los equipos, con su IMEI).
 @@L - **③** **Las acciones** según el estado: **Aceptar y enviar**, **Rechazar**, **Editar solicitud** o **Anular**.
 
+@@WEB web-traspaso-detalle.png | El detalle de una solicitud pendiente.@@
+@@WL - **①** **El traspaso:** su estado, la ruta (de qué tienda a cuál), los productos con su cantidad y quién lo creó.
+@@WL - **②** **Aceptar y enviar:** la tienda que surte acepta la solicitud y manda la mercancía.
+@@WL - **③** **Rechazar:** escribe el motivo si no se puede surtir. Más abajo, **Anular solicitud**.
+
 ### Faltantes
 **Faltantes por resolver** lista lo que no llegó. Cada faltante se resuelve de una de estas formas:
 - **Recibido tarde**: apareció y se da de alta en la tienda.
@@ -707,6 +718,17 @@ Guarda el nombre, el teléfono y el correo de quien compra, y su **historial de 
 @@L - **④** **Acciones:** ver el detalle, editar y desactivar.
 @@L - **⑤** **Exportar** la lista a Excel.
 
+@@WEB web-clientes.png | La lista de clientes.@@
+@@WL - **①** **Nuevo cliente:** lo da de alta con su teléfono (10 dígitos).
+@@WL - **②** **Buscador** por nombre o teléfono.
+@@WL - **③** **Un cliente:** su tipo (regular, frecuente o VIP). Tócalo para ver su detalle.
+
+@@WEB web-cliente-detalle.png | El detalle de un cliente.@@
+@@WL - **①** **Sus compras,** lo que ha gastado y sus puntos.
+@@WL - **②** **Datos del cliente:** teléfono, correo y dirección.
+@@WL - **③** **Editar** sus datos.
+@@WL - **④** **Desactivar:** ya no aparece en la lista.
+
 ## Cuentas por Cobrar
 
 Control de lo que los clientes le deben a la tienda y de sus pagos.
@@ -735,6 +757,11 @@ Pulsa **Nueva cuenta** y captura el cliente, el monto y el **número de factura*
 @@L - **②** **Monto** que el cliente abona ahora.
 @@L - **③** **Método de pago:** efectivo, transferencia (y tarjeta si el negocio la acepta).
 @@L - **④** **Confirmar pago:** lo guarda en el historial.
+
+@@WEB web-cuenta-detalle.png | El detalle de una cuenta por cobrar.@@
+@@WL - **①** **Los montos:** total, pagado y saldo pendiente.
+@@WL - **②** **Información de la cuenta:** el cliente y las fechas de emisión y vencimiento.
+@@WL - **③** **Registrar abono:** monto, método de pago y notas.
 
 Un abono hecho **sin conexión** se guarda en la computadora y se envía solo después.
 """
@@ -780,6 +807,12 @@ Una garantía **rechazada** puede volver al cliente directamente (Listo para ent
 @@L - **②** **Los datos:** la venta original, el producto con su IMEI, el cliente, quién la recibió, la falla, el proveedor y la fecha límite.
 @@L - **③** **Seguimiento:** cada paso queda con su fecha y quién lo hizo.
 @@L - **④** **El botón del siguiente paso** (por ejemplo, «Recibido en bodega»).
+
+
+@@WEB web-garantia-detalle.png | El detalle de una garantía.@@
+@@WL - **①** **Información de la garantía:** la venta, el producto con su IMEI, el contacto, la falla, el proveedor y la fecha límite.
+@@WL - **②** **Avanzar estado:** el botón del siguiente paso (por ejemplo, «Recibido en bodega»).
+@@WL - **③** **Bitácora:** cada paso con su fecha y quién lo hizo.
 
 """
 GARANTIAS_JS = GARANTIAS_COMUN.format(
@@ -850,6 +883,14 @@ Para que no haya sorpresas al cobrar, el costo se **cotiza y el cliente lo autor
 3. Mientras falte la autorización, **no se puede marcar la orden como lista ni entregarla**. Si el cliente no autoriza, se cancela la orden o se cambia la cotización y se vuelve a pedir.
 4. Si **después de autorizado** se agrega o quita un servicio y el total cambia, la autorización **vuelve a quedar pendiente** y el sistema avisa en la tienda («cambió el precio de $A a $B»): hay que avisarle al cliente del cambio y registrar su respuesta.
 
+@@WEB web-orden-detalle.png | El detalle de una orden en reparación.@@
+@@WL - **①** **Los importes:** el total, los anticipos y lo que falta por cobrar.
+@@WL - **②** **Autorización del cliente:** si ya autorizó el costo, quién lo registró y cuándo.
+@@WL - **③** **Avisar al cliente:** abre WhatsApp con el mensaje ya escrito, o imprime el comprobante.
+
+@@WEB web-orden-detalle2.png | Más abajo: lo cotizado y los datos de la orden.@@
+@@WL - **①** **Servicios y refacciones:** cada renglón con su precio, el total y el botón **Agregar servicio o refacción**. Con la ✕ se quita un renglón.
+
 ### El camino de un equipo
 1. La **sucursal** recibe el equipo, lo registra y, si el cliente decide dejar un **anticipo**, lo cobra ahí mismo.
 2. La sucursal **manda el equipo al taller**; el técnico lo registra con **Recibir en el taller**.
@@ -894,6 +935,9 @@ Si el técnico revisa el equipo y la reparación **no es posible** (no se consig
 
 ### Ver las órdenes de todas las sucursales
 El **administrador** ve por omisión las órdenes de **todas las sucursales**; con el selector de sucursal puede quedarse con una sola. Para ver, por ejemplo, **lo que se recibió hoy**, deja el estado en **Todas** y elige **Recibidas hoy** en el filtro de fecha (también hay **Últimos 7 días** y **Este mes**). Cada orden indica en qué sucursal se recibió.
+
+@@WEB web-por-recoger.png | Equipos por recoger. La tabla se desliza hacia un lado.@@
+@@WL - **①** **La lista:** folio, cliente, equipo, días sin recoger, último recordatorio y lo que falta por pagar, con el botón **Avisar** o **Recordar** por WhatsApp.
 
 ### Equipos listos que nadie recoge
 Entra a **{por_recoger}**: muestra las reparaciones **listas que esperan al cliente**, las más viejas primero, con **dónde está** el equipo (en el taller o ya en la tienda), los **días sin recoger** (cuentan desde que regresó a la tienda), cuándo fue el último recordatorio y cuánto queda por pagar. Con **Avisar / recordar por WhatsApp** mandas el mensaje ya escrito.
@@ -1009,6 +1053,15 @@ COMPRAS_JS = COMPRAS.format(
 @@L - **①** **Resumen:** monto total, pagado y saldo, con la fecha de vencimiento.
 @@L - **②** **Registrar pago:** monto, método y, si es en efectivo, de qué caja sale.
 @@L - **③** **Historial de pagos** de esa compra.
+
+@@WEB web-compras.png | Las compras y lo que se debe a proveedores.@@
+@@WL - **①** **Registrar compra:** da de alta una compra a un proveedor.
+@@WL - **②** **Una compra:** proveedor, sucursal, folio, vencimiento y saldo; en rojo las vencidas. Tócala para ver el detalle.
+
+@@WEB web-compra-detalle.png | El detalle de una compra: aquí se registran los pagos.@@
+@@WL - **①** **Monto total, pagado y saldo.**
+@@WL - **②** **Información de la compra:** sucursal, folio del proveedor, fechas y notas.
+@@WL - **③** **Registrar pago:** monto, método y, si es en efectivo, de qué caja sale.
 
 ### Catálogos
 En **Inventario › Catálogos** el administrador mantiene los **colores** (renombrar uno lo cambia en todos los artículos que lo llevan), las **secciones** de cada sucursal y las **descripciones** de cada categoría. No se puede eliminar lo que algún artículo usa.
@@ -1222,6 +1275,17 @@ Sección de administración (los descansos también los ve el encargado).
 @@WL - **①** **Nuevo empleado:** da de alta a quien va a usar el sistema.
 @@WL - **②** **Buscador** por nombre o usuario.
 @@WL - **③** **Un empleado:** su rol y su sucursal (solo el encargado y el técnico tienen una). Tócalo para ver su detalle.
+
+
+@@WEB web-nomina.png | La nómina del período abierto.@@
+@@WL - **①** **El período:** cuántos empleados hay, cuántos faltan por pagar y el total neto. **Cerrar período** se activa cuando ya se pagó a todos, y **Ver períodos anteriores** abre el historial.
+@@WL - **②** **Traer faltantes de caja:** agrega como deducción el faltante de cada corte cerrado en el período.
+@@WL - **③** **Cada empleado:** sus percepciones, deducciones y su neto. Tócalo para ver su línea.
+
+@@WEB web-nomina-linea.png | La línea de un empleado.@@
+@@WL - **①** **Percepciones:** el sueldo y lo que se le suma.
+@@WL - **②** **Deducciones:** descuentos, como un faltante de caja o un préstamo.
+@@WL - **③** **Neto a pagar:** de aquí se le paga desde una caja.
 
 """
 
