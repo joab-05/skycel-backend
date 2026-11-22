@@ -50,7 +50,7 @@ PRIMEROS_JS = PRIMEROS_COMUN.format(
     cambio="Si un administrador te cambia de sucursal o de puesto mientras trabajas, JSystem lo detecta en un minuto y te avisa: pulsa **Volver a entrar ahora**. Si estás cobrando, termina la venta y elige **Más tarde** (te vuelve a avisar en 5 minutos). Un vendedor o un administrador usa la **sucursal que tiene configurada la computadora** (ver «Configuración»).",
     moverse="""- **F1** abre esta ayuda en el tema de la pantalla donde estás. **Ctrl + 1 … 9** abre las primeras secciones del menú.
 - Arriba a la derecha están **Ayuda**, **Avisos** (el número rojo son los que no has leído), **Configuración** de esta computadora, el **tema** (la luna o el sol), **Cambiar mi contraseña** (la llave) y **Cerrar sesión**.
-- **Tema claro u oscuro:** pulsa la luna para pasar al tema oscuro (descansa la vista en un local con poca luz) y el sol para volver al claro. Se recuerda en esta computadora y la pantalla en la que estás se vuelve a abrir con los colores nuevos.
+- **Tema claro u oscuro:** pulsa la luna para pasar al tema oscuro (descansa la vista en un local con poca luz) y el sol para volver al claro. Se recuerda en esta computadora y la pantalla en la que estás se vuelve a abrir con los colores nuevos. Si prefieres otros colores, en **Configuración › Este equipo › Apariencia** eliges la **gama del tema oscuro**: Pizarra (azul oscuro), Grafito (gris), Negro puro, Medianoche (violeta), Bosque (verde) o Café (cálido).
 - En el menú de la izquierda los grupos (**Ventas, Inventario, Finanzas…**) se **abren y se cierran** con un clic en su nombre y se recuerda cuáles dejaste abiertos; el grupo de la pantalla en la que estás siempre está abierto. Ctrl + 1 … 9 siguen abriendo las primeras secciones aunque su grupo esté cerrado. Para cambiar tu contraseña: pulsa la llave, escribe la actual y la nueva dos veces (mínimo 8 caracteres).
 - Cuando hay una **actualización** de JSystem lista, sale un recuadro en la esquina: haz clic para instalarla en ese momento (se cierra y se vuelve a abrir solo) o déjala: se instala al cerrar el programa.
 - Si arriba no aparece ningún aviso de color, todo va bien. Si aparece uno, se perdió la conexión o hay ventas esperando enviarse.
@@ -1295,7 +1295,7 @@ CONFIG_JS = """## Configuración
 
 Los datos de **esta computadora** (servidor, sucursal, impresoras) y del negocio. Se abre con el engrane de arriba a la derecha. Encargados y administradores pueden cambiarla. Al terminar pulsa **Guardar configuración**.
 
-- **Este equipo:** la dirección del servidor y la **sucursal y caja** de esta computadora. Un **administrador** o un **vendedor** que entra aquí trabaja con esa sucursal y esa caja; un encargado o un técnico siempre trabaja con la suya.
+- **Este equipo:** la dirección del servidor y la **sucursal y caja** de esta computadora. Un **administrador** o un **vendedor** que entra aquí trabaja con esa sucursal y esa caja; un encargado o un técnico siempre trabaja con la suya. También ahí, en **Apariencia**, se elige la **gama de colores del tema oscuro**.
 - **Ticket e impresora:** la impresora de tickets y el texto del ticket.
 - **Etiquetas:** la impresora y el tamaño de las etiquetas con código de barras (ver abajo).
 - **Negocio** (administrador): logo, datos del negocio, pie del ticket, plazo de **devoluciones** y **formas de pago** (por ejemplo, habilitar la tarjeta).
