@@ -2,6 +2,7 @@ package com.skycel.backend.controller;
 
 import com.skycel.backend.dto.equipo.*;
 import com.skycel.backend.service.EquipoService;
+import com.skycel.backend.service.RastroEquipoService;
 import com.skycel.backend.shared.dto.StandardApiResponse;
 import com.skycel.backend.shared.response.ResponseEntityBuilder;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,6 +26,7 @@ import java.util.Map;
 public class EquipoController {
 
     private final EquipoService equipoService;
+    private final RastroEquipoService rastroEquipoService;
 
     @Operation(summary = "Dar de alta equipos (por IMEI o serie) en una sucursal")
     @SecurityRequirement(name = "Bearer Authentication")
@@ -78,6 +80,14 @@ public class EquipoController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<StandardApiResponse<EquipoResponseDto>> porImei(@PathVariable String imei, @AuthenticationPrincipal UserDetails user) {
         return ResponseEntityBuilder.ok(equipoService.porImei(imei, user.getUsername()), "equipo");
+    }
+
+    @Operation(summary = "El rastreo de un equipo: dónde está hoy y todo lo que le ha pasado desde que entró (traspasos, venta, garantías, bajas)")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/{imei}/rastro")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<StandardApiResponse<RastroEquipoDto>> rastro(@PathVariable String imei, @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntityBuilder.ok(rastroEquipoService.rastro(imei, user.getUsername()), "rastro");
     }
 
     @Operation(summary = "Corregir un equipo: precio, costo, condición, artículo e incluso su IMEI o serie")

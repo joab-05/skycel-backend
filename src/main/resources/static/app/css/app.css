@@ -1019,3 +1019,14 @@ input.moneda { padding-left: 28px; background-repeat: no-repeat; background-posi
 .man-visor { position: fixed; inset: 0; z-index: 9999; background: rgba(15,23,42,.88); display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 16px; cursor: zoom-out; }
 .man-visor img { max-width: min(100%, 520px); height: auto; border-radius: 12px; background: #fff; }
 @media print { .man-fig { break-inside: avoid; max-width: 300px; } .man-fig img { box-shadow: none; } }
+
+/* Rastreo de equipos: la línea del tiempo */
+.rs-tienda { display: inline-block; background: #f1f5f9; border: 1px solid var(--borde); border-radius: 999px; padding: 4px 12px; font-weight: 700; margin: 2px 0; }
+.rs-flecha { margin: 0 8px; color: var(--gris); }
+.rs-linea { position: relative; margin-top: 8px; }
+.rs-linea::before { content: ''; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 2px; background: var(--borde); }
+.rs-evento { position: relative; padding: 0 0 16px 28px; }
+.rs-punto { position: absolute; left: 0; top: 4px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--borde); }
+.rs-fecha { font-size: 12.5px; color: var(--gris); }
+.rs-texto strong { display: block; font-size: 15px; }
+.rs-texto .ayuda { margin: 2px 0 0; }

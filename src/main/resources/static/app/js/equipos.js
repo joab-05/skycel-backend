@@ -69,6 +69,7 @@ async function pantallaEquipos() {
     const precio = (u) => Number(u.descuentoAplicado) > 0 ? `${formatoDinero(u.precioFinal)} <span class="ayuda" style="display:inline;">(−${formatoDinero(u.descuentoAplicado)})</span>` : formatoDinero(u.precioVenta);
     const acciones = (u) => `
       <button class="btn btn-gris btn-chico eq-copiar" data-imei="${escapar(u.imei)}" title="Copiar el IMEI o serie">${ic('clipboard-list')}</button>
+      <button class="btn btn-gris btn-chico eq-rastro" data-imei="${escapar(u.imei)}" title="Rastrear: de dónde llegó y a dónde fue">${ic('route')}</button>
       ${puedeEditar ? `<button class="btn btn-gris btn-chico eq-editar" data-imei="${escapar(u.imei)}" title="Editar el equipo">${ic('pencil')}</button>` : ''}
       ${puedeAjustar && u.estado === 'DISPONIBLE' ? `
         <button class="btn btn-gris btn-chico eq-rezagado" data-imei="${escapar(u.imei)}" title="Marcar o quitar «rezagado»">${ic('hourglass')}</button>
@@ -101,6 +102,7 @@ async function pantallaEquipos() {
       try { await navigator.clipboard.writeText(b.dataset.imei); mostrarMensaje(root, 'Copiado: ' + b.dataset.imei, 'ok'); }
       catch { mostrarMensaje(root, 'No se pudo copiar: ' + b.dataset.imei, 'info'); }
     });
+    cont.querySelectorAll('.eq-rastro').forEach(b => b.onclick = () => navegar('#/rastreo/' + encodeURIComponent(b.dataset.imei)));
     const unidad = (b) => unidades.find(x => x.imei === b.dataset.imei);
     cont.querySelectorAll('.eq-editar').forEach(b => b.onclick = () => formularioEditarEquipo(contForm, unidad(b), codti, () => { contForm.classList.add('oculto'); cargar(); }));
     cont.querySelectorAll('.eq-rezagado').forEach(b => b.onclick = async () => {

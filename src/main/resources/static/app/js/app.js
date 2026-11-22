@@ -207,6 +207,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (vendeOInventaria || s.rol === 'TECNICO') items.push({ h: '#/inventario', i: ic('package'), t: 'Inventario', badge: bajoStock > 0 ? bajoStock : null, grupo: 'Inventario' });
   if (vendeOInventaria) items.push({ h: '#/equipos', i: ic('smartphone'), t: 'Equipos', grupo: 'Inventario' });
   if (tiene('INVENTARIO_FISICO', 'INVENTARIO_CONFIRMAR')) items.push({ h: '#/inventario-fisico', i: ic('scan-barcode'), t: 'Inventario físico', grupo: 'Inventario' });
+  if (vendeOInventaria) items.push({ h: '#/rastreo', i: ic('route'), t: 'Rastreo de equipos', grupo: 'Inventario' });
   if (tiene('INVENTARIO_AJUSTAR')) items.push({ h: '#/mermas', i: ic('triangle-alert'), t: 'Control de mermas', grupo: 'Inventario' });
   if (tiene('TRASPASOS') && (s.rol !== 'TECNICO' || s.tecnicoEncargado)) items.push({ h: '#/traspasos', i: ic('truck'), t: 'Traspasos', grupo: 'Inventario' });
   if (tiene('CATALOGOS_EDITAR')) items.push({ h: '#/catalogos', i: ic('list'), t: 'Catálogos', grupo: 'Inventario' });
@@ -369,6 +370,7 @@ async function render() {
     if (ruta === 'traspasos') return pantallaTraspasos();
     if (ruta === 'inventario-fisico') return pantallaInventarioFisico(param);
     if (ruta === 'mermas') return pantallaMermas();
+    if (ruta === 'rastreo') return pantallaRastro(param);
     if (ruta === 'nomina') return pantallaNomina();
     if (ruta === 'nomina-detalle' && param) return pantallaNominaDetalle(param);
     if (ruta === 'nomina-historial') return pantallaNominaHistorial();
@@ -3836,7 +3838,7 @@ function temaDeRuta(ruta) {
   const mapa = {
     pos: 'Punto de Venta', equipos: 'Equipos', servicios: 'Corte de Servicios', permisos: 'Roles y permisos', caja: 'Caja', corte: 'Caja', devoluciones: 'Devoluciones', devolucion: 'Devoluciones',
     inventario: 'Inventario', producto: 'Inventario', 'producto-editar': 'Inventario', catalogos: 'Inventario', auditoria: 'Inventario',
-    'inventario-fisico': 'Inventario físico', mermas: 'Control de mermas', traspasos: 'Traspasos', traspaso: 'Traspasos', 'traspaso-nuevo': 'Traspasos', faltantes: 'Traspasos',
+    'inventario-fisico': 'Inventario físico', mermas: 'Control de mermas', rastreo: 'Rastreo de equipos', traspasos: 'Traspasos', traspaso: 'Traspasos', 'traspaso-nuevo': 'Traspasos', faltantes: 'Traspasos',
     clientes: 'Clientes', cliente: 'Clientes', cxc: 'Cuentas por Cobrar', cuenta: 'Cuentas por Cobrar',
     garantias: 'Garantías', garantia: 'Garantías',
     recepcion: 'Órdenes de Servicio', taller: 'Órdenes de Servicio', consultar: 'Órdenes de Servicio', orden: 'Órdenes de Servicio',
@@ -4215,6 +4217,7 @@ async function pantallaInventario() {
         <select id="iv-cat" aria-label="Categoría"><option value="">Todas las categorías</option></select>
         <label class="casilla-chica"><input type="checkbox" id="iv-bajo-stock"> Solo bajo stock</label>
         <label class="casilla-chica" title="Busca el artículo en las demás sucursales para pedirlo en un traspaso"><input type="checkbox" id="iv-todas"> En todas las tiendas</label>
+        <select id="iv-tipo" aria-label="Tipo de artículo" style="display:none;"><option value="">Accesorios y equipos</option><option value="acc">Solo accesorios</option><option value="eq">Solo equipos</option></select>
       </div>
       <div id="iv-conteo" class="ayuda" style="margin-top:8px;"></div>
       <div id="iv-lista" style="margin-top:6px;"><div class="vacio">Cargando...</div></div>
@@ -4236,10 +4239,12 @@ async function pantallaInventario() {
       try {
         const r = await api('GET', `/api/productos/existencias?texto=${encodeURIComponent(q)}&excluir=${codti ?? ''}`);
         if (esta !== busquedaTiendas) return;
-        existencias = r;
-        conteo.textContent = r.length === 0 ? 'Sin existencia en las demás tiendas' : `${new Set(r.map(x => x.nombre)).size} artículos en ${new Set(r.map(x => x.codti)).size} tiendas`;
+        const tipo = document.getElementById('iv-tipo').value;   // solo accesorios o solo equipos
+        existencias = r.filter(x => tipo === 'eq' ? x.esEquipo : tipo === 'acc' ? !x.esEquipo : true);
+        const que = tipo === 'eq' ? 'equipos' : tipo === 'acc' ? 'accesorios' : 'existencia';
+        conteo.textContent = existencias.length === 0 ? `Sin ${que} en las demás tiendas` : `${new Set(existencias.map(x => x.nombre)).size} artículos en ${new Set(existencias.map(x => x.codti)).size} tiendas`;
         const puedePedir = Sesion.tiene('TRASPASOS');
-        cont.innerHTML = r.length === 0 ? `<div class="vacio">Ninguna otra tienda tiene existencia de «${escapar(q)}».</div>` : r.map((x, i) => `
+        cont.innerHTML = existencias.length === 0 ? `<div class="vacio">Ninguna otra tienda tiene ${tipo ? que + ' que coincidan con' : 'existencia de'} «${escapar(q)}».</div>` : existencias.map((x, i) => `
           <div class="orden-item">
             <div class="orden-cab"><span class="orden-folio">${escapar(x.nombre)}</span><span style="font-weight:700;">${Number(x.existencia)}</span></div>
             <div class="orden-cliente">${escapar(x.tienda)}${x.esAlmacen ? ' (bodega)' : ''} · ${x.esEquipo ? 'Equipo (IMEI)' : escapar(x.codpro)}${x.precio != null ? ' · ' + formatoDinero(x.precio) : ''}</div>
@@ -4327,10 +4332,12 @@ async function pantallaInventario() {
   document.getElementById('iv-equipos').onclick = () => navegar('#/equipos');
   document.getElementById('iv-buscar').addEventListener('input', refrescarListaInventario);
   document.getElementById('iv-bajo-stock').addEventListener('change', refrescarListaInventario);
+  document.getElementById('iv-tipo').addEventListener('change', refrescarListaInventario);
   document.getElementById('iv-cat').addEventListener('change', refrescarListaInventario);
   document.getElementById('iv-todas').addEventListener('change', (e) => {
     document.getElementById('iv-cat').disabled = e.target.checked;
     document.getElementById('iv-bajo-stock').disabled = e.target.checked;
+    document.getElementById('iv-tipo').style.display = e.target.checked ? '' : 'none';
     document.getElementById('iv-buscar').placeholder = e.target.checked ? 'Nombre, código o IMEI del artículo' : 'Nombre, código, marca o modelo';
     refrescarListaInventario();
   });

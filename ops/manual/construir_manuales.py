@@ -425,13 +425,14 @@ Cada producto con su nombre, código, existencia y precios (el costo y el provee
 @@L - **⑤** **La existencia:** verde es normal, amarillo está baja y rojo se agotó.
 
 ### Inventario general: dónde hay cada artículo
-Son **dos vistas separadas** en el menú: **Inventario** (la tienda de esta computadora: ver, editar, entradas y salidas) e **Inventario general** (todas las tiendas y la bodega). En el general escribe el nombre, el código o el IMEI y la tabla muestra en qué sucursales hay y cuánto. Con **Solicitar traspaso** (en las demás tiendas) eliges la cantidad y la solicitud le llega a esa tienda. Necesita conexión.
+Son **dos vistas separadas** en el menú: **Inventario** (la tienda de esta computadora: ver, editar, entradas y salidas) e **Inventario general** (todas las tiendas y la bodega). En el general escribe el nombre, el código o el IMEI y la tabla muestra en qué sucursales hay y cuánto. Con **Solicitar traspaso** (en las demás tiendas) eliges la cantidad y la solicitud le llega a esa tienda. Necesita conexión. Junto al buscador, la lista **Accesorios y equipos** deja ver **solo accesorios** o **solo equipos**.
 
 Un **administrador** también puede corregir las existencias de un accesorio en cualquiera de esas tiendas (la propia incluida), sin tenerla configurada en su equipo: en la fila de la tienda están los botones **+** (entrada) y **−** (salida); se pide el motivo, como siempre, y al terminar la búsqueda se repite para ver la existencia nueva. Los equipos (celulares y tablets) se siguen manejando por IMEI en **Equipos**.
 @@IMG general.png | El inventario general: dónde hay un artículo en todas las tiendas y la bodega.@@
 @@L - **①** **Buscador:** escribe al menos dos letras del nombre, el código o el IMEI.
 @@L - **②** **Solicitar traspaso** a la tienda que tiene el artículo (no sale en tu propia tienda).
 @@L - **③** **+** y **−** (administrador): corrige la existencia de un accesorio en esa tienda; pide el motivo.
+@@L - **④** **Tipo:** muestra accesorios y equipos, solo accesorios o solo equipos.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
@@ -483,7 +484,12 @@ Muestra los productos de **tu tienda**: existencia, precio y el mínimo que conv
 @@WL - **④** **Un producto:** su código, categoría, precio y existencias. Tócalo para ver su detalle.
 
 ### Qué muestra
-Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞**. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay; con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
+Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞**. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay (ahí también eliges **Solo accesorios** o **Solo equipos**); con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
+
+@@WEB web-inventario-general.png | Con «En todas las tiendas» se busca en las demás sucursales; el filtro deja ver solo accesorios o solo equipos.@@
+@@WL - **①** **Buscador:** nombre, código o IMEI del artículo.
+@@WL - **②** **Tipo:** accesorios y equipos, solo accesorios o solo equipos.
+@@WL - **③** **El resultado:** en qué tienda hay y cuánto; **Pedir traspaso** se lo pide a esa tienda.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
@@ -529,6 +535,8 @@ Cada equipo con su IMEI, el artículo, su condición (**nuevo**, **seminuevo** o
 ### Corregir y dar de baja
 - Solo un **administrador** corrige un equipo (IMEI, artículo, precio, costo, condición, proveedor y sección). El IMEI y el artículo solo se cambian mientras no se haya vendido, traspasado ni mandado a garantía.
 - **Rezagado** marca un equipo que no se mueve. **Dar de baja** lo saca de la existencia (robo, daño o error de captura) y **pide el motivo**.
+- El icono de **ruta** abre el **Rastreo** de ese equipo: de dónde llegó, a dónde fue y a quién se vendió.
+- **Reactivar equipo** (administrador, en JSystem junto a **Actualizar**): busca un IMEI en **todo el sistema** —aunque esté vendido, dado de baja o en otra sucursal— y lo deja disponible en la sucursal que elijas, con su motivo; queda en el historial y en Control de mermas. Un equipo que va en un traspaso no se reactiva hasta recibirlo o anular el traspaso. Si das de alta un IMEI que ya existe, el sistema te dice dónde está y cómo quedó.
 - **Por artículo** permite poner el mismo precio a todas las unidades disponibles y un **mínimo de existencias** que avisa cuando quedan pocas.{precio_general}
 {copiar}
 ### Vender, traspasar y devolver
@@ -642,6 +650,38 @@ Junta en un solo lugar todo lo que **cambió las existencias fuera de una venta,
 @@WL - **②** **Por motivo:** y también por persona, por tienda (administrador) y el detalle.
 @@WL - **③** **Detalle:** cada movimiento con quién, qué y por qué.
 
+"""
+
+# ───────────────────────────── Rastreo de equipos ─────────────────────────────
+RASTREO = """## Rastreo de equipos
+
+La **historia completa de un equipo** (celular o tablet), desde que entra al sistema hasta dónde está hoy: de qué proveedor llegó, por qué tiendas pasó, a quién se vendió y qué reclamos de garantía tuvo. Sirve para contestar «¿dónde está este equipo?», «¿cuánto tiempo estuvo sin venderse?» o «¿a quién se lo vendimos?».
+
+### Cómo rastrear un equipo
+1. Entra a **Rastreo de equipos** (grupo **Inventario** del menú).
+2. Escribe o **escanea** el IMEI o el número de serie y pulsa **Rastrear**.
+3. También puedes llegar desde **Equipos**: el icono de **ruta** de cada equipo abre su rastreo.
+
+@@IMG rastro.png | El rastreo de un equipo ya vendido.@@
+@@L - **①** **Buscador:** el IMEI o el número de serie del equipo.
+@@L - **②** **La ficha:** el artículo, su estado (disponible, vendido, en traspaso, en garantía, de baja…) y dónde está hoy.
+@@L - **③** **Los números:** los días que estuvo en inventario (hasta su venta; si no se ha vendido, los que lleva), sus traspasos y sus garantías, y el **recorrido** por las tiendas.
+@@L - **④** **Lo que le ha pasado,** en orden y con fecha y hora: cuándo ingresó y por qué compra, cada traspaso (de qué tienda salió y a cuál llegó), la venta (a quién, quién lo atendió y a qué precio), devoluciones, garantías, bajas y reactivaciones. Cada renglón dice quién lo registró.
+
+@@WEB web-rastreo.png | El rastreo de un equipo en el celular.@@
+@@WL - **①** **Buscador:** el IMEI o el número de serie.
+@@WL - **②** **La ficha:** el artículo, su estado y dónde está hoy.
+@@WL - **③** **Los números:** días en inventario, traspasos y garantías.
+
+@@WEB web-rastreo-linea.png | El recorrido y la línea del tiempo.@@
+@@WL - **①** **Recorrido:** las tiendas por las que pasó, en orden.
+@@WL - **②** **Lo que le ha pasado:** del ingreso a la venta y la garantía, con fecha, hora y quién lo registró.
+
+### Cosas que conviene saber
+- Un equipo que se registró antes de que existiera este historial empieza con **«Se registró en el sistema»**: lo anterior no se puede reconstruir.
+- Un equipo que **no aparece** no está registrado con ese IMEI: revisa que lo hayas escrito completo.
+- La venta se muestra con el nombre del cliente y quién atendió; el **costo** solo lo ve quien tiene permiso de ver costos.
+- Si un administrador **reactiva** un equipo (por ejemplo, uno dado de baja por error), queda anotado en la línea con su motivo.
 """
 
 # ───────────────────────────── Traspasos ─────────────────────────────
@@ -1527,10 +1567,10 @@ def armar(*partes, web=False):
     return "\n".join(salida)
 
 
-JS = armar(INTRO, PRIMEROS_JS, ROLES, POS_JS, CAJA_JS, DEVOLUCIONES, INVENTARIO_JS, EQUIPOS_JS, INVFIS_JS, MERMAS, TRASPASOS_JS,
+JS = armar(INTRO, PRIMEROS_JS, ROLES, POS_JS, CAJA_JS, DEVOLUCIONES, INVENTARIO_JS, EQUIPOS_JS, RASTREO, INVFIS_JS, MERMAS, TRASPASOS_JS,
            CLIENTES, GARANTIAS_JS, ORDENES_JS, SERV_JS, COMPRAS_JS, DESCUENTOS_JS, REPORTES_JS, FINANZAS_TALLER_JS, EMPLEADOS_JS, CONFIG_JS, AVISOS_JS,
            OFFLINE_JS, ATAJOS_JS, RUTINA, FAQ_JS)
-WEB = armar(web=True, *(INTRO, PRIMEROS_WEB, ROLES, POS_WEB, CAJA_WEB, DEVOLUCIONES, INVENTARIO_WEB, EQUIPOS_WEB, INVFIS_WEB, MERMAS, TRASPASOS_WEB,
+WEB = armar(web=True, *(INTRO, PRIMEROS_WEB, ROLES, POS_WEB, CAJA_WEB, DEVOLUCIONES, INVENTARIO_WEB, EQUIPOS_WEB, RASTREO, INVFIS_WEB, MERMAS, TRASPASOS_WEB,
             CLIENTES, GARANTIAS_WEB, ORDENES_WEB, SERV_WEB, COMPRAS_WEB, DESCUENTOS_WEB, REPORTES_WEB, EMPLEADOS_WEB,
             OFFLINE_WEB, ATAJOS_WEB, RUTINA, FAQ_WEB))
 

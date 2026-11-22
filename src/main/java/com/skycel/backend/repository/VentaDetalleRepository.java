@@ -17,6 +17,9 @@ public interface VentaDetalleRepository extends JpaRepository<VentaDetalle, Inte
 
     List<VentaDetalle> findByVenta_Idventa(Integer idventa);
 
+    /** Las ventas en que salió un equipo (por su IMEI o serie). */
+    List<VentaDetalle> findByImei(String imei);
+
     /**
      * Ventas, monto vendido y costo (para la utilidad) por sucursal, en un rango de fechas. Solo ventas
      * completadas (no canceladas); una sucursal sin ventas en el rango simplemente no aparece.

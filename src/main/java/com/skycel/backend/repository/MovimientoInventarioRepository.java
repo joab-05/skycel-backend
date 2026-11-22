@@ -21,6 +21,10 @@ public interface MovimientoInventarioRepository extends JpaRepository<Movimiento
                                       @Param("hasta") LocalDateTime hasta,
                                       @Param("codpro") String codpro);
 
+    /** Todo lo que le ha pasado a un equipo (por su IMEI o serie), del más antiguo al más reciente. */
+    @Query("SELECT m FROM MovimientoInventario m LEFT JOIN FETCH m.usuario WHERE m.imei = :imei ORDER BY m.fecha ASC, m.idmov ASC")
+    List<MovimientoInventario> rastro(@Param("imei") String imei);
+
     /** Salidas y ajustes (no ventas, devoluciones ni traspasos) de una tienda, o de todas si {@code codti} es null. */
     @Query("SELECT m FROM MovimientoInventario m LEFT JOIN FETCH m.producto p LEFT JOIN FETCH m.productoMaster pm LEFT JOIN FETCH m.usuario " +
             "WHERE (:codti IS NULL OR m.codti = :codti) AND m.tipo IN :tipos AND m.fecha BETWEEN :desde AND :hasta " +

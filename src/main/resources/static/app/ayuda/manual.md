@@ -251,7 +251,12 @@ Muestra los productos de **tu tienda**: existencia, precio y el mínimo que conv
 - **④** **Un producto:** su código, categoría, precio y existencias. Tócalo para ver su detalle.
 
 ### Qué muestra
-Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞**. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay; con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
+Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞**. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay (ahí también eliges **Solo accesorios** o **Solo equipos**); con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
+
+![Con «En todas las tiendas» se busca en las demás sucursales; el filtro deja ver solo accesorios o solo equipos.](img/web-inventario-general.png)
+- **①** **Buscador:** nombre, código o IMEI del artículo.
+- **②** **Tipo:** accesorios y equipos, solo accesorios o solo equipos.
+- **③** **El resultado:** en qué tienda hay y cuánto; **Pedir traspaso** se lo pide a esa tienda.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.
@@ -289,10 +294,37 @@ Cada equipo con su IMEI, el artículo, su condición (**nuevo**, **seminuevo** o
 ### Corregir y dar de baja
 - Solo un **administrador** corrige un equipo (IMEI, artículo, precio, costo, condición, proveedor y sección). El IMEI y el artículo solo se cambian mientras no se haya vendido, traspasado ni mandado a garantía.
 - **Rezagado** marca un equipo que no se mueve. **Dar de baja** lo saca de la existencia (robo, daño o error de captura) y **pide el motivo**.
+- El icono de **ruta** abre el **Rastreo** de ese equipo: de dónde llegó, a dónde fue y a quién se vendió.
+- **Reactivar equipo** (administrador, en JSystem junto a **Actualizar**): busca un IMEI en **todo el sistema** —aunque esté vendido, dado de baja o en otra sucursal— y lo deja disponible en la sucursal que elijas, con su motivo; queda en el historial y en Control de mermas. Un equipo que va en un traspaso no se reactiva hasta recibirlo o anular el traspaso. Si das de alta un IMEI que ya existe, el sistema te dice dónde está y cómo quedó.
 - **Por artículo** permite poner el mismo precio a todas las unidades disponibles y un **mínimo de existencias** que avisa cuando quedan pocas.
 
 ### Vender, traspasar y devolver
 En el **Punto de Venta** busca el equipo por su nombre o IMEI y toca la unidad. En **Traspasos**, los equipos viajan por IMEI. Una **devolución** de un equipo en buen estado lo regresa a la existencia.
+
+## Rastreo de equipos
+
+La **historia completa de un equipo** (celular o tablet), desde que entra al sistema hasta dónde está hoy: de qué proveedor llegó, por qué tiendas pasó, a quién se vendió y qué reclamos de garantía tuvo. Sirve para contestar «¿dónde está este equipo?», «¿cuánto tiempo estuvo sin venderse?» o «¿a quién se lo vendimos?».
+
+### Cómo rastrear un equipo
+1. Entra a **Rastreo de equipos** (grupo **Inventario** del menú).
+2. Escribe o **escanea** el IMEI o el número de serie y pulsa **Rastrear**.
+3. También puedes llegar desde **Equipos**: el icono de **ruta** de cada equipo abre su rastreo.
+
+
+![El rastreo de un equipo en el celular.](img/web-rastreo.png)
+- **①** **Buscador:** el IMEI o el número de serie.
+- **②** **La ficha:** el artículo, su estado y dónde está hoy.
+- **③** **Los números:** días en inventario, traspasos y garantías.
+
+![El recorrido y la línea del tiempo.](img/web-rastreo-linea.png)
+- **①** **Recorrido:** las tiendas por las que pasó, en orden.
+- **②** **Lo que le ha pasado:** del ingreso a la venta y la garantía, con fecha, hora y quién lo registró.
+
+### Cosas que conviene saber
+- Un equipo que se registró antes de que existiera este historial empieza con **«Se registró en el sistema»**: lo anterior no se puede reconstruir.
+- Un equipo que **no aparece** no está registrado con ese IMEI: revisa que lo hayas escrito completo.
+- La venta se muestra con el nombre del cliente y quién atendió; el **costo** solo lo ve quien tiene permiso de ver costos.
+- Si un administrador **reactiva** un equipo (por ejemplo, uno dado de baja por error), queda anotado en la línea con su motivo.
 
 ## Inventario físico
 

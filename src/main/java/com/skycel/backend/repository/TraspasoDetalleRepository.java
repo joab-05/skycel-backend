@@ -11,6 +11,9 @@ public interface TraspasoDetalleRepository extends JpaRepository<TraspasoDetalle
 
     List<TraspasoDetalle> findByTraspaso_IdtraspasoOrderByIddetalle(Integer idtraspaso);
 
+    /** Los traspasos en que viajó un equipo (por su IMEI o serie). */
+    List<TraspasoDetalle> findByImei(String imei);
+
     /**
      * Renglones de envíos recibidos con faltantes que aún no se resuelven del todo. Filtro opcional por tienda (origen o
      * destino).
