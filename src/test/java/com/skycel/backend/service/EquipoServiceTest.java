@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
@@ -346,6 +347,52 @@ class EquipoServiceTest {
             assertThat(u.getEstado()).isEqualTo("DEBAJA");
             verify(movimientoInventarioService).registrarEquipo(u, -1, "SALIDA", "Robo en vitrina", null);
             assertEstado(HttpStatus.CONFLICT, () -> service.darDeBaja("350000000000029", "Error", "admin"));
+        }
+
+        @Test
+        @DisplayName("reactivar: un equipo dado de baja o vendido queda disponible en la sucursal elegida, con motivo e historial; solo un administrador")
+        void reactivar() {
+            ProductoImei baja = existente(celular, zocalo, "350000000000011", "DEBAJA");
+            ProductoImei vendido = existente(celular, zocalo, "350000000000029", "VENDIDO");
+
+            assertEstado(HttpStatus.FORBIDDEN, () -> service.reactivar("350000000000011", 3, "Error de captura", "yamilet"));
+            assertEstado(HttpStatus.BAD_REQUEST, () -> service.reactivar("350000000000011", 3, " ", "admin"));
+
+            service.reactivar("350000000000011", 3, "Se dio de baja por error", "admin");
+            assertThat(baja.getEstado()).isEqualTo("DISPONIBLE");
+            assertThat(baja.getTienda().getCodti()).isEqualTo(3);
+            verify(movimientoInventarioService).registrarEquipo(eq(baja), eq(1), eq("AJUSTE"), contains("Se dio de baja por error"), isNull());
+
+            service.reactivar("350000000000029", null, "La venta no se concretó", "admin");
+            assertThat(vendido.getEstado()).isEqualTo("DISPONIBLE");
+            assertThat(vendido.getTienda().getCodti()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("reactivar: uno ya disponible en esa sucursal o en un traspaso no se toca; uno disponible en otra sucursal se cambia de lugar")
+        void reactivarCasosLimite() {
+            existente(celular, zocalo, "350000000000011", "DISPONIBLE");
+            existente(celular, zocalo, "350000000000029", "TRASPASADO");
+            ProductoImei enOtra = existente(celular, zocalo, "350000000000037", "DISPONIBLE");
+
+            assertEstado(HttpStatus.CONFLICT, () -> service.reactivar("350000000000011", 2, "Prueba", "admin"));
+            assertEstado(HttpStatus.CONFLICT, () -> service.reactivar("350000000000029", 3, "Prueba", "admin"));
+            assertEstado(HttpStatus.NOT_FOUND, () -> service.reactivar("350000000000999", 3, "Prueba", "admin"));
+
+            service.reactivar("350000000000037", 3, "Estaba capturado en la tienda equivocada", "admin");
+            assertThat(enOtra.getTienda().getCodti()).isEqualTo(3);
+            verify(movimientoInventarioService).registrarEquipo(eq(enOtra), eq(-1), eq("AJUSTE"), anyString(), isNull());
+        }
+
+        @Test
+        @DisplayName("dar de alta un IMEI que ya existe dice dónde está y cómo quedó")
+        void altaDuplicadaExplica() {
+            existente(celular, zocalo, "350000000000011", "VENDIDO");
+            EquipoRequestDto dto = alta(1, unidad("350000000000011", null, "2500", "2000"));
+
+            org.springframework.web.server.ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                    org.springframework.web.server.ResponseStatusException.class, () -> service.registrar(dto, "admin"));
+            assertThat(ex.getReason()).contains("VENDIDO").contains("Zocalo").contains("Reactivar equipo");
         }
 
         @Test

@@ -122,7 +122,11 @@ public class EquipoService {
             if (!vistos.add(id)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El identificador '" + id + "' viene repetido en la lista.");
             }
-            if (imeiRepository.existsByImei(id)) {
+            Optional<ProductoImei> yaExiste = imeiRepository.findByImei(id);
+            if (yaExiste != null && yaExiste.isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "El identificador '" + id + "' ya está registrado: " + descripcionDeUbicacion(yaExiste.get())
+                        + ". Un administrador puede dejarlo disponible desde Equipos › Reactivar equipo.");
+            } else if (imeiRepository.existsByImei(id)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "El identificador '" + id + "' ya está registrado en el sistema.");
             }
             BigDecimal precio = u.getPrecioVenta() != null ? u.getPrecioVenta() : dto.getPrecioVenta();
@@ -359,6 +363,52 @@ public class EquipoService {
         u.setEstado("DEBAJA");
         imeiRepository.save(u);
         movimientoInventarioService.registrarEquipo(u, -1, "SALIDA", motivo, null);
+        return toDto(u, verCostos(usuario));
+    }
+
+    /** Una frase para decir dónde está y cómo quedó una unidad ("Poco C85 · VENDIDO · en Zócalo"). */
+    static String descripcionDeUbicacion(ProductoImei u) {
+        String art = u.getProductoMaster() != null ? u.getProductoMaster().getNombreBase() + " · " : "";
+        String donde = u.getTienda() != null ? " · en " + u.getTienda().getNombre() : "";
+        return art + String.valueOf(u.getEstado()).replace('_', ' ') + donde;
+    }
+
+    /**
+     * Deja disponible un equipo que ya existe pero no está a la venta (dado de baja por error, vendido que no debía, devuelto,
+     * en garantía), en la sucursal indicada. Solo un administrador, y con motivo: queda en el historial de movimientos y en las
+     * mermas como ajuste. Un equipo en un traspaso en camino no se toca: se recibe o se anula el traspaso.
+     */
+    @Transactional
+    public EquipoResponseDto reactivar(String imei, Integer codti, String motivo, String username) {
+        Usuario usuario = usuario(username);
+        if (usuario.getRol() != Rol.ROOT && usuario.getRol() != Rol.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador puede reactivar un equipo.");
+        }
+        if (motivo == null || motivo.trim().length() < 3) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escriba el motivo (por ejemplo: dado de baja por error, no se entregó la venta).");
+        }
+        ProductoImei u = buscar(imei);
+        Tienda destino = codti == null ? u.getTienda() : tiendaRepository.findById(codti)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sucursal no encontrada: " + codti));
+        if (destino == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indique la sucursal donde queda el equipo.");
+        if ("TRASPASADO".equals(u.getEstado())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Este equipo va en un traspaso: recíbelo o anula el traspaso en Traspasos antes de reactivarlo.");
+        }
+        boolean mismaTienda = u.getTienda() != null && u.getTienda().getCodti().equals(destino.getCodti());
+        if (ProductoImei.DISPONIBLE.equals(u.getEstado()) && mismaTienda) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este equipo ya está disponible en " + destino.getNombre() + ".");
+        }
+        String antes = descripcionDeUbicacion(u);
+        String nota = "Reactivado (antes: " + antes + "). " + motivo.trim();
+        if (ProductoImei.DISPONIBLE.equals(u.getEstado())) {
+            // Ya contaba en otra sucursal: sale de ahí y entra a la nueva
+            movimientoInventarioService.registrarEquipo(u, -1, "AJUSTE", nota, null);
+        }
+        u.setTienda(destino);
+        u.setEstado(ProductoImei.DISPONIBLE);
+        imeiRepository.save(u);
+        movimientoInventarioService.registrarEquipo(u, +1, "AJUSTE", nota, null);
         return toDto(u, verCostos(usuario));
     }
 

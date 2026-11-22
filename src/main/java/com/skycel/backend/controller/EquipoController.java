@@ -107,6 +107,18 @@ public class EquipoController {
         return ResponseEntityBuilder.updated(equipoService.darDeBaja(imei, cuerpo.get("motivo"), user.getUsername()), "equipo");
     }
 
+    @Operation(summary = "Dejar disponible un equipo que ya existe pero no está a la venta (baja por error, venta que no era...) en la sucursal indicada; solo administrador")
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{imei}/reactivar")
+    @PreAuthorize("@permisos.tiene('INVENTARIO_AJUSTAR')")
+    public ResponseEntity<StandardApiResponse<EquipoResponseDto>> reactivar(
+            @PathVariable String imei, @RequestBody Map<String, Object> cuerpo, @AuthenticationPrincipal UserDetails user) {
+        Object cod = cuerpo.get("codti");
+        Integer codti = cod instanceof Number n ? Integer.valueOf(n.intValue()) : null;
+        Object mot = cuerpo.get("motivo");
+        return ResponseEntityBuilder.updated(equipoService.reactivar(imei, codti, mot == null ? null : mot.toString(), user.getUsername()), "equipo");
+    }
+
     @Operation(summary = "Mismo precio (y costo) para todas las unidades disponibles de un artículo en una sucursal; sin codti, en todas las sucursales y la bodega")
     @SecurityRequirement(name = "Bearer Authentication")
     @PutMapping("/articulo/{idprodmaster}/precio")
