@@ -1036,6 +1036,15 @@ Registra lo que se le **debe** a un proveedor por una compra. {donde}
 2. En la lista ves lo que se debe y los **días** que faltan (en rojo si ya venció). Abre una compra para **registrar pagos**, parciales o totales; el saldo baja con cada pago.
 3. {pago}
 
+@@WEB web-compras.png | Las compras y lo que se debe a proveedores.@@
+@@WL - **①** **Registrar compra:** da de alta una compra a un proveedor.
+@@WL - **②** **Una compra:** proveedor, sucursal, folio, vencimiento y saldo; en rojo las vencidas. Tócala para ver el detalle.
+
+@@WEB web-compra-detalle.png | El detalle de una compra: aquí se registran los pagos.@@
+@@WL - **①** **Monto total, pagado y saldo.**
+@@WL - **②** **Información de la compra:** sucursal, folio del proveedor, fechas y notas.
+@@WL - **③** **Registrar pago:** monto, método y, si es en efectivo, de qué caja sale.
+
 Esta sección la usan encargados y administradores.
 {catalogos}"""
 COMPRAS_JS = COMPRAS.format(
@@ -1054,14 +1063,6 @@ COMPRAS_JS = COMPRAS.format(
 @@L - **②** **Registrar pago:** monto, método y, si es en efectivo, de qué caja sale.
 @@L - **③** **Historial de pagos** de esa compra.
 
-@@WEB web-compras.png | Las compras y lo que se debe a proveedores.@@
-@@WL - **①** **Registrar compra:** da de alta una compra a un proveedor.
-@@WL - **②** **Una compra:** proveedor, sucursal, folio, vencimiento y saldo; en rojo las vencidas. Tócala para ver el detalle.
-
-@@WEB web-compra-detalle.png | El detalle de una compra: aquí se registran los pagos.@@
-@@WL - **①** **Monto total, pagado y saldo.**
-@@WL - **②** **Información de la compra:** sucursal, folio del proveedor, fechas y notas.
-@@WL - **③** **Registrar pago:** monto, método y, si es en efectivo, de qué caja sale.
 
 ### Catálogos
 En **Inventario › Catálogos** el administrador mantiene los **colores** (renombrar uno lo cambia en todos los artículos que lo llevan), las **secciones** de cada sucursal y las **descripciones** de cada categoría. No se puede eliminar lo que algún artículo usa.

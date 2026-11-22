@@ -629,6 +629,15 @@ Registra lo que se le **debe** a un proveedor por una compra.
 2. En la lista ves lo que se debe y los **días** que faltan (en rojo si ya venció). Abre una compra para **registrar pagos**, parciales o totales; el saldo baja con cada pago.
 3. Se paga en efectivo o transferencia (y con tarjeta solo si el negocio la acepta). El historial de la compra muestra cada pago; un pago de caja se registra con el motivo «Pago a proveedor».
 
+![Las compras y lo que se debe a proveedores.](img/web-compras.png)
+- **①** **Registrar compra:** da de alta una compra a un proveedor.
+- **②** **Una compra:** proveedor, sucursal, folio, vencimiento y saldo; en rojo las vencidas. Tócala para ver el detalle.
+
+![El detalle de una compra: aquí se registran los pagos.](img/web-compra-detalle.png)
+- **①** **Monto total, pagado y saldo.**
+- **②** **Información de la compra:** sucursal, folio del proveedor, fechas y notas.
+- **③** **Registrar pago:** monto, método y, si es en efectivo, de qué caja sale.
+
 Esta sección la usan encargados y administradores.
 
 ## Descuentos
