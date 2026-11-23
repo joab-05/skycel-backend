@@ -75,7 +75,7 @@ async function pantallaRastro(imeiInicial) {
         <p style="margin:8px 0 0;">${escapar(rastroTextoHoy(e))}</p>
       </div>
       <div class="kp-h">
-        ${kpiH('c1', 'history', r.diasEnInventario == null ? '—' : r.diasEnInventario, r.vendido ? 'Días en inventario (hasta su venta)' : 'Lleva en inventario')}
+        ${kpiH('c1', 'history', r.diasEnInventario == null ? '—' : r.diasEnInventario, r.vendido ? 'Días en inventario (hasta su venta)' : 'Días en inventario (hasta hoy)')}
         ${kpiH('c5', 'truck', r.traspasos, 'Traspasos')}
         ${kpiH('c4', 'shield-check', r.garantias, 'Garantías')}
       </div>

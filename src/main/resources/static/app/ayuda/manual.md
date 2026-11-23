@@ -285,6 +285,7 @@ Cada equipo con su IMEI, el artículo, su condición (**nuevo**, **seminuevo** o
 - **①** **Registrar equipos:** da de alta uno o varios por su IMEI o serie.
 - **②** **Buscador** por IMEI, serie o nombre.
 - **③** **Un equipo:** su estado, precio, costo, días en existencia y sección. Sus botones sirven para ver su historial, corregirlo, marcarlo rezagado o darlo de baja.
+- **④** **El icono de ruta** abre el **Rastreo** de ese equipo.
 
 ### Registrar equipos
 1. Pulsa **Registrar equipos** y elige el **artículo**. Si es un modelo o color nuevo, primero se registra en Inventario › Nuevo producto, con la categoría Equipos.
@@ -311,6 +312,7 @@ La **historia completa de un equipo** (celular o tablet), desde que entra al sis
 3. También puedes llegar desde **Equipos**: el icono de **ruta** de cada equipo abre su rastreo.
 
 
+
 ![El rastreo de un equipo en el celular.](img/web-rastreo.png)
 - **①** **Buscador:** el IMEI o el número de serie.
 - **②** **La ficha:** el artículo, su estado y dónde está hoy.
@@ -319,6 +321,10 @@ La **historia completa de un equipo** (celular o tablet), desde que entra al sis
 ![El recorrido y la línea del tiempo.](img/web-rastreo-linea.png)
 - **①** **Recorrido:** las tiendas por las que pasó, en orden.
 - **②** **Lo que le ha pasado:** del ingreso a la venta y la garantía, con fecha, hora y quién lo registró.
+
+![Un equipo dado de baja por error y reactivado en otra tienda.](img/web-rastreo-reactivado.png)
+- **①** **Recorrido:** pasó por tres tiendas.
+- **②** **La baja y la reactivación** quedan en la línea, con quién las hizo y el motivo.
 
 ### Cosas que conviene saber
 - Un equipo que se registró antes de que existiera este historial empieza con **«Se registró en el sistema»**: lo anterior no se puede reconstruir.

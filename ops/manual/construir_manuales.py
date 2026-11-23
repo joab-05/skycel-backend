@@ -519,13 +519,15 @@ Cada equipo con su IMEI, el artículo, su condición (**nuevo**, **seminuevo** o
 @@L - **①** **Buscador** por IMEI, serie o nombre.
 @@L - **②** **Filtros** de estado (por omisión, **Disponibles**) y de categoría.
 @@L - **③** **Registrar equipos:** da de alta unidades nuevas (un IMEI por línea).
-@@L - **④** **Acciones de cada equipo:** copiar el IMEI, editar (administrador), marcar como **rezagado** y dar de baja.
+@@L - **④** **Acciones de cada equipo:** copiar el IMEI, **rastrearlo** (el icono de ruta), editar (administrador), marcar como **rezagado** y dar de baja.
 @@L - **⑤** **Por artículo:** el resumen de cuántos hay de cada modelo.
+@@L - **⑥** **Reactivar equipo** (administrador): busca un IMEI que ya existe en el sistema y lo deja disponible en la sucursal que elijas.
 
 @@WEB web-equipos.png | Los equipos de la sucursal.@@
 @@WL - **①** **Registrar equipos:** da de alta uno o varios por su IMEI o serie.
 @@WL - **②** **Buscador** por IMEI, serie o nombre.
 @@WL - **③** **Un equipo:** su estado, precio, costo, días en existencia y sección. Sus botones sirven para ver su historial, corregirlo, marcarlo rezagado o darlo de baja.
+@@WL - **④** **El icono de ruta** abre el **Rastreo** de ese equipo.
 
 ### Registrar equipos
 1. Pulsa **Registrar equipos** y elige el **artículo**. Si es un modelo o color nuevo, primero se registra en Inventario › Nuevo producto, con la categoría Equipos.
@@ -668,6 +670,11 @@ La **historia completa de un equipo** (celular o tablet), desde que entra al sis
 @@L - **③** **Los números:** los días que estuvo en inventario (hasta su venta; si no se ha vendido, los que lleva), sus traspasos y sus garantías, y el **recorrido** por las tiendas.
 @@L - **④** **Lo que le ha pasado,** en orden y con fecha y hora: cuándo ingresó y por qué compra, cada traspaso (de qué tienda salió y a cuál llegó), la venta (a quién, quién lo atendió y a qué precio), devoluciones, garantías, bajas y reactivaciones. Cada renglón dice quién lo registró.
 
+@@IMG rastro2.png | Un equipo que se dio de baja por error y se reactivó en otra tienda.@@
+@@L - **①** **La ficha:** hoy está disponible en Corpo.
+@@L - **②** **El recorrido:** Bodega central, Zócalo y Corpo.
+@@L - **③** **La baja y la reactivación:** quedan anotadas con quién las hizo y por qué.
+
 @@WEB web-rastreo.png | El rastreo de un equipo en el celular.@@
 @@WL - **①** **Buscador:** el IMEI o el número de serie.
 @@WL - **②** **La ficha:** el artículo, su estado y dónde está hoy.
@@ -676,6 +683,10 @@ La **historia completa de un equipo** (celular o tablet), desde que entra al sis
 @@WEB web-rastreo-linea.png | El recorrido y la línea del tiempo.@@
 @@WL - **①** **Recorrido:** las tiendas por las que pasó, en orden.
 @@WL - **②** **Lo que le ha pasado:** del ingreso a la venta y la garantía, con fecha, hora y quién lo registró.
+
+@@WEB web-rastreo-reactivado.png | Un equipo dado de baja por error y reactivado en otra tienda.@@
+@@WL - **①** **Recorrido:** pasó por tres tiendas.
+@@WL - **②** **La baja y la reactivación** quedan en la línea, con quién las hizo y el motivo.
 
 ### Cosas que conviene saber
 - Un equipo que se registró antes de que existiera este historial empieza con **«Se registró en el sistema»**: lo anterior no se puede reconstruir.
