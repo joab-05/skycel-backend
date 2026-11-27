@@ -223,6 +223,7 @@ function itemsMenu(s, pend, err, bajoStock) {
   if (tiene('ORDEN_CONSULTAR', 'ORDEN_RECIBIR', 'TALLER_TRABAJAR')) items.push({ h: '#/consultar', i: ic('search'), t: 'Consultar orden', grupo: 'Taller' });
   if (tiene('ORDEN_CONSULTAR', 'ORDEN_RECIBIR')) items.push({ h: '#/por-recoger', i: ic('package-check'), t: 'Equipos por recoger', grupo: 'Taller' });
   if (tiene('ORDEN_CONSULTAR', 'TALLER_TRABAJAR') && (SUPERIOR.includes(s.rol) || s.rol === 'ENCARGADO_TIENDA' || s.tecnicoEncargado)) items.push({ h: '#/reporte-taller', i: ic('chart-column'), t: 'Reporte del taller', grupo: 'Taller' });
+  if (tiene('TAREAS_VER')) items.push({ h: '#/tareas', i: ic('clipboard-check'), t: 'Tareas', grupo: 'Tareas' });
   if (tiene('EMPLEADOS_ADMIN')) items.push({ h: '#/empleados', i: ic('briefcase'), t: 'Empleados', grupo: 'Administración' });
   if (Sesion.tiene('PERMISOS_ADMIN')) items.push({ h: '#/permisos', i: ic('lock'), t: 'Permisos', grupo: 'Administración' });
   if (tiene('NOMINA')) items.push({ h: '#/nomina', i: ic('banknote'), t: 'Nómina', grupo: 'Administración' });
@@ -371,6 +372,7 @@ async function render() {
     if (ruta === 'inventario-fisico') return pantallaInventarioFisico(param);
     if (ruta === 'mermas') return pantallaMermas();
     if (ruta === 'rastreo') return pantallaRastro(param);
+    if (ruta === 'tareas') return pantallaTareas();
     if (ruta === 'nomina') return pantallaNomina();
     if (ruta === 'nomina-detalle' && param) return pantallaNominaDetalle(param);
     if (ruta === 'nomina-historial') return pantallaNominaHistorial();
@@ -3838,7 +3840,7 @@ function temaDeRuta(ruta) {
   const mapa = {
     pos: 'Punto de Venta', equipos: 'Equipos', servicios: 'Corte de Servicios', permisos: 'Roles y permisos', caja: 'Caja', corte: 'Caja', devoluciones: 'Devoluciones', devolucion: 'Devoluciones',
     inventario: 'Inventario', producto: 'Inventario', 'producto-editar': 'Inventario', catalogos: 'Inventario', auditoria: 'Inventario',
-    'inventario-fisico': 'Inventario físico', mermas: 'Control de mermas', rastreo: 'Rastreo de equipos', traspasos: 'Traspasos', traspaso: 'Traspasos', 'traspaso-nuevo': 'Traspasos', faltantes: 'Traspasos',
+    'inventario-fisico': 'Inventario físico', mermas: 'Control de mermas', rastreo: 'Rastreo de equipos', tareas: 'Tareas', traspasos: 'Traspasos', traspaso: 'Traspasos', 'traspaso-nuevo': 'Traspasos', faltantes: 'Traspasos',
     clientes: 'Clientes', cliente: 'Clientes', cxc: 'Cuentas por Cobrar', cuenta: 'Cuentas por Cobrar',
     garantias: 'Garantías', garantia: 'Garantías',
     recepcion: 'Órdenes de Servicio', taller: 'Órdenes de Servicio', consultar: 'Órdenes de Servicio', orden: 'Órdenes de Servicio',

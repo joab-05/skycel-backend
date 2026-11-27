@@ -67,7 +67,12 @@ public enum Permiso {
     DESCANSOS("Registrar los descansos del personal", "Administración", Set.of(ADMIN, ENCARGADO_TIENDA)),
     NEGOCIO_CONFIG("Cambiar los datos del negocio, el logo y las sucursales", "Administración", Set.of(ADMIN)),
     CONFIG_EQUIPO("Configurar la computadora (servidor, sucursal, caja e impresora)", "Administración", Set.of(ADMIN, ENCARGADO_TIENDA)),
-    AUDITORIA("Ver el historial de cambios", "Administración", Set.of(ADMIN));
+    AUDITORIA("Ver el historial de cambios", "Administración", Set.of(ADMIN)),
+
+    // ── Tareas ────────────────────────────────────────────────────────────────
+    TAREAS_VER("Ver y marcar sus tareas del día", "Tareas", Set.of(ADMIN, ENCARGADO_TIENDA, VENDEDOR, TECNICO)),
+    TAREAS_EQUIPO("Ver las tareas de toda la tienda y su cumplimiento", "Tareas", Set.of(ADMIN, ENCARGADO_TIENDA)),
+    TAREAS_RUTINAS("Armar las rutinas de actividades de las tiendas", "Tareas", Set.of(ADMIN));
 
     private final String etiqueta;
     private final String grupo;

@@ -3,6 +3,7 @@ package com.skycel.backend.config;
 import com.skycel.backend.service.CompraService;
 import com.skycel.backend.service.CuentaPorCobrarService;
 import com.skycel.backend.service.RespaldoService;
+import com.skycel.backend.service.TareaService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -23,13 +24,15 @@ public class TareasAlArrancar {
     private final RespaldoService respaldoService;
     private final CuentaPorCobrarService cuentaPorCobrarService;
     private final CompraService compraService;
+    private final TareaService tareaService;
     private final long esperaSegundos;
 
     public TareasAlArrancar(RespaldoService respaldoService, CuentaPorCobrarService cuentaPorCobrarService, CompraService compraService,
-                            @Value("${skycel.arranque.espera-segundos:180}") long esperaSegundos) {
+                            TareaService tareaService, @Value("${skycel.arranque.espera-segundos:180}") long esperaSegundos) {
         this.respaldoService = respaldoService;
         this.cuentaPorCobrarService = cuentaPorCobrarService;
         this.compraService = compraService;
+        this.tareaService = tareaService;
         this.esperaSegundos = Math.max(0, esperaSegundos);
     }
 
@@ -69,6 +72,11 @@ public class TareasAlArrancar {
             compraService.marcarVencidas();
         } catch (RuntimeException e) {
             log.error("No se pudieron marcar las compras vencidas", e);
+        }
+        try {
+            tareaService.generarHoyParaTodas();
+        } catch (RuntimeException e) {
+            log.error("No se pudieron generar las tareas de hoy", e);
         }
     }
 }

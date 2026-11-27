@@ -3,6 +3,7 @@ package com.skycel.backend.config;
 import com.skycel.backend.service.CompraService;
 import com.skycel.backend.service.CuentaPorCobrarService;
 import com.skycel.backend.service.RespaldoService;
+import com.skycel.backend.service.TareaService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -15,7 +16,8 @@ class TareasAlArrancarTest {
     private final RespaldoService respaldo = mock(RespaldoService.class);
     private final CuentaPorCobrarService cuentas = mock(CuentaPorCobrarService.class);
     private final CompraService compras = mock(CompraService.class);
-    private final TareasAlArrancar tareas = new TareasAlArrancar(respaldo, cuentas, compras, 0);
+    private final TareaService tareasDelDia = mock(TareaService.class);
+    private final TareasAlArrancar tareas = new TareasAlArrancar(respaldo, cuentas, compras, tareasDelDia, 0);
 
     @Test
     @DisplayName("al encender el servidor hace el respaldo que faltó y marca lo vencido")
@@ -29,6 +31,7 @@ class TareasAlArrancarTest {
         verify(respaldo).ejecutar();
         verify(cuentas).marcarVencidas();
         verify(compras).marcarVencidas();
+        verify(tareasDelDia).generarHoyParaTodas();
     }
 
     @Test
@@ -55,5 +58,6 @@ class TareasAlArrancarTest {
         tareas.ponerAlCorriente();
 
         verify(compras).marcarVencidas();
+        verify(tareasDelDia).generarHoyParaTodas();
     }
 }

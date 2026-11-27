@@ -119,6 +119,9 @@ Cada persona tiene un rol, y el sistema solo le muestra lo que le corresponde.
 | Descuentos, nómina y comisiones | No | No | Sí | No |
 | Configuración de la computadora (servidor, impresora, ticket) | No | Sí | Sí | No |
 | Empleados | No | No | Sí | No |
+| Ver y marcar sus tareas del día | Sí | Sí | Sí | Sí |
+| Ver las tareas de toda la tienda y su cumplimiento | No | Sí | Sí | No |
+| Armar las rutinas de actividades de las tiendas | No | No | Sí | No |
 
 > Un **encargado** solo ve la información de su tienda, y de fábrica **no ve costos ni proveedores** (eso es solo del administrador); el **técnico encargado** sí ve el costo de las refacciones de las órdenes que trabaja.
 > Un **encargado** ve solo su tienda. Un **administrador** puede cambiar de sucursal o ver todas. Un **técnico** solo ve las órdenes del taller.
@@ -1256,6 +1259,81 @@ Elige la **sucursal** (si eres administrador) y el **periodo** (Hoy, Ayer, 7 dí
 > Los **gastos** son las **salidas de caja** del periodo, agrupadas por motivo (renta, flete, nómina…). Los retiros del dueño, los traslados, los pagos a proveedores, los préstamos a empleados y la apertura y cierre de caja **no** cuentan como gasto. Es una guía para decidir, no un documento contable.
 """
 
+# ───────────────────────────── Tareas ─────────────────────────────
+TAREAS = """## Tareas
+
+Lo que le toca hacer a cada persona en el día, en el orden en que se hace: **apertura**, **durante el día** y **cierre**. Cada día el sistema crea las actividades de cada tienda a partir de las **rutinas** que arma el administrador, y el personal las marca como hechas (con una nota si hace falta). El encargado y el administrador ven cómo va todo el equipo y cuánto se cumplió.
+
+### Qué ve cada quien
+- **Todos** ven **Mis tareas**: las actividades de su puesto (encargado, apoyo o técnico) y las que son de cualquiera de la tienda.
+- **Encargado y administrador** ven además **Tareas del equipo** y **Cumplimiento**. El encargado, solo de su tienda; el administrador, de todas.
+- **El administrador** arma las **Rutinas**.
+
+### Marcar mis tareas
+1. Entra a **Tareas** (grupo **Tareas** del menú). Se muestran las de hoy en la sucursal en la que trabajas.
+2. Cada actividad tiene una casilla. Si quieres dejar una **nota** (por ejemplo «faltaban 3 cables»), escríbela antes de marcarla.
+3. Marca la casilla. Queda guardado quién la hizo y a qué hora. Si otra persona ya la había hecho, el sistema te dice quién fue.
+4. Si te equivocas, pulsa **Deshacer** (solo el mismo día, y solo quien la marcó o el encargado).
+
+@@IMG tareas.png | Mis tareas del día, por apertura, durante el día y cierre.@@
+@@L - **①** **Pestañas:** Mis tareas, Tareas del equipo, Cumplimiento y Rutinas; solo salen las que tu rol puede usar.
+@@L - **②** **Avance del día:** cuántas llevas hechas y, en rojo, cuántas están atrasadas.
+@@L - **③** **Una actividad hecha:** quién la hizo, a qué hora y su nota. **Deshacer** la regresa a pendiente.
+@@L - **④** **Una pendiente:** marca la casilla; antes puedes escribir una nota. **Antes de 10:00** es su hora límite y **Apoyo (vendedor)** dice a quién le toca.
+
+@@WEB web-tareas.png | Mis tareas en el celular.@@
+@@WL - **①** **Avance del día:** cuántas llevas hechas y cuántas están atrasadas.
+@@WL - **②** **Una actividad hecha:** quién la hizo y a qué hora; **Deshacer** la regresa a pendiente.
+@@WL - **③** **Una pendiente:** escribe una nota si quieres y marca la casilla.
+
+### Ver al equipo (encargado y administrador)
+En **Tareas del equipo** eliges la sucursal y el día y ves todas las actividades, de cualquier puesto: quién hizo cada una, a qué hora y qué nota dejó. Con **Deshacer la marca** corriges una que se marcó por error (solo las de hoy).
+
+@@IMG tareas-equipo.png | Las tareas de toda la tienda en un día.@@
+@@L - **①** **Sucursal y día:** el administrador elige cualquier tienda; el encargado, la suya. Puedes ver días anteriores.
+@@L - **②** **Resumen:** tareas del día, hechas, pendientes y atrasadas.
+@@L - **③** **La lista:** estado de cada actividad, quién la hizo, la hora y su nota.
+@@L - **④** **Deshacer la marca:** regresa a pendiente la actividad seleccionada.
+
+@@WEB web-tareas-equipo.png | Las tareas del equipo en el celular.@@
+@@WL - **①** **Sucursal y día:** el administrador elige cualquier tienda; el encargado, la suya.
+@@WL - **②** **Resumen:** tareas, hechas, pendientes y atrasadas.
+@@WL - **③** **Cada actividad:** su estado, quién la hizo, la hora y la nota.
+
+### Cumplimiento
+Elige la sucursal (el administrador puede ver **todas**) y las fechas (hasta 3 meses). Verás, por sucursal, el **porcentaje de tareas hechas** y el de **hechas a tiempo**, cuántas quedaron **sin hacer** y quién hizo cuántas.
+
+@@IMG tareas-cumplimiento.png | El cumplimiento por sucursal y por persona.@@
+@@L - **①** **Sucursal y fechas:** el rango máximo es de 3 meses.
+@@L - **②** **Por sucursal:** tareas, hechas, a tiempo, no hechas y los porcentajes.
+@@L - **③** **Quién las hizo:** las tareas hechas por cada persona y cuántas fueron fuera de hora.
+
+### Armar las rutinas (administrador)
+1. Entra a **Tareas › Rutinas** y pulsa **Nueva actividad**.
+2. Elige la **sucursal** (o **Todas las sucursales**), escribe **qué hay que hacer** y, si hace falta, un detalle.
+3. Elige el **momento** (apertura, durante el día o cierre), a quién le toca (encargado, apoyo, técnico o cualquiera) y los **días** de la semana.
+4. Si debe estar lista a cierta hora, pon la **hora límite**. Guarda.
+5. Con **Subir** y **Bajar** acomodas el orden dentro de su momento del día.
+
+@@IMG tareas-rutinas.png | La lista de actividades de las rutinas.@@
+@@L - **①** **Sucursal y Nueva actividad:** filtra la lista por tienda y agrega actividades.
+@@L - **②** **Editar, Quitar, Subir y Bajar:** actúan sobre la actividad seleccionada.
+@@L - **③** **La lista:** sucursal, momento, orden, a quién le toca, días y hora límite.
+
+@@WEB web-tareas-rutinas.png | Las rutinas en el celular.@@
+@@WL - **①** **Sucursal y Nueva actividad:** filtra por tienda y agrega actividades.
+@@WL - **②** **Cada actividad:** su momento, a quién le toca, los días y la hora límite; con **Editar**, **▲**, **▼** y **Quitar**.
+
+### Cosas que conviene saber
+- Las actividades del día se crean solas: al abrir **Tareas** y cuando se enciende el servidor.
+- Lo que cambias en una rutina aplica **desde hoy**; lo que ya se hizo no se toca. Al **quitar** una actividad se desactiva y conserva su historial.
+- Las actividades de **Todas las sucursales** no se generan en el almacén; para él se arman actividades propias.
+- Solo se marcan las tareas **de hoy**. Lo que quede sin hacer al terminar el día cuenta como **no hecha** en el cumplimiento.
+- Una actividad **sin hora límite** cuenta a tiempo si se hace ese día. Con hora límite, marcada después cuenta **fuera de hora**.
+- Los porcentajes no cuentan las tareas de hoy que siguen abiertas: todavía hay tiempo.
+- El administrador (root) puede cambiar quién ve y quién arma las tareas en **Permisos** (grupo **Tareas**).
+"""
+
 # ───────────────────────────── Empleados ─────────────────────────────
 EMPLEADOS_JS = """## Empleados, nómina y comisiones
 
@@ -1579,10 +1657,10 @@ def armar(*partes, web=False):
 
 
 JS = armar(INTRO, PRIMEROS_JS, ROLES, POS_JS, CAJA_JS, DEVOLUCIONES, INVENTARIO_JS, EQUIPOS_JS, RASTREO, INVFIS_JS, MERMAS, TRASPASOS_JS,
-           CLIENTES, GARANTIAS_JS, ORDENES_JS, SERV_JS, COMPRAS_JS, DESCUENTOS_JS, REPORTES_JS, FINANZAS_TALLER_JS, EMPLEADOS_JS, CONFIG_JS, AVISOS_JS,
+           CLIENTES, GARANTIAS_JS, ORDENES_JS, SERV_JS, COMPRAS_JS, DESCUENTOS_JS, REPORTES_JS, FINANZAS_TALLER_JS, TAREAS, EMPLEADOS_JS, CONFIG_JS, AVISOS_JS,
            OFFLINE_JS, ATAJOS_JS, RUTINA, FAQ_JS)
 WEB = armar(web=True, *(INTRO, PRIMEROS_WEB, ROLES, POS_WEB, CAJA_WEB, DEVOLUCIONES, INVENTARIO_WEB, EQUIPOS_WEB, RASTREO, INVFIS_WEB, MERMAS, TRASPASOS_WEB,
-            CLIENTES, GARANTIAS_WEB, ORDENES_WEB, SERV_WEB, COMPRAS_WEB, DESCUENTOS_WEB, REPORTES_WEB, EMPLEADOS_WEB,
+            CLIENTES, GARANTIAS_WEB, ORDENES_WEB, SERV_WEB, COMPRAS_WEB, DESCUENTOS_WEB, REPORTES_WEB, TAREAS, EMPLEADOS_WEB,
             OFFLINE_WEB, ATAJOS_WEB, RUTINA, FAQ_WEB))
 
 for ruta, texto in ((RUTA_JS, JS), (RUTA_WEB, WEB)):
