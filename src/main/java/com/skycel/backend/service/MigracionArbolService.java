@@ -401,7 +401,7 @@ public class MigracionArbolService {
         private Grupo grupoDe(TipoProducto tipo) {
             return switch (tipo) {
                 case CELULAR, TABLET -> Grupo.EQUIPOS;
-                case ACCESORIO -> Grupo.ACCESORIOS;
+                case ACCESORIO, REFACCION -> Grupo.ACCESORIOS;
                 case SERVICIO -> Grupo.SERVICIOS;
             };
         }

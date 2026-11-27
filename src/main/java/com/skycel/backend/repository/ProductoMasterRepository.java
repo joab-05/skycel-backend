@@ -41,4 +41,7 @@ public interface ProductoMasterRepository extends JpaRepository<ProductoMaster, 
            "LOWER(p.notaAdicional) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
            "LOWER(p.compatibilidad) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     List<ProductoMaster> searchByKeyword(String keyword);
+
+    /** Cuántos artículos cuelgan directamente de una categoría (activos o no). */
+    long countByCategoria_Idcat(Short idcat);
 }

@@ -242,7 +242,7 @@ public class CategoriaService {
             return TipoProducto.valueOf(tipoStr.trim().toUpperCase());
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Tipo inválido: " + tipoStr + ". Valores válidos: CELULAR, ACCESORIO, SERVICIO, TABLET");
+                    "Tipo inválido: " + tipoStr + ". Valores válidos: CELULAR, ACCESORIO, SERVICIO, TABLET, REFACCION");
         }
     }
 

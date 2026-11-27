@@ -23,7 +23,7 @@ public class CategoriaController {
 
     private final CategoriaService categoriaService;
 
-    @Operation(summary = "Listar categorías activas", description = "Con tipo, solo las de ese tipo (CELULAR, ACCESORIO, SERVICIO, TABLET).")
+    @Operation(summary = "Listar categorías activas", description = "Con tipo, solo las de ese tipo (CELULAR, ACCESORIO, SERVICIO, TABLET, REFACCION).")
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping
     @PreAuthorize("isAuthenticated()")

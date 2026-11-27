@@ -352,18 +352,28 @@ public class OrdenServicioService {
 
     private static String recortar250(String s) { return s.length() <= 250 ? s : s.substring(0, 250); }
 
-    /** La categoría «Refacciones» de los accesorios (se crea la primera vez que hace falta). */
+    /**
+     * La categoría «Refacciones › General» (de tipo Refacción) donde se dan de alta las piezas que compra el técnico; se crea la primera vez
+     * que hace falta, junto con la principal «Refacciones».
+     */
     private Short categoriaRefacciones() {
-        Categoria raiz = categoriaRepository.findAll().stream()
-                .filter(c -> c.getTipo() == TipoProducto.ACCESORIO && c.getCategoriaSuperior() == null && Boolean.TRUE.equals(c.getActivo()))
-                .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "No hay una categoría principal de accesorios."));
-        return categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat("Refacciones", raiz.getIdcat())
+        Categoria raiz = categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIsNull("Refacciones")
+                .filter(c -> c.getTipo() == TipoProducto.REFACCION && Boolean.TRUE.equals(c.getActivo()))
+                .orElseGet(() -> {
+                    com.skycel.backend.domain.dto.request.CategoriaRequestDTO principal = new com.skycel.backend.domain.dto.request.CategoriaRequestDTO();
+                    principal.setNombreCat("Refacciones");
+                    principal.setTipo("REFACCION");
+                    principal.setIncluirEnNombre(false);
+                    return categoriaRepository.findById(categoriaService.crear(principal).getIdcat()).orElseThrow();
+                });
+        return categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat("General", raiz.getIdcat())
                 .filter(c -> Boolean.TRUE.equals(c.getActivo())).map(Categoria::getIdcat)
                 .orElseGet(() -> {
                     com.skycel.backend.domain.dto.request.CategoriaRequestDTO nueva = new com.skycel.backend.domain.dto.request.CategoriaRequestDTO();
-                    nueva.setNombreCat("Refacciones");
+                    nueva.setNombreCat("General");
                     nueva.setIdCategoriaSuperior(raiz.getIdcat());
-                    nueva.setCodigo("REF");
+                    nueva.setCodigo(java.util.stream.Stream.of("REF", "RREF", "REFA", "REFB")
+                            .filter(c -> !categoriaRepository.existsByCodigoIgnoreCase(c)).findFirst().orElse(null));
                     nueva.setIncluirEnNombre(false);   // el nombre del artículo es solo lo que escribe el técnico
                     return categoriaService.crear(nueva).getIdcat();
                 });
@@ -638,7 +648,7 @@ public class OrdenServicioService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Agregue al menos un servicio antes de marcar la orden como lista.");
         }
         for (OrdenServicioDetalle l : lineas) {
-            if (l.getProductoMaster().getTipo() == TipoProducto.ACCESORIO) {
+            if (l.getProductoMaster().getTipo() == TipoProducto.ACCESORIO || l.getProductoMaster().getTipo() == TipoProducto.REFACCION) {
                 Tienda deDonde = l.getTiendaStock() != null ? l.getTiendaStock() : orden.getTienda();
                 BigDecimal hay = productoRepository.findByCodproAndTienda_Codti(l.getCodpro(), deDonde.getCodti())
                         .map(p -> p.getStock() != null ? p.getStock() : BigDecimal.ZERO).orElse(BigDecimal.ZERO);

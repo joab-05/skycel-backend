@@ -15,5 +15,7 @@ public record ExistenciaTiendaDto(
         Integer idprodmaster,
         String nombre,
         BigDecimal existencia,
-        BigDecimal precio) {
+        BigDecimal precio,
+        /** ACCESORIO, REFACCION o EQUIPO. */
+        String tipo) {
 }

@@ -75,7 +75,7 @@ public class ProductoService {
         try {
             tipo = com.skycel.backend.domain.enums.TipoProducto.valueOf(dto.getTipo().toUpperCase());
         } catch (IllegalArgumentException | NullPointerException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de producto inválido. Use CELULAR, ACCESORIO o SERVICIO.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de producto inválido. Use CELULAR, ACCESORIO, REFACCION o SERVICIO.");
         }
         master.setTipo(tipo);
 

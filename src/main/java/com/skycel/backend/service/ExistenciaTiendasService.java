@@ -48,7 +48,8 @@ public class ExistenciaTiendasService {
             String nombre = p.getProductoMaster().getNombreBase();
             if (!contieneTodas(otras, nombre + " " + p.getCodpro())) continue;
             lista.add(new ExistenciaTiendaDto(p.getTienda().getCodti(), p.getTienda().getNombre(), Boolean.TRUE.equals(p.getTienda().getEsAlmacen()),
-                    false, p.getCodpro(), p.getProductoMaster().getIdprodmaster(), nombre, p.getStock(), p.getPreciopub()));
+                    false, p.getCodpro(), p.getProductoMaster().getIdprodmaster(), nombre, p.getStock(), p.getPreciopub(),
+                    p.getProductoMaster().getTipo().name()));
         }
         for (Object[] f : imeiRepository.existenciasEquipos(ancla)) {
             Integer codti = (Integer) f[2];
@@ -56,7 +57,7 @@ public class ExistenciaTiendasService {
             String nombre = (String) f[1];
             if (!contieneTodas(otras, nombre)) continue;
             lista.add(new ExistenciaTiendaDto(codti, (String) f[3], Boolean.TRUE.equals(f[4]), true, null, (Integer) f[0], nombre,
-                    BigDecimal.valueOf(((Number) f[5]).longValue()), (BigDecimal) f[6]));
+                    BigDecimal.valueOf(((Number) f[5]).longValue()), (BigDecimal) f[6], "EQUIPO"));
         }
         lista.sort(Comparator.comparing(ExistenciaTiendaDto::nombre, String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(ExistenciaTiendaDto::tienda, String.CASE_INSENSITIVE_ORDER));

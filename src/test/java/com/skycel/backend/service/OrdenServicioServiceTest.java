@@ -496,11 +496,11 @@ class OrdenServicioServiceTest {
         @DisplayName("pieza comprada para la orden: se da de alta en el inventario del taller con su costo y se agrega como renglón")
         void piezaComprada() {
             int o = orden();
-            Categoria accesorios = Categoria.builder().idcat((short) 56).nombre("Accesorios").tipo(TipoProducto.ACCESORIO).activo(true).build();
-            Categoria refacciones = Categoria.builder().idcat((short) 90).nombre("Refacciones").tipo(TipoProducto.ACCESORIO).categoriaSuperior(accesorios).activo(true).build();
-            when(categoriaRepository.findAll()).thenReturn(List.of(accesorios, refacciones));
-            when(categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat("Refacciones", (short) 56)).thenReturn(Optional.of(refacciones));
-            ProductoMaster mPieza = ProductoMaster.builder().idprodmaster(9).tipo(TipoProducto.ACCESORIO).nombreBase("Pantalla Samsung A16 (OS)").build();
+            Categoria raizRefacciones = Categoria.builder().idcat((short) 88).nombre("Refacciones").tipo(TipoProducto.REFACCION).activo(true).build();
+            Categoria general = Categoria.builder().idcat((short) 90).nombre("General").tipo(TipoProducto.REFACCION).categoriaSuperior(raizRefacciones).activo(true).build();
+            when(categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIsNull("Refacciones")).thenReturn(Optional.of(raizRefacciones));
+            when(categoriaRepository.findByNombreIgnoreCaseAndCategoriaSuperiorIdcat("General", (short) 88)).thenReturn(Optional.of(general));
+            ProductoMaster mPieza = ProductoMaster.builder().idprodmaster(9).tipo(TipoProducto.REFACCION).nombreBase("Pantalla Samsung A16 (OS)").build();
             when(productoService.crearProducto(any())).thenAnswer(inv -> {
                 com.skycel.backend.domain.dto.request.ProductoRequestDTO alta = inv.getArgument(0);
                 mPieza.setNombreBase(alta.getNombreProducto());

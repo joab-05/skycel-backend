@@ -4196,7 +4196,7 @@ async function cargarNominaDetalle(iddetalle, s) {
 
 // ── Inventario ───────────────────────────────────────────────────────────
 
-const TIPO_ICONO = { CELULAR: ic('smartphone'), TABLET: ic('smartphone'), ACCESORIO: ic('headphones'), SERVICIO: ic('receipt') };
+const TIPO_ICONO = { CELULAR: ic('smartphone'), TABLET: ic('smartphone'), ACCESORIO: ic('headphones'), REFACCION: ic('wrench'), SERVICIO: ic('receipt') };
 
 async function pantallaInventario() {
   const s = Sesion.obtener();
@@ -4219,7 +4219,7 @@ async function pantallaInventario() {
         <select id="iv-cat" aria-label="Categoría"><option value="">Todas las categorías</option></select>
         <label class="casilla-chica"><input type="checkbox" id="iv-bajo-stock"> Solo bajo stock</label>
         <label class="casilla-chica" title="Busca el artículo en las demás sucursales para pedirlo en un traspaso"><input type="checkbox" id="iv-todas"> En todas las tiendas</label>
-        <select id="iv-tipo" aria-label="Tipo de artículo" style="display:none;"><option value="">Accesorios y equipos</option><option value="acc">Solo accesorios</option><option value="eq">Solo equipos</option></select>
+        <select id="iv-tipo" aria-label="Tipo de artículo" style="display:none;"><option value="">Accesorios y equipos</option><option value="acc">Solo accesorios</option><option value="ref">Solo refacciones</option><option value="eq">Solo equipos</option></select>
       </div>
       <div id="iv-conteo" class="ayuda" style="margin-top:8px;"></div>
       <div id="iv-lista" style="margin-top:6px;"><div class="vacio">Cargando...</div></div>
@@ -4242,8 +4242,8 @@ async function pantallaInventario() {
         const r = await api('GET', `/api/productos/existencias?texto=${encodeURIComponent(q)}&excluir=${codti ?? ''}`);
         if (esta !== busquedaTiendas) return;
         const tipo = document.getElementById('iv-tipo').value;   // solo accesorios o solo equipos
-        existencias = r.filter(x => tipo === 'eq' ? x.esEquipo : tipo === 'acc' ? !x.esEquipo : true);
-        const que = tipo === 'eq' ? 'equipos' : tipo === 'acc' ? 'accesorios' : 'existencia';
+        existencias = r.filter(x => tipo === 'eq' ? x.esEquipo : tipo === 'ref' ? x.tipo === 'REFACCION' : tipo === 'acc' ? !x.esEquipo && x.tipo !== 'REFACCION' : true);
+        const que = tipo === 'eq' ? 'equipos' : tipo === 'ref' ? 'refacciones' : tipo === 'acc' ? 'accesorios' : 'existencia';
         conteo.textContent = existencias.length === 0 ? `Sin ${que} en las demás tiendas` : `${new Set(existencias.map(x => x.nombre)).size} artículos en ${new Set(existencias.map(x => x.codti)).size} tiendas`;
         const puedePedir = Sesion.tiene('TRASPASOS');
         cont.innerHTML = existencias.length === 0 ? `<div class="vacio">Ninguna otra tienda tiene ${tipo ? que + ' que coincidan con' : 'existencia de'} «${escapar(q)}».</div>` : existencias.map((x, i) => `
@@ -4369,6 +4369,7 @@ const TIPOS_PRINCIPAL = [
   { valor: 'CELULAR', texto: 'Equipos (se venden por IMEI o serie)' },
   { valor: 'ACCESORIO', texto: 'Accesorios (por piezas)' },
   { valor: 'SERVICIO', texto: 'Servicios (sin inventario)' },
+  { valor: 'REFACCION', texto: 'Refacciones (piezas del taller)' },
 ];
 
 async function cargarCategorias() {
@@ -4792,7 +4793,7 @@ async function pantallaProductoDetalle(param) {
       `).join('')}
     </div>` : ''}
     ${puedeEditar ? `
-    ${p.tipo === 'ACCESORIO' ? `
+    ${p.tipo === 'ACCESORIO' || p.tipo === 'REFACCION' ? `
     <div class="tarjeta">
       <h2>Ajustar stock</h2>
       <label class="obligatorio">Tipo de movimiento</label>

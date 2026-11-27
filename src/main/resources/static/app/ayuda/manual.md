@@ -254,12 +254,15 @@ Muestra los productos de **tu tienda**: existencia, precio y el mínimo que conv
 - **④** **Un producto:** su código, categoría, precio y existencias. Tócalo para ver su detalle.
 
 ### Qué muestra
-Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞**. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay (ahí también eliges **Solo accesorios** o **Solo equipos**); con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
+Cada producto con su nombre, código, existencia y precios (el costo y el proveedor solo los ve un administrador). Los de **poca existencia** aparecen marcados y el menú dice cuántos son. Los **servicios** no tienen existencia: muestran **∞**. Con **En todas las tiendas** buscas un artículo (por nombre, código o IMEI) en las demás sucursales y ves dónde hay (ahí también eliges **Solo accesorios**, **Solo refacciones** o **Solo equipos**); con **Pedir traspaso** le mandas la solicitud a esa tienda. **Exportar** lo saca a Excel.
 
-![Con «En todas las tiendas» se busca en las demás sucursales; el filtro deja ver solo accesorios o solo equipos.](img/web-inventario-general.png)
+![Con «En todas las tiendas» se busca en las demás sucursales; el filtro deja ver solo accesorios, solo refacciones o solo equipos.](img/web-inventario-general.png)
 - **①** **Buscador:** nombre, código o IMEI del artículo.
-- **②** **Tipo:** accesorios y equipos, solo accesorios o solo equipos.
+- **②** **Tipo:** accesorios y equipos, solo accesorios, solo refacciones o solo equipos.
 - **③** **El resultado:** en qué tienda hay y cuánto; **Pedir traspaso** se lo pide a esa tienda.
+
+### Refacciones (piezas del taller)
+Las piezas para reparar equipos (pantallas, baterías, tapas…) son de un tipo aparte: **Refacción**. Se llevan con existencias y código como un accesorio, pero **no aparecen en el Punto de Venta**: se usan en las órdenes de servicio y se piden y mandan en traspasos. Tienen su propia categoría principal, **Refacciones**, y su propio filtro **Solo refacciones** en el inventario general. Las piezas que el técnico compra para una orden se dan de alta solas en **Refacciones › General**. Para crear una categoría de refacciones, al dar de alta la categoría principal elige el tipo **Refacciones (piezas del taller)**.
 
 ### Registrar un producto nuevo (administrador)
 1. Pulsa **Nuevo producto**.

@@ -39,6 +39,12 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
 
     List<Producto> findByTienda_CodtiAndActivoTrue(Integer codti);
 
+    /** Todos los productos de una tienda, activos o no (para migrar el tipo de lo que es del taller). */
+    List<Producto> findByTienda_Codti(Integer codti);
+
+    /** ¿Hay productos de este artículo en alguna tienda fuera de la lista? */
+    boolean existsByProductoMaster_IdprodmasterAndTienda_CodtiNotIn(Integer idprodmaster, java.util.Collection<Integer> codtis);
+
     /** Pasa todos los productos de una sección a otra. Devuelve cuántos movió. */
     @org.springframework.data.jpa.repository.Modifying
     @Query("UPDATE Producto p SET p.seccion = :destino WHERE p.seccion.idseccion = :origen")
@@ -60,11 +66,12 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
     /**
      * Igual que {@link #findActivosConDetalleByTienda} pero solo lo que el punto de venta puede vender: lo que tiene stock y los
      * servicios de la tienda, que no manejan stock (siempre en 0) y se venden siempre. La mano de obra del taller
-     * ({@code paraReparacion}) se cobra desde su orden de reparación, no en caja.
+     * ({@code paraReparacion}) y las refacciones se cobran desde su orden de reparación, no en caja.
      */
     @Query("SELECT p FROM Producto p JOIN FETCH p.tienda LEFT JOIN FETCH p.productoMaster m LEFT JOIN FETCH m.categoria " +
            "LEFT JOIN FETCH p.color LEFT JOIN FETCH p.proveedor LEFT JOIN FETCH p.magnitud LEFT JOIN FETCH p.seccion " +
            "WHERE p.tienda.codti = :codti AND p.activo = true " +
+           "AND p.productoMaster.tipo <> com.skycel.backend.domain.enums.TipoProducto.REFACCION " +
            "AND (p.stock > 0 OR (p.productoMaster.tipo = com.skycel.backend.domain.enums.TipoProducto.SERVICIO " +
            "AND (p.productoMaster.paraReparacion IS NULL OR p.productoMaster.paraReparacion = false)))")
     List<Producto> findDisponiblesConDetalleByTienda(Integer codti);
@@ -81,11 +88,11 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
            "ORDER BY p.stock ASC, p.codpro ASC")
     List<Producto> findBajoStockByTienda(Integer codti);
 
-    /** Accesorios con existencia, de todas las sucursales activas, cuyo nombre o código contiene el texto (la búsqueda entre tiendas). */
+    /** Accesorios y refacciones con existencia, de todas las sucursales activas, cuyo nombre o código contiene el texto (la búsqueda entre tiendas). */
     @Query("""
             SELECT p FROM Producto p JOIN FETCH p.tienda t JOIN FETCH p.productoMaster m
             WHERE p.activo = true AND t.activo = true AND p.stock > 0
-              AND m.tipo = com.skycel.backend.domain.enums.TipoProducto.ACCESORIO
+              AND m.tipo IN (com.skycel.backend.domain.enums.TipoProducto.ACCESORIO, com.skycel.backend.domain.enums.TipoProducto.REFACCION)
               AND (LOWER(m.nombreBase) LIKE LOWER(CONCAT('%', :texto, '%')) OR LOWER(p.codpro) LIKE LOWER(CONCAT('%', :texto, '%')))
             ORDER BY m.nombreBase ASC, t.nombre ASC
             """)
