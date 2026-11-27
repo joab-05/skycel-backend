@@ -41,6 +41,7 @@ class ReporteResultadosServiceTest {
     @Mock private MovimientoCajaRepository movimientoCajaRepository;
     @Mock private DevolucionRepository devolucionRepository;
     @Mock private ProductoRepository productoRepository;
+    @Mock private com.skycel.backend.repository.MovimientoInventarioRepository movimientoInventarioRepository;
 
     private ReporteResultadosService service;
     private Tienda matriz;
@@ -48,7 +49,7 @@ class ReporteResultadosServiceTest {
     @BeforeEach
     void setUp() {
         service = new ReporteResultadosService(reporteService, ventaDetalleRepository, movimientoCajaRepository,
-                devolucionRepository, productoRepository);
+                devolucionRepository, productoRepository, movimientoInventarioRepository);
         matriz = Tienda.builder().codti(1).nombre("Matriz").esAlmacen(false).build();
         lenient().when(reporteService.alcance(any(), any()))
                 .thenReturn(new ReporteService.Alcance(List.of(matriz), List.of(1), Map.of(1, "Matriz")));
@@ -215,6 +216,25 @@ class ReporteResultadosServiceTest {
         List<Map<String, Object>> arts = (List<Map<String, Object>>) r.get("articulos");
         assertThat(arts.get(0).get("ultimaVenta")).isEqualTo(venta);
         assertThat(arts.get(0).get("nombreProducto")).isEqualTo("Funda iPhone");
+    }
+
+    @Test
+    @DisplayName("sin movimiento: de una refacción la última venta es su última salida por venta (puede salir del taller en la venta de otra sucursal)")
+    void sinMovimientoRefaccion() {
+        ProductoMaster pantalla = ProductoMaster.builder().nombreBase("Pantalla Samsung A16").tipo(com.skycel.backend.domain.enums.TipoProducto.REFACCION).build();
+        Producto p = Producto.builder().idproducto(77).codpro("REF-000001").tienda(matriz).productoMaster(pantalla)
+                .stock(new BigDecimal("3")).preciopro(new BigDecimal("650.00")).build();
+        when(productoRepository.sinMovimiento(any(LocalDateTime.class), anyList(), any(Pageable.class))).thenReturn(List.of(p));
+        LocalDateTime salida = LocalDateTime.of(2026, 9, 2, 12, 0);
+        when(movimientoInventarioRepository.ultimaVentaPorProducto(List.of(77))).thenReturn(List.<Object[]>of(new Object[]{77, salida}));
+
+        Map<String, Object> r = service.sinMovimiento(60, null, "admin");
+
+        assertThat(r.get("valorParado")).isEqualTo(new BigDecimal("1950.00"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> arts = (List<Map<String, Object>>) r.get("articulos");
+        assertThat(arts.get(0).get("tipo")).isEqualTo("REFACCION");
+        assertThat(arts.get(0).get("ultimaVenta")).isEqualTo(salida);
     }
 
     @Test

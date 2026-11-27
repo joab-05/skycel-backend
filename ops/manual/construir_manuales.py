@@ -1231,7 +1231,7 @@ Para administradores (todas las sucursales o la que elijan). Arriba eliges el **
 | Estado de resultados | Ventas, devoluciones, costo, utilidad bruta, gastos y utilidad neta, comparados con el periodo anterior |
 | Ventas por día | Cuánto se vendió cada día, con gráfica (barras si son pocos días, líneas si es un mes o más) |
 | Por categoría | Qué categorías venden más y cuánto dejan, con reparto en pastel y barras |
-| Sin movimiento | Accesorios con existencia que no se han vendido en los días que elijas, y el dinero que tienen parado |
+| Sin movimiento | Accesorios y refacciones con existencia que no se han vendido en los días que elijas, y el dinero que tienen parado |
 | Equipos rezagados | Equipos que llevan mucho tiempo sin venderse, con su costo |
 | Caja de todas las sucursales (administrador) | El efectivo y los movimientos de hoy de todas las cajas |
 
@@ -1259,7 +1259,7 @@ Elige la **sucursal** (si eres administrador) y el **periodo** (Hoy, Ayer, 7 dí
 - **Estado de resultados**: ventas, menos devoluciones, menos el costo de lo vendido, igual a la **utilidad bruta**; menos los **gastos de caja**, igual a la **utilidad neta**. Se compara con el periodo anterior.
 - **Por día**: cuánto se vendió cada día, con gráfica.
 - **Por categoría**: qué categorías venden más y cuánto dejan.
-- **Sin movimiento**: accesorios con existencia que no se han vendido en los días que elijas, y el dinero que tienen parado.
+- **Sin movimiento**: accesorios y refacciones con existencia que no se han vendido en los días que elijas, y el dinero que tienen parado.
 - Cada vista tiene **Descargar para Excel**.
 
 > Los **gastos** son las **salidas de caja** del periodo, agrupadas por motivo (renta, flete, nómina…). Los retiros del dueño, los traslados, los pagos a proveedores, los préstamos a empleados y la apertura y cierre de caja **no** cuentan como gasto. Es una guía para decidir, no un documento contable.

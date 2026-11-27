@@ -12,6 +12,11 @@ import java.util.List;
 @Repository
 public interface MovimientoInventarioRepository extends JpaRepository<MovimientoInventario, Long> {
 
+    /** Cuándo salió por última vez en una venta cada uno de estos productos (id del producto, fecha). */
+    @Query("SELECT m.producto.idproducto, MAX(m.fecha) FROM MovimientoInventario m "
+            + "WHERE m.tipo = 'VENTA' AND m.producto.idproducto IN :ids GROUP BY m.producto.idproducto")
+    List<Object[]> ultimaVentaPorProducto(@org.springframework.data.repository.query.Param("ids") List<Integer> ids);
+
     @Query("SELECT m FROM MovimientoInventario m LEFT JOIN m.producto p WHERE m.codti = :codti " +
             "AND m.fecha BETWEEN :desde AND :hasta " +
             "AND (:codpro IS NULL OR p.codpro = :codpro OR m.imei = :codpro) " +

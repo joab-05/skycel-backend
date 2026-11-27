@@ -122,16 +122,21 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
     List<ValorInventarioRow> valorInventarioPorTienda(@Param("codtis") List<Integer> codtis);
 
     /**
-     * Accesorios con existencia que llevan sin venderse desde {@code limite} (y que ya estaban en la tienda antes de
-     * esa fecha, para no marcar lo recién recibido). Los más caros de tener parados (a costo) primero.
+     * Accesorios y refacciones con existencia que llevan sin venderse desde {@code limite} (y que ya estaban en la tienda antes de
+     * esa fecha, para no marcar lo recién recibido). Los más caros de tener parados (a costo) primero. Un accesorio se vende en su
+     * tienda; una refacción puede salir del taller en una venta de otra sucursal, así que de ella se mira su salida de inventario.
      */
     @Query("""
             SELECT p FROM Producto p
             WHERE p.activo = true AND p.stock > 0 AND p.tienda.codti IN :codtis
-              AND p.productoMaster.tipo = com.skycel.backend.domain.enums.TipoProducto.ACCESORIO
+              AND p.productoMaster.tipo IN (com.skycel.backend.domain.enums.TipoProducto.ACCESORIO, com.skycel.backend.domain.enums.TipoProducto.REFACCION)
               AND (p.fechaIngreso IS NULL OR p.fechaIngreso < :limite)
-              AND NOT EXISTS (SELECT 1 FROM VentaDetalle d JOIN d.venta v
-                              WHERE d.codpro = p.codpro AND v.tienda = p.tienda AND v.estado = 1 AND v.fechaVenta >= :limite)
+              AND ((p.productoMaster.tipo = com.skycel.backend.domain.enums.TipoProducto.ACCESORIO
+                    AND NOT EXISTS (SELECT 1 FROM VentaDetalle d JOIN d.venta v
+                                    WHERE d.codpro = p.codpro AND v.tienda = p.tienda AND v.estado = 1 AND v.fechaVenta >= :limite))
+                OR (p.productoMaster.tipo = com.skycel.backend.domain.enums.TipoProducto.REFACCION
+                    AND NOT EXISTS (SELECT 1 FROM MovimientoInventario mv
+                                    WHERE mv.producto = p AND mv.tipo = 'VENTA' AND mv.fecha >= :limite)))
             ORDER BY p.stock * p.preciopro DESC
             """)
     List<Producto> sinMovimiento(@Param("limite") java.time.LocalDateTime limite, @Param("codtis") List<Integer> codtis,

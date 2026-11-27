@@ -1,8 +1,10 @@
 package com.skycel.backend.service;
 
 import com.skycel.backend.domain.entity.Producto;
+import com.skycel.backend.domain.enums.TipoProducto;
 import com.skycel.backend.repository.DevolucionRepository;
 import com.skycel.backend.repository.MovimientoCajaRepository;
+import com.skycel.backend.repository.MovimientoInventarioRepository;
 import com.skycel.backend.repository.ProductoRepository;
 import com.skycel.backend.repository.VentaDetalleRepository;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +46,7 @@ public class ReporteResultadosService {
     private final MovimientoCajaRepository movimientoCajaRepository;
     private final DevolucionRepository devolucionRepository;
     private final ProductoRepository productoRepository;
+    private final MovimientoInventarioRepository movimientoInventarioRepository;
 
     // ── Estado de resultados ─────────────────────────────────────────────────
 
@@ -207,7 +210,7 @@ public class ReporteResultadosService {
 
     // ── Accesorios sin movimiento ────────────────────────────────────────────
 
-    /** Accesorios con existencia que no se han vendido en {@code dias} días: dinero parado en la repisa. */
+    /** Accesorios y refacciones con existencia que no se han vendido en {@code dias} días: dinero parado en la repisa. */
     @Transactional(readOnly = true)
     public Map<String, Object> sinMovimiento(Integer dias, Integer codti, String username) {
         if (dias != null && dias < 1)
@@ -224,6 +227,14 @@ public class ReporteResultadosService {
                 ultima.put(f[0] + "|" + f[1], (LocalDateTime) f[2]);
             }
         }
+        // la refacción de una orden puede salir del taller en la venta de otra sucursal: su última venta es su última salida por venta
+        Map<Integer, LocalDateTime> ultimaSalida = new HashMap<>();
+        List<Integer> idsRefaccion = productos.stream().filter(p -> p.getProductoMaster().getTipo() == TipoProducto.REFACCION).map(Producto::getIdproducto).toList();
+        if (!idsRefaccion.isEmpty()) {
+            for (Object[] f : movimientoInventarioRepository.ultimaVentaPorProducto(idsRefaccion)) {
+                ultimaSalida.put((Integer) f[0], (LocalDateTime) f[1]);
+            }
+        }
         List<Map<String, Object>> filas = new ArrayList<>();
         BigDecimal parado = BigDecimal.ZERO;
         for (Producto p : productos) {
@@ -235,7 +246,9 @@ public class ReporteResultadosService {
             m.put("nombreTienda", p.getTienda().getNombre());
             m.put("stock", p.getStock());
             m.put("valorCosto", valor);
-            m.put("ultimaVenta", ultima.get(p.getCodpro() + "|" + p.getTienda().getCodti()));
+            boolean refaccion = p.getProductoMaster().getTipo() == TipoProducto.REFACCION;
+            m.put("tipo", p.getProductoMaster().getTipo() != null ? p.getProductoMaster().getTipo().name() : TipoProducto.ACCESORIO.name());
+            m.put("ultimaVenta", refaccion ? ultimaSalida.get(p.getIdproducto()) : ultima.get(p.getCodpro() + "|" + p.getTienda().getCodti()));
             filas.add(m);
             parado = parado.add(valor);
         }

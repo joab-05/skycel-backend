@@ -3732,7 +3732,7 @@ async function iniciarReporteResultados(cont, s) {
   function dibujarSinMovimiento(cuerpo, r) {
     cuerpo.innerHTML = `
       <div class="kp-h">
-        ${kpiH('c1', 'package', String(r.totalArticulos), 'Accesorios sin venderse')}
+        ${kpiH('c1', 'package', String(r.totalArticulos), 'Accesorios y refacciones sin venderse')}
         ${kpiH('c4', 'banknote', formatoDinero(r.valorParado), 'Dinero parado (a costo)')}
       </div>
       ${r.articulos.length === 0 ? '' : botonExcel()}
