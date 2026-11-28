@@ -58,7 +58,7 @@ PRIMEROS_JS = PRIMEROS_COMUN.format(
 @@IMG inicio.png | La pantalla de inicio de JSystem. Haz clic en la imagen para verla más grande.@@
 @@L - **①** **El menú de la izquierda.** Los grupos (Ventas, Inventario, Finanzas…) se abren y se cierran con un clic.
 @@L - **②** **Accesos rápidos** a las pantallas que más usas.
-@@L - **③** **Los números del día:** ventas, tickets, existencias bajas, traspasos, cuentas por pagar y órdenes en el taller. Haz clic en uno para abrir su pantalla.
+@@L - **③** **Los números del día:** ventas, tickets, existencias bajas, traspasos, cuentas por pagar y órdenes en el taller. Si usas **Tareas**, también salen **Tareas por hacer hoy** (en rojo, cuántas ya van atrasadas) y, si eres encargado o administrador, **Tareas por revisar**. Haz clic en uno para abrir su pantalla.
 @@L - **④** **Ventas de los últimos 7 días.** Hoy es la barra azul fuerte.
 @@L - **⑤** **Saldo de caja** de la tienda, con lo que entró y salió.
 @@L - **⑥** **Ayuda, avisos, configuración, tema, contraseña y salir.**
@@ -80,7 +80,7 @@ PRIMEROS_WEB = PRIMEROS_COMUN.format(
 @@WEB web-menu.png | El inicio en el celular.@@
 @@WL - **①** **Ayuda, avisos, ajustes y salir.** El número rojo de la campana son los avisos que no has leído.
 @@WL - **②** **Nueva venta,** si tu rol vende.
-@@WL - **③** **Los números del día** (ventas, tickets, bajo stock, traspasos, por pagar y órdenes en el taller, según tu rol). Toca uno para abrir su pantalla.
+@@WL - **③** **Los números del día** (ventas, tickets, bajo stock, traspasos, por pagar y órdenes en el taller, según tu rol). Si usas **Tareas** verás **Tareas por hacer hoy** (en rojo, cuántas van atrasadas) y, si revisas, **Tareas por revisar**. Toca uno para abrir su pantalla.
 @@WL - **④** **El acceso rápido de abajo:** Inicio, Vender, Inventario y Caja.
 
 @@WEB web-ajustes.png | Ajustes: tu contraseña y, para el administrador, las formas de pago y el logo.@@

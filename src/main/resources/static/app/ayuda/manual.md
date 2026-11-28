@@ -37,7 +37,7 @@ Solo el **encargado** y el **técnico** están ligados a una tienda; los vendedo
 ![El inicio en el celular.](img/web-menu.png)
 - **①** **Ayuda, avisos, ajustes y salir.** El número rojo de la campana son los avisos que no has leído.
 - **②** **Nueva venta,** si tu rol vende.
-- **③** **Los números del día** (ventas, tickets, bajo stock, traspasos, por pagar y órdenes en el taller, según tu rol). Toca uno para abrir su pantalla.
+- **③** **Los números del día** (ventas, tickets, bajo stock, traspasos, por pagar y órdenes en el taller, según tu rol). Si usas **Tareas** verás **Tareas por hacer hoy** (en rojo, cuántas van atrasadas) y, si revisas, **Tareas por revisar**. Toca uno para abrir su pantalla.
 - **④** **El acceso rápido de abajo:** Inicio, Vender, Inventario y Caja.
 
 ![Ajustes: tu contraseña y, para el administrador, las formas de pago y el logo.](img/web-ajustes.png)

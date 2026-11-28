@@ -520,6 +520,8 @@ async function pantallaMenu() {
   if (verTraspasos) kpis.push({ id: 'traspasos', c: 'c3', i: 'truck', t: 'Traspasos por atender', h: '#/traspasos' });
   if (gestor) kpis.push({ id: 'porpagar', c: 'c4', i: 'shopping-bag', t: 'Por pagar a proveedores', h: '#/compras' });
   if (enTaller) kpis.push({ id: 'taller', c: 'c5', i: 'wrench', t: 'Órdenes en taller', h: '#/taller' });
+  if (Sesion.tiene('TAREAS_VER')) kpis.push({ id: 'tareas', c: 'c7', i: 'clipboard-check', t: 'Tareas por hacer hoy', h: '#/tareas' });
+  if (Sesion.tiene('TAREAS_ASIGNAR')) kpis.push({ id: 'tarrev', c: 'c5', i: 'eye', t: 'Tareas por revisar', h: '#/tareas' });
   if (pend + err > 0) kpis.push({ id: 'pend', c: 'c6', i: 'cloud-upload', t: 'Por enviar', h: '#/pendientes', v: String(pend + err) });
 
   root.innerHTML = `
@@ -656,6 +658,13 @@ async function pantallaMenu() {
       .catch(() => poner('dk-porpagar', '—'));
   }
   if (enTaller) api('GET', '/api/ordenes-servicio/taller').then(l => poner('dk-taller', String(l.length))).catch(() => poner('dk-taller', '—'));
+  if (Sesion.tiene('TAREAS_VER')) api('GET', `/api/tareas/mias?codti=${codti}`).then(d => {
+    const el = document.getElementById('dk-tareas');
+    if (!el) return;
+    el.textContent = d.atrasadas > 0 ? `${d.pendientes} · ${d.atrasadas} ${d.atrasadas === 1 ? 'atrasada' : 'atrasadas'}` : String(d.pendientes);
+    if (d.atrasadas > 0) { el.style.color = '#dc2626'; el.style.fontSize = '16px'; }
+  }).catch(() => poner('dk-tareas', '—'));
+  if (Sesion.tiene('TAREAS_ASIGNAR')) api('GET', `/api/tareas/revision?codti=${codti}`).then(l => poner('dk-tarrev', String(l.length))).catch(() => poner('dk-tarrev', '—'));
 }
 
 /** Gráfica de barras de 7 días (HTML y CSS, sin librerías): total vendido por día; la barra de hoy va resaltada. */
