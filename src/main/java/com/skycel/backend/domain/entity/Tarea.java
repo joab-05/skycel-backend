@@ -79,9 +79,38 @@ public class Tarea {
     @Column(name = "hecha_el")
     private LocalDateTime hechaEl;
 
+    /** Para una tarea puntual: la persona a la que se le asignó (sin persona, es de todo su puesto o de cualquiera de la tienda). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idusuario_asignado")
+    private Usuario asignadoA;
+
+    /** Al marcarla queda «por revisar» en lugar de «hecha»: la aprueba o la regresa otra persona. */
+    @Column(name = "requiere_revision")
+    @Builder.Default
+    private Boolean requiereRevision = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idusuario_revisa")
+    private Usuario revisadaPor;
+
+    @Column(name = "revisada_el")
+    private LocalDateTime revisadaEl;
+
+    /** Lo que dijo quien la regresó (se conserva mientras la tarea vuelve a quedar pendiente). */
+    @Column(name = "comentario_revision", length = 500)
+    private String comentarioRevision;
+
+    /** Quién creó la tarea puntual (usuario). */
+    @Column(name = "creada_por", length = 50)
+    private String creadaPor;
+
     /** Si se marcó después de su hora límite. */
     @Column(name = "tarde")
     private Boolean tarde;
+
+    public boolean esPuntual() { return rutina == null; }
+
+    public boolean terminada() { return estado != null && estado != EstadoTarea.PENDIENTE; }
 
     @CreationTimestamp
     @Column(name = "creado_el", updatable = false)

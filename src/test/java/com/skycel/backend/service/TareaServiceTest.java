@@ -64,8 +64,8 @@ class TareaServiceTest {
     }
 
     private Tarea tarea(int id, String titulo, MomentoTarea momento, int orden, Rol rol, LocalDate fecha) {
-        return Tarea.builder().idtarea(id).tienda(zocalo).fecha(fecha).titulo(titulo).momento(momento).orden(orden).rolDestino(rol)
-                .estado(EstadoTarea.PENDIENTE).build();
+        return Tarea.builder().idtarea(id).rutina(TareaRutina.builder().idrutina(1).build()).tienda(zocalo).fecha(fecha).titulo(titulo)
+                .momento(momento).orden(orden).rolDestino(rol).estado(EstadoTarea.PENDIENTE).build();
     }
 
     private static void rechaza(Runnable accion, HttpStatus estado, String texto) {
@@ -278,6 +278,7 @@ class TareaServiceTest {
 
         t.setEstado(EstadoTarea.HECHA);
         t.setHechaPor(vendedor);
+        t.setHechaEl(LUNES.atTime(8, 0));
         service.deshacer(1, admin, LUNES_9);
         assertThat(t.getEstado()).isEqualTo(EstadoTarea.PENDIENTE);
     }
@@ -378,7 +379,7 @@ class TareaServiceTest {
     // ── Rutinas ─────────────────────────────────────────────────────────────────
 
     private static RutinaRequest pide(String titulo, String momento, List<Integer> dias, String hora) {
-        return new RutinaRequest(2, titulo, null, momento, null, null, dias, hora, null);
+        return new RutinaRequest(2, titulo, null, momento, null, null, dias, hora, null, null);
     }
 
     @Test
@@ -411,7 +412,7 @@ class TareaServiceTest {
         rechaza(() -> service.crearRutina(pide("x", "APERTURA", List.of(), null), "joab"), HttpStatus.BAD_REQUEST, "al menos un día");
         rechaza(() -> service.crearRutina(pide("x", "APERTURA", List.of(8), null), "joab"), HttpStatus.BAD_REQUEST, "1 (lunes)");
         rechaza(() -> service.crearRutina(pide("x", "APERTURA", null, "25:99"), "joab"), HttpStatus.BAD_REQUEST, "hora");
-        rechaza(() -> service.crearRutina(new RutinaRequest(2, "x", null, "APERTURA", null, "ROOT", null, null, null), "joab"),
+        rechaza(() -> service.crearRutina(new RutinaRequest(2, "x", null, "APERTURA", null, "ROOT", null, null, null, null), "joab"),
                 HttpStatus.BAD_REQUEST, "solo puede ser de");
         verify(rutinaRepo, never()).save(any());
     }

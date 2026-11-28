@@ -72,6 +72,7 @@ public enum Permiso {
     // ── Tareas ────────────────────────────────────────────────────────────────
     TAREAS_VER("Ver y marcar sus tareas del día", "Tareas", Set.of(ADMIN, ENCARGADO_TIENDA, VENDEDOR, TECNICO)),
     TAREAS_EQUIPO("Ver las tareas de toda la tienda y su cumplimiento", "Tareas", Set.of(ADMIN, ENCARGADO_TIENDA)),
+    TAREAS_ASIGNAR("Asignar tareas puntuales a una persona y revisar lo que se hizo", "Tareas", Set.of(ADMIN, ENCARGADO_TIENDA)),
     TAREAS_RUTINAS("Armar las rutinas de actividades de las tiendas", "Tareas", Set.of(ADMIN));
 
     private final String etiqueta;

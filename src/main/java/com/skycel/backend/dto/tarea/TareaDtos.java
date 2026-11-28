@@ -12,20 +12,34 @@ public final class TareaDtos {
 
     /** Alta y cambio de una actividad de la rutina. {@code codti} vacío = todas las tiendas; {@code dias} (1 = lunes ... 7 = domingo) vacío = todos. */
     public record RutinaRequest(Integer codti, String titulo, String descripcion, String momento, Integer orden,
-                                String rolDestino, List<Integer> dias, String horaLimite, Boolean activa) {
+                                String rolDestino, List<Integer> dias, String horaLimite, Boolean activa, Boolean requiereRevision) {
     }
 
     public record RutinaDto(Integer idrutina, Integer codti, String nombreTienda, String titulo, String descripcion,
                             String momento, String momentoEtiqueta, Integer orden, String rolDestino, List<Integer> dias,
-                            String horaLimite, boolean activa) {
+                            String horaLimite, boolean activa, boolean requiereRevision) {
+    }
+
+    /** Alta y cambio de una tarea puntual: algo suelto, con fecha límite, para una persona (o para un puesto, o para cualquiera de la tienda). */
+    public record PuntualRequest(Integer codti, String titulo, String descripcion, LocalDate fecha, String horaLimite,
+                                 Integer idusuarioAsignado, String rolDestino, Boolean requiereRevision) {
     }
 
     public record NotaRequest(String nota) {
     }
 
+    public record RechazoRequest(String comentario) {
+    }
+
+    /** Quién puede recibir una tarea. */
+    public record PersonaDto(Integer idusuario, String nombre, String rol) {
+    }
+
     public record TareaDto(Integer idtarea, Integer codti, LocalDate fecha, String titulo, String descripcion, String momento,
                            String momentoEtiqueta, Integer orden, String rolDestino, String horaLimite, String estado, String nota,
-                           Integer idusuarioHecha, String hechaPor, LocalDateTime hechaEl, boolean tarde, boolean atrasada) {
+                           Integer idusuarioHecha, String hechaPor, LocalDateTime hechaEl, boolean tarde, boolean atrasada,
+                           boolean puntual, Integer idusuarioAsignado, String asignadoA, boolean requiereRevision,
+                           String revisadaPor, LocalDateTime revisadaEl, String comentarioRevision) {
     }
 
     public record TareasDiaDto(Integer codti, String nombreTienda, LocalDate fecha, int total, int hechas, int pendientes,
@@ -33,7 +47,7 @@ public final class TareaDtos {
     }
 
     public record TiendaCumplimiento(Integer codti, String nombre, int total, int hechas, int aTiempo, int noHechas,
-                                     int pendientesHoy, Integer pctHechas, Integer pctATiempo) {
+                                     int pendientesHoy, Integer pctHechas, Integer pctATiempo, int porRevisar) {
     }
 
     public record PersonaCumplimiento(Integer idusuario, String nombre, int hechas, int tarde) {

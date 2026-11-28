@@ -121,6 +121,7 @@ Cada persona tiene un rol, y el sistema solo le muestra lo que le corresponde.
 | Empleados | No | No | Sí | No |
 | Ver y marcar sus tareas del día | Sí | Sí | Sí | Sí |
 | Ver las tareas de toda la tienda y su cumplimiento | No | Sí | Sí | No |
+| Asignar tareas puntuales y revisar lo que se hizo | No | Sí | Sí | No |
 | Armar las rutinas de actividades de las tiendas | No | No | Sí | No |
 
 > Un **encargado** solo ve la información de su tienda, y de fábrica **no ve costos ni proveedores** (eso es solo del administrador); el **técnico encargado** sí ve el costo de las refacciones de las órdenes que trabaja.
@@ -1268,76 +1269,96 @@ Elige la **sucursal** (si eres administrador) y el **periodo** (Hoy, Ayer, 7 dí
 # ───────────────────────────── Tareas ─────────────────────────────
 TAREAS = """## Tareas
 
-Lo que le toca hacer a cada persona en el día, en el orden en que se hace: **apertura**, **durante el día** y **cierre**. Cada día el sistema crea las actividades de cada tienda a partir de las **rutinas** que arma el administrador, y el personal las marca como hechas (con una nota si hace falta). El encargado y el administrador ven cómo va todo el equipo y cuánto se cumplió.
+Lo que le toca hacer a cada persona en el día, en el orden en que se hace: **apertura**, **durante el día** y **cierre**. Cada día el sistema crea las actividades de cada tienda a partir de las **rutinas** que arma el administrador, y el personal las marca como hechas (con una nota si hace falta). Además, el encargado y el administrador pueden asignar **tareas puntuales** (algo suelto, con fecha límite, para una persona) y **revisar** lo que se hizo. Ven cómo va todo el equipo y cuánto se cumplió.
 
 ### Qué ve cada quien
-- **Todos** ven **Mis tareas**: las actividades de su puesto (encargado, apoyo o técnico) y las que son de cualquiera de la tienda.
-- **Encargado y administrador** ven además **Tareas del equipo** y **Cumplimiento**. El encargado, solo de su tienda; el administrador, de todas.
+- **Todos** ven **Mis tareas**: las actividades de su puesto (encargado, apoyo o técnico), las que son de cualquiera de la tienda y las tareas puntuales que les asignaron.
+- **Encargado y administrador** ven además **Tareas del equipo** y **Cumplimiento**, y **asignan y revisan** tareas. El encargado, solo de su tienda; el administrador, de todas.
 - **El administrador** arma las **Rutinas**.
 
 ### Marcar mis tareas
 1. Entra a **Tareas** (grupo **Tareas** del menú). Se muestran las de hoy en la sucursal en la que trabajas.
 2. Cada actividad tiene una casilla. Si quieres dejar una **nota** (por ejemplo «faltaban 3 cables»), escríbela antes de marcarla.
 3. Marca la casilla. Queda guardado quién la hizo y a qué hora. Si otra persona ya la había hecho, el sistema te dice quién fue.
-4. Si te equivocas, pulsa **Deshacer** (solo el mismo día, y solo quien la marcó o el encargado).
+4. Si la actividad dice **Se revisa**, queda **esperando revisión** hasta que el encargado la apruebe. Si la **regresa**, vuelve a quedar pendiente con lo que te dijo, en rojo, para que la hagas de nuevo.
+5. Si te equivocas, pulsa **Deshacer** (solo el mismo día, y solo quien la marcó o el encargado). Una tarea ya aprobada no se deshace.
 
-@@IMG tareas.png | Mis tareas del día, por apertura, durante el día y cierre.@@
+@@IMG tareas.png | Mis tareas del día: arriba las puntuales y abajo las de la rutina.@@
 @@L - **①** **Pestañas:** Mis tareas, Tareas del equipo, Cumplimiento y Rutinas; solo salen las que tu rol puede usar.
 @@L - **②** **Avance del día:** cuántas llevas hechas y, en rojo, cuántas están atrasadas.
-@@L - **③** **Una actividad hecha:** quién la hizo, a qué hora y su nota. **Deshacer** la regresa a pendiente.
-@@L - **④** **Una pendiente:** marca la casilla; antes puedes escribir una nota. **Antes de 10:00** es su hora límite y **Apoyo (vendedor)** dice a quién le toca.
+@@L - **③** **Una tarea puntual pendiente:** dice para cuándo es (**Para el 27 de nov antes de 15:00**) y si **Se revisa**. Marca la casilla; antes puedes escribir una nota.
+@@L - **④** **Una tarea esperando revisión:** el reloj dice que ya la hiciste y falta que la aprueben. **Deshacer** la regresa a pendiente.
+@@L - **⑤** **Una tarea que te regresaron:** en rojo, lo que falta o hay que corregir.
 
 @@WEB web-tareas.png | Mis tareas en el celular.@@
 @@WL - **①** **Avance del día:** cuántas llevas hechas y cuántas están atrasadas.
-@@WL - **②** **Una actividad hecha:** quién la hizo y a qué hora; **Deshacer** la regresa a pendiente.
-@@WL - **③** **Una pendiente:** escribe una nota si quieres y marca la casilla.
+@@WL - **②** **Una tarea puntual pendiente:** dice para cuándo es y si **Se revisa**; marca la casilla.
+@@WL - **③** **Una tarea esperando revisión:** ya la hiciste; falta que la aprueben.
+@@WL - **④** **Una tarea que te regresaron:** en rojo, lo que hay que corregir.
 
-### Ver al equipo (encargado y administrador)
-En **Tareas del equipo** eliges la sucursal y el día y ves todas las actividades, de cualquier puesto: quién hizo cada una, a qué hora y qué nota dejó. Con **Deshacer la marca** corriges una que se marcó por error (solo las de hoy).
+### Tareas puntuales (encargado y administrador)
+Una tarea puntual es algo que no es de todos los días: «llamar al cliente de la orden OS-0231», «contar los cables». Se asigna a una persona, a todo un puesto o a cualquiera de la tienda, con **fecha límite** (y hora, si quieres). Si no se hace a tiempo se ve **atrasada** y, aun así, se puede hacer después.
+1. Entra a **Tareas › Tareas del equipo**, elige la sucursal y pulsa **Nueva tarea**.
+2. Escribe **qué hay que hacer** y un detalle si hace falta.
+3. Elige **para quién** es: una persona, todo un puesto o cualquiera de la tienda.
+4. Pon la **fecha límite** (y la hora, si importa) y, si quieres, marca **Requiere que el encargado la revise**.
+5. Guarda. A la persona le aparece en **Mis tareas** desde unos días antes de la fecha límite.
+Mientras siga pendiente se puede **Editar** o **Quitar**; una tarea que ya se hizo no.
 
-@@IMG tareas-equipo.png | Las tareas de toda la tienda en un día.@@
+### Ver al equipo y revisar (encargado y administrador)
+En **Tareas del equipo** eliges la sucursal y el día y ves todas las actividades, de cualquier puesto: quién hizo cada una, a qué hora y qué nota dejó. El día de hoy trae además lo que sigue abierto de días anteriores: lo que espera revisión y las tareas puntuales vencidas. Con **Deshacer la marca** corriges una que se marcó por error (solo las de hoy).
+
+Para **revisar**, selecciona una tarea **por revisar** y elige **Aprobar** o **Regresar**. Al regresarla escribes qué falta; la persona la ve en rojo y la hace de nuevo. Lo que hiciste tú lo revisa otra persona.
+
+@@IMG tareas-equipo.png | Las tareas de toda la tienda en un día, con la que espera revisión seleccionada.@@
 @@L - **①** **Sucursal y día:** el administrador elige cualquier tienda; el encargado, la suya. Puedes ver días anteriores.
-@@L - **②** **Resumen:** tareas del día, hechas, pendientes y atrasadas.
-@@L - **③** **La lista:** estado de cada actividad, quién la hizo, la hora y su nota.
-@@L - **④** **Deshacer la marca:** regresa a pendiente la actividad seleccionada.
+@@L - **②** **Nueva tarea:** asigna una tarea puntual.
+@@L - **③** **Resumen:** tareas del día, hechas, pendientes, por revisar y atrasadas.
+@@L - **④** **La lista:** estado de cada actividad (**Por revisar** en azul), para quién es, quién la hizo, la hora y su nota. Las puntuales salen primero.
+@@L - **⑤** **Acciones:** **Aprobar** y **Regresar** (tareas por revisar), **Editar** y **Quitar** (tareas puntuales pendientes) y **Deshacer la marca**.
 
 @@WEB web-tareas-equipo.png | Las tareas del equipo en el celular.@@
-@@WL - **①** **Sucursal y día:** el administrador elige cualquier tienda; el encargado, la suya.
-@@WL - **②** **Resumen:** tareas, hechas, pendientes y atrasadas.
-@@WL - **③** **Cada actividad:** su estado, quién la hizo, la hora y la nota.
+@@WL - **①** **Sucursal, día y Nueva tarea:** el administrador elige cualquier tienda; el encargado, la suya.
+@@WL - **②** **Resumen:** tareas, hechas, pendientes, por revisar y atrasadas.
+
+@@WEB web-tareas-revision.png | Revisar una tarea: aprobarla o regresarla.@@
+@@WL - **①** **Una tarea por revisar:** su estado, para quién es, quién la hizo y la nota.
+@@WL - **②** **Aprobar:** la da por buena.
+@@WL - **③** **Regresar:** pide escribir qué falta; la tarea vuelve a quedar pendiente.
 
 ### Cumplimiento
-Elige la sucursal (el administrador puede ver **todas**) y las fechas (hasta 3 meses). Verás, por sucursal, el **porcentaje de tareas hechas** y el de **hechas a tiempo**, cuántas quedaron **sin hacer** y quién hizo cuántas.
+Elige la sucursal (el administrador puede ver **todas**) y las fechas (hasta 3 meses). Verás, por sucursal, el **porcentaje de tareas hechas** y el de **hechas a tiempo**, cuántas quedaron **sin hacer**, cuántas **esperan revisión** y quién hizo cuántas. Una tarea por revisar ya cuenta como hecha.
 
 @@IMG tareas-cumplimiento.png | El cumplimiento por sucursal y por persona.@@
 @@L - **①** **Sucursal y fechas:** el rango máximo es de 3 meses.
-@@L - **②** **Por sucursal:** tareas, hechas, a tiempo, no hechas y los porcentajes.
+@@L - **②** **Por sucursal:** tareas, hechas, a tiempo, no hechas, por revisar y los porcentajes.
 @@L - **③** **Quién las hizo:** las tareas hechas por cada persona y cuántas fueron fuera de hora.
 
 ### Armar las rutinas (administrador)
 1. Entra a **Tareas › Rutinas** y pulsa **Nueva actividad**.
 2. Elige la **sucursal** (o **Todas las sucursales**), escribe **qué hay que hacer** y, si hace falta, un detalle.
 3. Elige el **momento** (apertura, durante el día o cierre), a quién le toca (encargado, apoyo, técnico o cualquiera) y los **días** de la semana.
-4. Si debe estar lista a cierta hora, pon la **hora límite**. Guarda.
+4. Si debe estar lista a cierta hora, pon la **hora límite**. Si lo que se hace debe revisarse, marca **Requiere que el encargado la revise**. Guarda.
 5. Con **Subir** y **Bajar** acomodas el orden dentro de su momento del día.
 
 @@IMG tareas-rutinas.png | La lista de actividades de las rutinas.@@
 @@L - **①** **Sucursal y Nueva actividad:** filtra la lista por tienda y agrega actividades.
 @@L - **②** **Editar, Quitar, Subir y Bajar:** actúan sobre la actividad seleccionada.
 @@L - **③** **La lista:** sucursal, momento, orden, a quién le toca, días y hora límite.
+@@L - **④** **Revisión:** las actividades que hay que revisar.
 
 @@WEB web-tareas-rutinas.png | Las rutinas en el celular.@@
 @@WL - **①** **Sucursal y Nueva actividad:** filtra por tienda y agrega actividades.
-@@WL - **②** **Cada actividad:** su momento, a quién le toca, los días y la hora límite; con **Editar**, **▲**, **▼** y **Quitar**.
+@@WL - **②** **Cada actividad:** su momento, a quién le toca, los días, la hora límite y si se revisa; con **Editar**, **▲**, **▼** y **Quitar**.
 
 ### Cosas que conviene saber
 - Las actividades del día se crean solas: al abrir **Tareas** y cuando se enciende el servidor.
 - Lo que cambias en una rutina aplica **desde hoy**; lo que ya se hizo no se toca. Al **quitar** una actividad se desactiva y conserva su historial.
 - Las actividades de **Todas las sucursales** no se generan en el almacén; para él se arman actividades propias.
-- Solo se marcan las tareas **de hoy**. Lo que quede sin hacer al terminar el día cuenta como **no hecha** en el cumplimiento.
+- Una actividad de rutina solo se marca **el mismo día**. Lo que quede sin hacer al terminar el día cuenta como **no hecha** en el cumplimiento. Una tarea puntual se puede hacer después de su fecha límite, pero cuenta como **fuera de hora**.
 - Una actividad **sin hora límite** cuenta a tiempo si se hace ese día. Con hora límite, marcada después cuenta **fuera de hora**.
 - Los porcentajes no cuentan las tareas de hoy que siguen abiertas: todavía hay tiempo.
-- El administrador (root) puede cambiar quién ve y quién arma las tareas en **Permisos** (grupo **Tareas**).
+- El administrador (root) puede cambiar quién ve, quién asigna y revisa y quién arma las tareas en **Permisos** (grupo **Tareas**).
 """
 
 # ───────────────────────────── Empleados ─────────────────────────────

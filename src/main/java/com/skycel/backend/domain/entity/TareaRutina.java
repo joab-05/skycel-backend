@@ -66,6 +66,11 @@ public class TareaRutina {
     @Column(name = "hora_limite")
     private LocalTime horaLimite;
 
+    /** Si lo que se hace tiene que revisarlo el encargado o el administrador antes de darse por bueno. */
+    @Column(name = "requiere_revision")
+    @Builder.Default
+    private Boolean requiereRevision = false;
+
     @Column(name = "activa", nullable = false)
     @Builder.Default
     private Boolean activa = true;

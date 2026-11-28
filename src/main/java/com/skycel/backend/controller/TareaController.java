@@ -72,6 +72,55 @@ public class TareaController {
         return ResponseEntityBuilder.ok(service.cumplimiento(codti, desde, hasta, userDetails.getUsername()), "cumplimiento");
     }
 
+    // ── Revisión y tareas puntuales (quien asigna) ─────────────────────────────
+
+    @GetMapping("/revision")
+    @PreAuthorize("@permisos.tiene('TAREAS_ASIGNAR')")
+    public ResponseEntity<StandardApiResponse<List<TareaDto>>> porRevisar(@RequestParam Integer codti,
+                                                                          @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.porRevisar(codti, userDetails.getUsername()), "tareas");
+    }
+
+    @PostMapping("/{idtarea}/aprobar")
+    @PreAuthorize("@permisos.tiene('TAREAS_ASIGNAR')")
+    public ResponseEntity<StandardApiResponse<TareaDto>> aprobar(@PathVariable Integer idtarea, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.aprobar(idtarea, userDetails.getUsername()), "tarea");
+    }
+
+    @PostMapping("/{idtarea}/rechazar")
+    @PreAuthorize("@permisos.tiene('TAREAS_ASIGNAR')")
+    public ResponseEntity<StandardApiResponse<TareaDto>> rechazar(@PathVariable Integer idtarea, @RequestBody RechazoRequest body,
+                                                                  @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.rechazar(idtarea, body == null ? null : body.comentario(), userDetails.getUsername()), "tarea");
+    }
+
+    @GetMapping("/personal")
+    @PreAuthorize("@permisos.tiene('TAREAS_ASIGNAR')")
+    public ResponseEntity<StandardApiResponse<List<PersonaDto>>> personal(@RequestParam Integer codti,
+                                                                          @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.personal(codti, userDetails.getUsername()), "personal");
+    }
+
+    @PostMapping
+    @PreAuthorize("@permisos.tiene('TAREAS_ASIGNAR')")
+    public ResponseEntity<StandardApiResponse<TareaDto>> crearPuntual(@RequestBody PuntualRequest body, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.created(service.crearPuntual(body, userDetails.getUsername()), "tarea");
+    }
+
+    @PutMapping("/{idtarea}")
+    @PreAuthorize("@permisos.tiene('TAREAS_ASIGNAR')")
+    public ResponseEntity<StandardApiResponse<TareaDto>> actualizarPuntual(@PathVariable Integer idtarea, @RequestBody PuntualRequest body,
+                                                                           @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.updated(service.actualizarPuntual(idtarea, body, userDetails.getUsername()), "tarea");
+    }
+
+    @DeleteMapping("/{idtarea}")
+    @PreAuthorize("@permisos.tiene('TAREAS_ASIGNAR')")
+    public ResponseEntity<Void> quitarPuntual(@PathVariable Integer idtarea, @AuthenticationPrincipal UserDetails userDetails) {
+        service.quitarPuntual(idtarea, userDetails.getUsername());
+        return ResponseEntity.noContent().build();
+    }
+
     // ── Rutinas ────────────────────────────────────────────────────────────────
 
     @GetMapping("/rutinas")
