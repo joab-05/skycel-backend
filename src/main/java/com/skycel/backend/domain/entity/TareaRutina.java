@@ -71,6 +71,11 @@ public class TareaRutina {
     @Builder.Default
     private Boolean requiereRevision = false;
 
+    /** Si hay que subir una foto de evidencia para poder marcarla como hecha. */
+    @Column(name = "requiere_foto")
+    @Builder.Default
+    private Boolean requiereFoto = false;
+
     @Column(name = "activa", nullable = false)
     @Builder.Default
     private Boolean activa = true;

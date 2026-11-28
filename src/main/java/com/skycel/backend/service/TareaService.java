@@ -1,6 +1,7 @@
 package com.skycel.backend.service;
 
 import com.skycel.backend.domain.entity.Tarea;
+import com.skycel.backend.domain.entity.TareaFoto;
 import com.skycel.backend.domain.entity.TareaRutina;
 import com.skycel.backend.domain.entity.Tienda;
 import com.skycel.backend.domain.entity.Usuario;
@@ -9,6 +10,7 @@ import com.skycel.backend.domain.enums.MomentoTarea;
 import com.skycel.backend.domain.enums.Permiso;
 import com.skycel.backend.domain.enums.Rol;
 import com.skycel.backend.dto.tarea.TareaDtos.*;
+import com.skycel.backend.repository.TareaFotoRepository;
 import com.skycel.backend.repository.TareaRepository;
 import com.skycel.backend.repository.TareaRutinaRepository;
 import com.skycel.backend.repository.TiendaRepository;
@@ -49,6 +51,8 @@ public class TareaService {
 
     private static final int MAX_DIAS_REPORTE = 92;
     private static final int MAX_NOTA = 500;
+    public static final int MAX_FOTOS = 3;
+    public static final int MAX_BYTES_FOTO = 1_500_000;
     /** Cuántos días de anticipación se ve una tarea puntual en «Mis tareas». */
     private static final int DIAS_DE_ANTICIPACION = 2;
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("H:mm");
@@ -66,6 +70,7 @@ public class TareaService {
 
     private final TareaRutinaRepository rutinaRepository;
     private final TareaRepository tareaRepository;
+    private final TareaFotoRepository fotoRepository;
     private final TiendaRepository tiendaRepository;
     private final UsuarioRepository usuarioRepository;
     private final PermisoService permisoService;
@@ -98,7 +103,7 @@ public class TareaService {
         TareaRutina r = rutina(idrutina);
         aplicar(r, req);
         rutinaRepository.save(r);
-        tareaRepository.borrarDesde(idrutina, LocalDate.now(), EstadoTarea.PENDIENTE);
+        borrarPendientesDesde(idrutina);
         return aDto(r);
     }
 
@@ -108,7 +113,7 @@ public class TareaService {
         TareaRutina r = rutina(idrutina);
         r.setActiva(false);
         rutinaRepository.save(r);
-        tareaRepository.borrarDesde(idrutina, LocalDate.now(), EstadoTarea.PENDIENTE);
+        borrarPendientesDesde(idrutina);
     }
 
     /** Sube (−1) o baja (+1) una actividad dentro de su momento del día y su tienda. */
@@ -132,9 +137,16 @@ public class TareaService {
                 orden += 10;
             }
             rutinaRepository.saveAll(grupo);
-            for (TareaRutina x : grupo) tareaRepository.borrarDesde(x.getIdrutina(), LocalDate.now(), EstadoTarea.PENDIENTE);
+            for (TareaRutina x : grupo) borrarPendientesDesde(x.getIdrutina());
         }
         return grupo.stream().map(this::aDto).collect(Collectors.toList());
+    }
+
+    /** Quita las tareas aún sin hacer de una rutina desde hoy (con sus fotos): se vuelven a generar con lo nuevo. */
+    private void borrarPendientesDesde(Integer idrutina) {
+        LocalDate hoy = LocalDate.now();
+        fotoRepository.borrarPendientesDeRutina(idrutina, hoy);
+        tareaRepository.borrarDesde(idrutina, hoy, EstadoTarea.PENDIENTE);
     }
 
     // ── Generación del día ─────────────────────────────────────────────────────
@@ -178,6 +190,7 @@ public class TareaService {
                     .rolDestino(r.getRolDestino())
                     .horaLimite(r.getHoraLimite())
                     .requiereRevision(Boolean.TRUE.equals(r.getRequiereRevision()))
+                    .requiereFoto(Boolean.TRUE.equals(r.getRequiereFoto()))
                     .estado(EstadoTarea.PENDIENTE)
                     .build());
         }
@@ -221,6 +234,8 @@ public class TareaService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya la hizo " + nombreDe(t.getHechaPor()) + " a las "
                     + t.getHechaEl().toLocalTime().truncatedTo(ChronoUnit.MINUTES) + ".");
         String limpia = notaLimpia(nota);
+        if (Boolean.TRUE.equals(t.getRequiereFoto()) && (t.getNumFotos() == null || t.getNumFotos() == 0))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta tarea pide una foto: súbela antes de marcarla.");
         t.setEstado(Boolean.TRUE.equals(t.getRequiereRevision()) ? EstadoTarea.POR_REVISAR : EstadoTarea.HECHA);
         t.setNota(limpia);
         t.setHechaPor(usuario);
@@ -364,6 +379,7 @@ public class TareaService {
         Tarea t = tarea(idtarea);
         exigirPuntualPendiente(t);
         exigirGestor(u, t.getTienda().getCodti(), Permiso.TAREAS_ASIGNAR, "Solo el encargado de esa sucursal o un administrador quita tareas.");
+        fotoRepository.borrarDeTarea(idtarea);
         tareaRepository.delete(t);
     }
 
@@ -410,6 +426,7 @@ public class TareaService {
         t.setAsignadoA(asignado);
         t.setRolDestino(rol);
         t.setRequiereRevision(Boolean.TRUE.equals(req.requiereRevision()));
+        t.setRequiereFoto(Boolean.TRUE.equals(req.requiereFoto()));
     }
 
     private static Rol rolDeTarea(String texto) {
@@ -593,6 +610,7 @@ public class TareaService {
         if (req.orden() != null) r.setOrden(req.orden());
         if (req.activa() != null) r.setActiva(req.activa());
         r.setRequiereRevision(Boolean.TRUE.equals(req.requiereRevision()));
+        r.setRequiereFoto(Boolean.TRUE.equals(req.requiereFoto()));
     }
 
     private static String diasComoTexto(List<Integer> dias) {
@@ -677,7 +695,8 @@ public class TareaService {
                 t.getHechaEl(), Boolean.TRUE.equals(t.getTarde()), atrasada,
                 t.esPuntual(), t.getAsignadoA() == null ? null : t.getAsignadoA().getIdusuario(),
                 t.getAsignadoA() == null ? null : t.getAsignadoA().getNombreCompleto(), Boolean.TRUE.equals(t.getRequiereRevision()),
-                t.getRevisadaPor() == null ? null : t.getRevisadaPor().getNombreCompleto(), t.getRevisadaEl(), t.getComentarioRevision());
+                t.getRevisadaPor() == null ? null : t.getRevisadaPor().getNombreCompleto(), t.getRevisadaEl(), t.getComentarioRevision(),
+                Boolean.TRUE.equals(t.getRequiereFoto()), t.getNumFotos() == null ? 0 : t.getNumFotos());
     }
 
     private RutinaDto aDto(TareaRutina r) {
@@ -687,6 +706,93 @@ public class TareaService {
                 r.getTienda() == null ? null : r.getTienda().getNombre(), r.getTitulo(), r.getDescripcion(), r.getMomento().name(),
                 r.getMomento().etiqueta(), r.getOrden(), r.getRolDestino() == null ? null : r.getRolDestino().name(), dias,
                 r.getHoraLimite() == null ? null : r.getHoraLimite().toString(), Boolean.TRUE.equals(r.getActiva()),
-                Boolean.TRUE.equals(r.getRequiereRevision()));
+                Boolean.TRUE.equals(r.getRequiereRevision()), Boolean.TRUE.equals(r.getRequiereFoto()));
+    }
+
+    // ── Fotos de evidencia ─────────────────────────────────────────────────────
+
+    /**
+     * Sube una foto (JPEG o PNG ya reducida por la pantalla) a una tarea que sigue pendiente. La sube quien la va a hacer (o un administrador).
+     * Devuelve las fotos de la tarea.
+     */
+    @Transactional
+    public List<FotoDto> subirFoto(Integer idtarea, byte[] contenido, String username) {
+        return subirFoto(idtarea, contenido, usuario(username), LocalDateTime.now());
+    }
+
+    List<FotoDto> subirFoto(Integer idtarea, byte[] contenido, Usuario usuario, LocalDateTime ahora) {
+        Tarea t = tarea(idtarea);
+        if (!puedeVer(usuario, t)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Esa tarea le toca a otra persona o a otro puesto.");
+        if (t.getEstado() != EstadoTarea.PENDIENTE)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Solo se agregan fotos mientras la tarea está pendiente.");
+        if (!t.esPuntual() && !t.getFecha().equals(ahora.toLocalDate()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se pueden usar las tareas de hoy.");
+        if (contenido == null || contenido.length == 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto viene vacía.");
+        if (contenido.length > MAX_BYTES_FOTO)
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "La foto pesa demasiado (máximo " + MAX_BYTES_FOTO / 1_000_000.0 + " MB). Reduzca su tamaño.");
+        String tipo = tipoDeImagen(contenido);
+        if (tipo == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se aceptan fotos JPEG o PNG.");
+        if (fotoRepository.countByTarea_Idtarea(idtarea) >= MAX_FOTOS)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una tarea admite hasta " + MAX_FOTOS + " fotos. Borra alguna antes de agregar otra.");
+        fotoRepository.save(TareaFoto.builder().tarea(t).usuario(usuario).tipo(tipo).contenido(contenido).build());
+        t.setNumFotos((int) fotoRepository.countByTarea_Idtarea(idtarea));
+        tareaRepository.save(t);
+        return listaDeFotos(idtarea);
+    }
+
+    /** Las fotos de una tarea: las ve quien la hace y quien da seguimiento a la tienda. */
+    @Transactional(readOnly = true)
+    public List<FotoDto> fotos(Integer idtarea, String username) {
+        Usuario u = usuario(username);
+        exigirVerFotos(u, tarea(idtarea));
+        return listaDeFotos(idtarea);
+    }
+
+    @Transactional(readOnly = true)
+    public TareaFoto foto(Integer idtarea, Integer idfoto, String username) {
+        Usuario u = usuario(username);
+        exigirVerFotos(u, tarea(idtarea));
+        return fotoDeLaTarea(idtarea, idfoto);
+    }
+
+    /** La borra quien la subió mientras la tarea siga pendiente, o quien asigna y revisa en esa tienda. */
+    @Transactional
+    public List<FotoDto> eliminarFoto(Integer idtarea, Integer idfoto, String username) {
+        Usuario u = usuario(username);
+        Tarea t = tarea(idtarea);
+        TareaFoto f = fotoDeLaTarea(idtarea, idfoto);
+        boolean propia = f.getUsuario() != null && f.getUsuario().getIdusuario().equals(u.getIdusuario());
+        boolean gestor = puedeGestionar(u, t.getTienda().getCodti(), Permiso.TAREAS_ASIGNAR);
+        if (!gestor && !(propia && t.getEstado() == EstadoTarea.PENDIENTE))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo quien la subió, y mientras la tarea siga pendiente, puede borrar la foto.");
+        fotoRepository.delete(f);
+        fotoRepository.flush();
+        t.setNumFotos((int) fotoRepository.countByTarea_Idtarea(idtarea));
+        tareaRepository.save(t);
+        return listaDeFotos(idtarea);
+    }
+
+    private void exigirVerFotos(Usuario u, Tarea t) {
+        if (puedeVer(u, t)) return;
+        if (!puedeGestionar(u, t.getTienda().getCodti(), Permiso.TAREAS_EQUIPO))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puedes ver las fotos de esa tarea.");
+    }
+
+    private TareaFoto fotoDeLaTarea(Integer idtarea, Integer idfoto) {
+        return fotoRepository.findById(idfoto).filter(f -> f.getTarea().getIdtarea().equals(idtarea))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "La foto no existe en esta tarea."));
+    }
+
+    private List<FotoDto> listaDeFotos(Integer idtarea) {
+        return fotoRepository.resumenes(idtarea).stream()
+                .map(f -> new FotoDto((Integer) f[0], (String) f[1], (LocalDateTime) f[2], (Integer) f[3], (String) f[4]))
+                .collect(Collectors.toList());
+    }
+
+    /** image/jpeg o image/png según los primeros bytes (no se confía en lo que diga el cliente); null si no es ninguna. */
+    static String tipoDeImagen(byte[] b) {
+        if (b.length > 3 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF) return "image/jpeg";
+        if (b.length > 8 && (b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') return "image/png";
+        return null;
     }
 }

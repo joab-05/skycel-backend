@@ -743,7 +743,7 @@ Elige la **sucursal** (si eres administrador) y el **periodo** (Hoy, Ayer, 7 dí
 
 ## Tareas
 
-Lo que le toca hacer a cada persona en el día, en el orden en que se hace: **apertura**, **durante el día** y **cierre**. Cada día el sistema crea las actividades de cada tienda a partir de las **rutinas** que arma el administrador, y el personal las marca como hechas (con una nota si hace falta). Además, el encargado y el administrador pueden asignar **tareas puntuales** (algo suelto, con fecha límite, para una persona) y **revisar** lo que se hizo. Ven cómo va todo el equipo y cuánto se cumplió.
+Lo que le toca hacer a cada persona en el día, en el orden en que se hace: **apertura**, **durante el día** y **cierre**. Cada día el sistema crea las actividades de cada tienda a partir de las **rutinas** que arma el administrador, y el personal las marca como hechas (con una nota y, si la actividad lo pide, una **foto** de evidencia). Además, el encargado y el administrador pueden asignar **tareas puntuales** (algo suelto, con fecha límite, para una persona) y **revisar** lo que se hizo. Ven cómo va todo el equipo y cuánto se cumplió.
 
 ### Qué ve cada quien
 - **Todos** ven **Mis tareas**: las actividades de su puesto (encargado, apoyo o técnico), las que son de cualquiera de la tienda y las tareas puntuales que les asignaron.
@@ -755,28 +755,28 @@ Lo que le toca hacer a cada persona en el día, en el orden en que se hace: **ap
 2. Cada actividad tiene una casilla. Si quieres dejar una **nota** (por ejemplo «faltaban 3 cables»), escríbela antes de marcarla.
 3. Marca la casilla. Queda guardado quién la hizo y a qué hora. Si otra persona ya la había hecho, el sistema te dice quién fue.
 4. Si la actividad dice **Se revisa**, queda **esperando revisión** hasta que el encargado la apruebe. Si la **regresa**, vuelve a quedar pendiente con lo que te dijo, en rojo, para que la hagas de nuevo.
-5. Si te equivocas, pulsa **Deshacer** (solo el mismo día, y solo quien la marcó o el encargado). Una tarea ya aprobada no se deshace.
+5. Si la actividad dice **Pide foto**, toma o elige una foto con el botón **Foto** (en el celular abre la cámara) **antes** de marcarla; puedes agregar hasta 3. Con **Ver fotos** las revisas y, mientras la tarea siga abierta, quitas las que no sirvan.
+6. Si te equivocas, pulsa **Deshacer** (solo el mismo día, y solo quien la marcó o el encargado). Una tarea ya aprobada no se deshace.
 
 
 ![Mis tareas en el celular.](img/web-tareas.png)
-- **①** **Avance del día:** cuántas llevas hechas y cuántas están atrasadas.
-- **②** **Una tarea puntual pendiente:** dice para cuándo es y si **Se revisa**; marca la casilla.
-- **③** **Una tarea esperando revisión:** ya la hiciste; falta que la aprueben.
-- **④** **Una tarea que te regresaron:** en rojo, lo que hay que corregir.
+- **①** **Una tarea puntual que pide foto:** el botón **Foto** abre la cámara del celular; hasta que subas la foto no deja marcarla.
+- **②** **Una tarea esperando revisión:** ya la hiciste; falta que la aprueben. **Ver fotos** muestra la evidencia.
+- **③** **Una tarea que te regresaron:** en rojo, lo que hay que corregir; puedes agregar otra foto y marcarla de nuevo.
 
 ### Tareas puntuales (encargado y administrador)
 Una tarea puntual es algo que no es de todos los días: «llamar al cliente de la orden OS-0231», «contar los cables». Se asigna a una persona, a todo un puesto o a cualquiera de la tienda, con **fecha límite** (y hora, si quieres). Si no se hace a tiempo se ve **atrasada** y, aun así, se puede hacer después.
 1. Entra a **Tareas › Tareas del equipo**, elige la sucursal y pulsa **Nueva tarea**.
 2. Escribe **qué hay que hacer** y un detalle si hace falta.
 3. Elige **para quién** es: una persona, todo un puesto o cualquiera de la tienda.
-4. Pon la **fecha límite** (y la hora, si importa) y, si quieres, marca **Requiere que el encargado la revise**.
+4. Pon la **fecha límite** (y la hora, si importa) y, si quieres, marca **Requiere que el encargado la revise** y **Pide una foto de evidencia**.
 5. Guarda. A la persona le aparece en **Mis tareas** desde unos días antes de la fecha límite.
 Mientras siga pendiente se puede **Editar** o **Quitar**; una tarea que ya se hizo no.
 
 ### Ver al equipo y revisar (encargado y administrador)
 En **Tareas del equipo** eliges la sucursal y el día y ves todas las actividades, de cualquier puesto: quién hizo cada una, a qué hora y qué nota dejó. El día de hoy trae además lo que sigue abierto de días anteriores: lo que espera revisión y las tareas puntuales vencidas. Con **Deshacer la marca** corriges una que se marcó por error (solo las de hoy).
 
-Para **revisar**, selecciona una tarea **por revisar** y elige **Aprobar** o **Regresar**. Al regresarla escribes qué falta; la persona la ve en rojo y la hace de nuevo. Lo que hiciste tú lo revisa otra persona.
+Para **revisar**, selecciona una tarea **por revisar**, mira las fotos con **Ver fotos** (la columna **Fotos** dice cuántas tiene, o **falta** si la pedía y no la tiene) y elige **Aprobar** o **Regresar**. Al regresarla escribes qué falta; la persona la ve en rojo y la hace de nuevo. Lo que hiciste tú lo revisa otra persona.
 
 
 ![Las tareas del equipo en el celular.](img/web-tareas-equipo.png)
@@ -784,7 +784,7 @@ Para **revisar**, selecciona una tarea **por revisar** y elige **Aprobar** o **R
 - **②** **Resumen:** tareas, hechas, pendientes, por revisar y atrasadas.
 
 ![Revisar una tarea: aprobarla o regresarla.](img/web-tareas-revision.png)
-- **①** **Una tarea por revisar:** su estado, para quién es, quién la hizo y la nota.
+- **①** **Una tarea por revisar:** su estado, para quién es, quién la hizo y la nota; **Ver fotos** abre la evidencia.
 - **②** **Aprobar:** la da por buena.
 - **③** **Regresar:** pide escribir qué falta; la tarea vuelve a quedar pendiente.
 
@@ -796,13 +796,13 @@ Elige la sucursal (el administrador puede ver **todas**) y las fechas (hasta 3 m
 1. Entra a **Tareas › Rutinas** y pulsa **Nueva actividad**.
 2. Elige la **sucursal** (o **Todas las sucursales**), escribe **qué hay que hacer** y, si hace falta, un detalle.
 3. Elige el **momento** (apertura, durante el día o cierre), a quién le toca (encargado, apoyo, técnico o cualquiera) y los **días** de la semana.
-4. Si debe estar lista a cierta hora, pon la **hora límite**. Si lo que se hace debe revisarse, marca **Requiere que el encargado la revise**. Guarda.
+4. Si debe estar lista a cierta hora, pon la **hora límite**. Si lo que se hace debe revisarse, marca **Requiere que el encargado la revise**; si debe comprobarse con una foto, marca **Pide una foto de evidencia**. Guarda.
 5. Con **Subir** y **Bajar** acomodas el orden dentro de su momento del día.
 
 
 ![Las rutinas en el celular.](img/web-tareas-rutinas.png)
 - **①** **Sucursal y Nueva actividad:** filtra por tienda y agrega actividades.
-- **②** **Cada actividad:** su momento, a quién le toca, los días, la hora límite y si se revisa; con **Editar**, **▲**, **▼** y **Quitar**.
+- **②** **Cada actividad:** su momento, a quién le toca, los días, la hora límite y si se revisa o pide foto; con **Editar**, **▲**, **▼** y **Quitar**.
 
 ### Cosas que conviene saber
 - Las actividades del día se crean solas: al abrir **Tareas** y cuando se enciende el servidor.
@@ -811,6 +811,8 @@ Elige la sucursal (el administrador puede ver **todas**) y las fechas (hasta 3 m
 - Una actividad de rutina solo se marca **el mismo día**. Lo que quede sin hacer al terminar el día cuenta como **no hecha** en el cumplimiento. Una tarea puntual se puede hacer después de su fecha límite, pero cuenta como **fuera de hora**.
 - Una actividad **sin hora límite** cuenta a tiempo si se hace ese día. Con hora límite, marcada después cuenta **fuera de hora**.
 - Los porcentajes no cuentan las tareas de hoy que siguen abiertas: todavía hay tiempo.
+- Las fotos se reducen solas antes de subirse (máximo 3 por tarea) y se guardan en la base de datos, así que viajan en los respaldos. Pasados unos **60 días** el sistema las borra para no llenar el servidor; la tarea y su historial se quedan.
+- Una actividad que **pide foto** no se marca sin al menos una foto. Si la regresan, la foto anterior se conserva y puedes agregar otra.
 - El administrador (root) puede cambiar quién ve, quién asigna y revisa y quién arma las tareas en **Permisos** (grupo **Tareas**).
 
 ## Empleados, nómina y comisiones

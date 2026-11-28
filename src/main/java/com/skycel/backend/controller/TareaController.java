@@ -121,6 +121,36 @@ public class TareaController {
         return ResponseEntity.noContent().build();
     }
 
+    // ── Fotos de evidencia ─────────────────────────────────────────────────────
+
+    @GetMapping("/{idtarea}/fotos")
+    @PreAuthorize("@permisos.tiene('TAREAS_VER')")
+    public ResponseEntity<StandardApiResponse<List<FotoDto>>> fotos(@PathVariable Integer idtarea, @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.fotos(idtarea, userDetails.getUsername()), "fotos");
+    }
+
+    @PostMapping(value = "/{idtarea}/fotos", consumes = {"image/jpeg", "image/png", "application/octet-stream"})
+    @PreAuthorize("@permisos.tiene('TAREAS_VER')")
+    public ResponseEntity<StandardApiResponse<List<FotoDto>>> subirFoto(@PathVariable Integer idtarea, @RequestBody byte[] imagen,
+                                                                       @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.created(service.subirFoto(idtarea, imagen, userDetails.getUsername()), "foto");
+    }
+
+    @GetMapping("/{idtarea}/fotos/{idfoto}")
+    @PreAuthorize("@permisos.tiene('TAREAS_VER')")
+    public ResponseEntity<byte[]> foto(@PathVariable Integer idtarea, @PathVariable Integer idfoto, @AuthenticationPrincipal UserDetails userDetails) {
+        var f = service.foto(idtarea, idfoto, userDetails.getUsername());
+        return ResponseEntity.ok().contentType(org.springframework.http.MediaType.parseMediaType(f.getTipo()))
+                .header("Cache-Control", "private, max-age=3600").body(f.getContenido());
+    }
+
+    @DeleteMapping("/{idtarea}/fotos/{idfoto}")
+    @PreAuthorize("@permisos.tiene('TAREAS_VER')")
+    public ResponseEntity<StandardApiResponse<List<FotoDto>>> eliminarFoto(@PathVariable Integer idtarea, @PathVariable Integer idfoto,
+                                                                          @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntityBuilder.ok(service.eliminarFoto(idtarea, idfoto, userDetails.getUsername()), "fotos");
+    }
+
     // ── Rutinas ────────────────────────────────────────────────────────────────
 
     @GetMapping("/rutinas")

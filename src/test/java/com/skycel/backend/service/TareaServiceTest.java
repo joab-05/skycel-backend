@@ -41,10 +41,11 @@ class TareaServiceTest {
 
     private final TareaRutinaRepository rutinaRepo = mock(TareaRutinaRepository.class);
     private final TareaRepository tareaRepo = mock(TareaRepository.class);
+    private final com.skycel.backend.repository.TareaFotoRepository fotoRepo = mock(com.skycel.backend.repository.TareaFotoRepository.class);
     private final TiendaRepository tiendaRepo = mock(TiendaRepository.class);
     private final UsuarioRepository usuarioRepo = mock(UsuarioRepository.class);
     private final PermisoService permisos = mock(PermisoService.class);
-    private final TareaService service = new TareaService(rutinaRepo, tareaRepo, tiendaRepo, usuarioRepo, permisos,
+    private final TareaService service = new TareaService(rutinaRepo, tareaRepo, fotoRepo, tiendaRepo, usuarioRepo, permisos,
             new TransactionTemplate(mock(PlatformTransactionManager.class)));
 
     private final Tienda zocalo = Tienda.builder().codti(2).nombre("Zócalo").activo(true).idEncargado(20).build();
@@ -379,7 +380,7 @@ class TareaServiceTest {
     // ── Rutinas ─────────────────────────────────────────────────────────────────
 
     private static RutinaRequest pide(String titulo, String momento, List<Integer> dias, String hora) {
-        return new RutinaRequest(2, titulo, null, momento, null, null, dias, hora, null, null);
+        return new RutinaRequest(2, titulo, null, momento, null, null, dias, hora, null, null, null);
     }
 
     @Test
@@ -412,7 +413,7 @@ class TareaServiceTest {
         rechaza(() -> service.crearRutina(pide("x", "APERTURA", List.of(), null), "joab"), HttpStatus.BAD_REQUEST, "al menos un día");
         rechaza(() -> service.crearRutina(pide("x", "APERTURA", List.of(8), null), "joab"), HttpStatus.BAD_REQUEST, "1 (lunes)");
         rechaza(() -> service.crearRutina(pide("x", "APERTURA", null, "25:99"), "joab"), HttpStatus.BAD_REQUEST, "hora");
-        rechaza(() -> service.crearRutina(new RutinaRequest(2, "x", null, "APERTURA", null, "ROOT", null, null, null, null), "joab"),
+        rechaza(() -> service.crearRutina(new RutinaRequest(2, "x", null, "APERTURA", null, "ROOT", null, null, null, null, null), "joab"),
                 HttpStatus.BAD_REQUEST, "solo puede ser de");
         verify(rutinaRepo, never()).save(any());
     }

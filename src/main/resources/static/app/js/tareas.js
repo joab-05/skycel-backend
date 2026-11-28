@@ -40,6 +40,31 @@ function tareaEstado(t) {
   return t.atrasada ? ['Atrasada', 'cancelada'] : ['Pendiente', 'pendiente'];
 }
 
+/** Abre o cierra, dentro de {@code cont}, las fotos de una tarea. {@code puedeBorrar}: muestra «Quitar» en cada una. */
+async function tareaMostrarFotos(cont, idtarea, puedeBorrar, alCambiar) {
+  if (!cont) return;
+  if (cont.dataset.abierto === '1') { cont.innerHTML = ''; cont.dataset.abierto = ''; return; }
+  cont.dataset.abierto = '1';
+  cont.innerHTML = '<div class="vacio">Cargando...</div>';
+  const falla = (err) => err.network ? 'Sin conexión con el servidor.' : err.message;
+  try {
+    const fotos = await api('GET', `/api/tareas/${idtarea}/fotos`);
+    const urls = await Promise.all(fotos.map(f => apiImagenUrl(`/api/tareas/${idtarea}/fotos/${f.idfoto}`).catch(() => '')));
+    cont.innerHTML = fotos.length === 0 ? '<div class="ayuda">Sin fotos.</div>' : fotos.map((f, i) => `
+      <figure style="margin:8px 0;">
+        <img src="${urls[i]}" alt="Foto de la tarea" style="width:100%;max-width:420px;border-radius:10px;border:1px solid var(--borde);display:block;">
+        <figcaption class="ayuda">${escapar(f.usuario || '')}${puedeBorrar ? ` <button type="button" class="btn btn-gris btn-chico tr-quitar-foto" data-foto="${f.idfoto}">Quitar</button>` : ''}</figcaption>
+      </figure>`).join('');
+    cont.querySelectorAll('.tr-quitar-foto').forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      try { await api('DELETE', `/api/tareas/${idtarea}/fotos/${b.dataset.foto}`); } catch (err) { alert(falla(err)); }
+      alCambiar();
+    });
+  } catch (err) {
+    cont.innerHTML = `<div class="mensaje error">${escapar(falla(err))}</div>`;
+  }
+}
+
 async function pantallaTareas() {
   const s = Sesion.obtener();
   const veEquipo = Sesion.tiene('TAREAS_EQUIPO');
@@ -118,13 +143,24 @@ async function pantallaTareas() {
       catch (err) { alert(errorDe(err)); }
       mostrar('mis');
     });
+    cuerpo.querySelectorAll('.tr-foto').forEach(i => i.onchange = async () => {
+      const archivo = i.files[0];
+      if (!archivo) return;
+      i.disabled = true;
+      try { await apiSubirImagen(`/api/tareas/${i.dataset.id}/fotos`, await reducirFoto(archivo)); }
+      catch (err) { alert(errorDe(err)); }
+      mostrar('mis');
+    });
+    cuerpo.querySelectorAll('.tr-ver-fotos').forEach(b => b.onclick = () =>
+      tareaMostrarFotos(cuerpo.querySelector(`.tr-fotos[data-id="${b.dataset.id}"]`), b.dataset.id, b.dataset.puede === '1', () => mostrar('mis')));
   }
 
   function filaMia(t) {
     const limite = t.puntual ? `<span class="pastilla ${t.atrasada ? 'cancelada' : 'reparacion'}">Para el ${escapar(tareaFechaCorta(t.fecha))}${t.horaLimite ? ' antes de ' + escapar(t.horaLimite) : ''}</span> `
       : (t.horaLimite ? `<span class="pastilla ${t.atrasada ? 'cancelada' : 'pendiente'}">Antes de ${escapar(t.horaLimite)}</span> ` : '');
     const etiquetas = limite + (t.rolDestino && !t.puntual ? `<span class="pastilla recibida">${escapar(tareaTextoRol(t.rolDestino))}</span> ` : '') +
-      (t.requiereRevision ? '<span class="pastilla pendiente">Se revisa</span>' : '');
+      (t.requiereRevision ? '<span class="pastilla pendiente">Se revisa</span> ' : '') +
+      (t.requiereFoto ? '<span class="pastilla pendiente">Pide foto</span>' : '');
     const desc = t.descripcion ? `<div class="ayuda">${escapar(t.descripcion)}</div>` : '';
     if (t.estado !== 'PENDIENTE') {
       const mia = t.idusuarioHecha != null && t.idusuarioHecha === s.idusuario;
@@ -133,6 +169,7 @@ async function pantallaTareas() {
         <div><strong style="color:var(--gris);">${revisando ? '⏳' : '✔'} ${escapar(t.titulo)}</strong> ${etiquetas}</div>${desc}
         <div class="ayuda" style="color:${revisando || t.tarde ? '#d97706' : '#059669'};font-weight:700;">Hecha por ${escapar(t.hechaPor)} a las ${escapar(tareaHora(t.hechaEl))}${t.tarde ? ' · fuera de hora' : ''}${revisando ? ' · espera revisión' : ''}${t.estado === 'APROBADA' ? ' · aprobada por ' + escapar(t.revisadaPor) : ''}</div>
         ${t.nota ? `<div>Nota: ${escapar(t.nota)}</div>` : ''}
+        ${t.fotos > 0 ? `<button type="button" class="btn btn-gris btn-chico tr-ver-fotos" data-id="${t.idtarea}" style="margin-top:6px;">${ic('eye')} Ver fotos (${t.fotos})</button><div class="tr-fotos" data-id="${t.idtarea}"></div>` : ''}
         ${t.estado !== 'APROBADA' && (mia || veEquipo) ? `<button class="btn btn-gris btn-chico tr-deshacer" data-id="${t.idtarea}" style="margin-top:6px;">Deshacer</button>` : ''}
       </div>`;
     }
@@ -143,6 +180,12 @@ async function pantallaTareas() {
         <span>${escapar(t.titulo)} ${etiquetas}</span>
       </label>${desc}${regreso}
       <input class="tr-nota" data-id="${t.idtarea}" placeholder="Nota (opcional)" maxlength="500" style="margin-top:6px;">
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label class="btn btn-gris btn-chico" style="margin:0;">${ic('camera')} ${t.fotos > 0 ? 'Agregar otra foto' : 'Foto'}<input type="file" accept="image/*" capture="environment" class="tr-foto" data-id="${t.idtarea}" hidden></label>
+        ${t.fotos > 0 ? `<button type="button" class="btn btn-gris btn-chico tr-ver-fotos" data-id="${t.idtarea}" data-puede="1">${ic('eye')} Ver fotos (${t.fotos})</button>`
+          : (t.requiereFoto ? '<span class="ayuda" style="color:#d97706;font-weight:700;">Pide una foto antes de marcarla.</span>' : '')}
+      </div>
+      <div class="tr-fotos" data-id="${t.idtarea}"></div>
     </div>`;
   }
 
@@ -183,10 +226,12 @@ async function pantallaTareas() {
               ${t.nota ? `<div>Nota: ${escapar(t.nota)}</div>` : ''}
               ${t.comentarioRevision ? `<div style="color:#dc2626;font-weight:700;">Se regresó: ${escapar(t.comentarioRevision)}</div>` : ''}
               <div class="grupo-botones">
+                ${t.fotos > 0 ? `<button class="btn btn-gris btn-chico te-ver-fotos" data-id="${t.idtarea}">${ic('eye')} Ver fotos (${t.fotos})</button>` : (t.requiereFoto && t.estado === 'PENDIENTE' ? '<span class="ayuda">Pide foto</span>' : '')}
                 ${veAsigna && t.estado === 'POR_REVISAR' ? `<button class="btn btn-verde btn-chico te-aprobar" data-id="${t.idtarea}">${ic('check')} Aprobar</button><button class="btn btn-gris btn-chico te-regresar" data-id="${t.idtarea}">${ic('undo-2')} Regresar</button>` : ''}
                 ${veAsigna && t.puntual && t.estado === 'PENDIENTE' ? `<button class="btn btn-gris btn-chico te-editar" data-id="${t.idtarea}">${ic('pencil')} Editar</button><button class="btn btn-rojo btn-chico te-quitar" data-id="${t.idtarea}">${ic('trash-2')} Quitar</button>` : ''}
                 ${(t.estado === 'HECHA' || t.estado === 'POR_REVISAR') && t.hechaEl && t.hechaEl.slice(0, 10) === tareaHoyISO() ? `<button class="btn btn-gris btn-chico te-deshacer" data-id="${t.idtarea}">Deshacer la marca</button>` : ''}
               </div>
+              <div class="te-fotos" data-id="${t.idtarea}"></div>
             </div>`;
           }).join('')}`;
         datos.querySelectorAll('.te-deshacer').forEach(b => b.onclick = async () => {
@@ -195,6 +240,8 @@ async function pantallaTareas() {
           ver();
         });
         const tarea = (b) => d.tareas.find(x => String(x.idtarea) === String(b.dataset.id));
+        datos.querySelectorAll('.te-ver-fotos').forEach(b => b.onclick = () =>
+          tareaMostrarFotos(datos.querySelector(`.te-fotos[data-id="${b.dataset.id}"]`), b.dataset.id, veAsigna, ver));
         datos.querySelectorAll('.te-aprobar').forEach(b => b.onclick = async () => {
           b.disabled = true;
           try { await api('POST', `/api/tareas/${b.dataset.id}/aprobar`); } catch (err) { alert(errorDe(err)); }
@@ -244,6 +291,7 @@ async function pantallaTareas() {
           <label class="obligatorio" for="tp-fecha">Fecha límite</label><input id="tp-fecha" type="date" value="${escapar(t ? t.fecha : tareaHoyISO())}">
           <label for="tp-hora">Hora límite</label><input id="tp-hora" type="time" value="${escapar(t && t.horaLimite ? t.horaLimite : '')}">
           <label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="tp-rev" style="width:auto;" ${t && t.requiereRevision ? 'checked' : ''}> Requiere que el encargado la revise</label>
+          <label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="tp-foto" style="width:auto;" ${t && t.requiereFoto ? 'checked' : ''}> Pide una foto de evidencia</label>
           <div id="tp-error"></div>
           <div class="grupo-botones">
             <button id="tp-guardar" class="btn btn-verde">${ic('save')} Guardar</button>
@@ -260,7 +308,7 @@ async function pantallaTareas() {
         const para = document.getElementById('tp-para').value;
         const cuerpoReq = {
           codti: Number(codti), titulo, descripcion: document.getElementById('tp-desc').value.trim() || null, fecha,
-          horaLimite: document.getElementById('tp-hora').value || null, requiereRevision: document.getElementById('tp-rev').checked,
+          horaLimite: document.getElementById('tp-hora').value || null, requiereRevision: document.getElementById('tp-rev').checked, requiereFoto: document.getElementById('tp-foto').checked,
           idusuarioAsignado: para.startsWith('p') ? Number(para.slice(1)) : null, rolDestino: para.startsWith('r') ? para.slice(1) : null,
         };
         const boton = document.getElementById('tp-guardar');
@@ -346,7 +394,7 @@ async function pantallaTareas() {
           <div class="tarjeta" ${r.activa ? '' : 'style="opacity:.6;"'}>
             <div class="orden-cab"><strong>${escapar(r.titulo)}</strong><span class="pastilla ${r.activa ? 'recibida' : 'pendiente'}">${r.activa ? escapar(r.momentoEtiqueta) : 'Inactiva'}</span></div>
             <div class="ayuda">${escapar(r.nombreTienda || 'Todas las sucursales')} · ${escapar(r.momentoEtiqueta)} · ${escapar(tareaTextoRol(r.rolDestino))}</div>
-            <div class="ayuda">${escapar(tareaTextoDias(r.dias))}${r.horaLimite ? ' · antes de ' + escapar(r.horaLimite) : ''}${r.requiereRevision ? ' · se revisa' : ''}</div>
+            <div class="ayuda">${escapar(tareaTextoDias(r.dias))}${r.horaLimite ? ' · antes de ' + escapar(r.horaLimite) : ''}${r.requiereRevision ? ' · se revisa' : ''}${r.requiereFoto ? ' · pide foto' : ''}</div>
             <div class="grupo-botones">
               <button class="btn btn-gris btn-chico tu-editar" data-id="${r.idrutina}">${ic('pencil')} Editar</button>
               ${r.activa ? `<button class="btn btn-gris btn-chico tu-subir" data-id="${r.idrutina}">▲</button>
@@ -386,6 +434,7 @@ async function pantallaTareas() {
           <div class="grupo-botones">${TAREAS_DIAS.map((n, i) => `<label style="display:flex;gap:4px;align-items:center;font-weight:600;"><input type="checkbox" class="tf-dia" value="${i + 1}" style="width:auto;" ${!r || (r.dias || []).includes(i + 1) ? 'checked' : ''}> ${n}</label>`).join('')}</div>
           <label for="tf-hora">Hora límite</label><input id="tf-hora" type="time" value="${escapar(r && r.horaLimite ? r.horaLimite : '')}">
           <label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="tf-rev" style="width:auto;" ${r && r.requiereRevision ? 'checked' : ''}> Requiere que el encargado la revise</label>
+          <label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="tf-foto" style="width:auto;" ${r && r.requiereFoto ? 'checked' : ''}> Pide una foto de evidencia</label>
           ${r ? `<label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="tf-activa" style="width:auto;" ${r.activa ? 'checked' : ''}> Activa</label>` : ''}
           <div id="tf-error"></div>
           <div class="grupo-botones">
@@ -406,7 +455,7 @@ async function pantallaTareas() {
           momento: document.getElementById('tf-momento').value, rolDestino: document.getElementById('tf-rol').value || null,
           dias, horaLimite: document.getElementById('tf-hora').value || null,
           activa: r ? document.getElementById('tf-activa').checked : true, orden: r ? r.orden : null,
-          requiereRevision: document.getElementById('tf-rev').checked,
+          requiereRevision: document.getElementById('tf-rev').checked, requiereFoto: document.getElementById('tf-foto').checked,
         };
         const boton = document.getElementById('tf-guardar');
         boton.disabled = true;

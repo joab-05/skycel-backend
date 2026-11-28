@@ -38,10 +38,11 @@ class TareaRevisionServiceTest {
 
     private final TareaRutinaRepository rutinaRepo = mock(TareaRutinaRepository.class);
     private final TareaRepository tareaRepo = mock(TareaRepository.class);
+    private final com.skycel.backend.repository.TareaFotoRepository fotoRepo = mock(com.skycel.backend.repository.TareaFotoRepository.class);
     private final TiendaRepository tiendaRepo = mock(TiendaRepository.class);
     private final UsuarioRepository usuarioRepo = mock(UsuarioRepository.class);
     private final PermisoService permisos = mock(PermisoService.class);
-    private final TareaService service = new TareaService(rutinaRepo, tareaRepo, tiendaRepo, usuarioRepo, permisos,
+    private final TareaService service = new TareaService(rutinaRepo, tareaRepo, fotoRepo, tiendaRepo, usuarioRepo, permisos,
             new TransactionTemplate(mock(PlatformTransactionManager.class)));
 
     private final Tienda zocalo = Tienda.builder().codti(2).nombre("Zócalo").activo(true).idEncargado(20).build();
@@ -188,7 +189,7 @@ class TareaRevisionServiceTest {
     }
 
     private PuntualRequest pide(String titulo, LocalDate fecha, Integer persona) {
-        return new PuntualRequest(2, titulo, null, fecha, null, persona, null, true);
+        return new PuntualRequest(2, titulo, null, fecha, null, persona, null, true, null);
     }
 
     @Test
@@ -209,7 +210,7 @@ class TareaRevisionServiceTest {
         rechaza(() -> service.crearPuntual(pide("x", null, 30), admin, LUNES_9), HttpStatus.BAD_REQUEST, "fecha límite");
         rechaza(() -> service.crearPuntual(pide("x", LUNES.minusDays(1), 30), admin, LUNES_9), HttpStatus.BAD_REQUEST, "anterior a hoy");
         rechaza(() -> service.crearPuntual(pide("x", LUNES, 99), admin, LUNES_9), HttpStatus.BAD_REQUEST, "no existe");
-        rechaza(() -> service.crearPuntual(new PuntualRequest(2, "x", null, LUNES, "25:99", null, null, false), admin, LUNES_9), HttpStatus.BAD_REQUEST, "hora límite");
+        rechaza(() -> service.crearPuntual(new PuntualRequest(2, "x", null, LUNES, "25:99", null, null, false, null), admin, LUNES_9), HttpStatus.BAD_REQUEST, "hora límite");
         rechaza(() -> service.crearPuntual(pide("x", LUNES, 30), vendedor, LUNES_9), HttpStatus.FORBIDDEN, "asigna tareas");
         rechaza(() -> service.crearPuntual(pide("x", LUNES, 30), otroEncargado, LUNES_9), HttpStatus.FORBIDDEN, "asigna tareas");
     }
@@ -227,7 +228,7 @@ class TareaRevisionServiceTest {
         when(tareaRepo.findById(11)).thenReturn(Optional.of(hecha));
         when(tareaRepo.findById(12)).thenReturn(Optional.of(deRutina));
 
-        TareaDto dto = service.actualizarPuntual(10, new PuntualRequest(2, "Contar fundas y cables", null, LUNES.plusDays(1), null, null, "VENDEDOR", false), "u1");
+        TareaDto dto = service.actualizarPuntual(10, new PuntualRequest(2, "Contar fundas y cables", null, LUNES.plusDays(1), null, null, "VENDEDOR", false, null), "u1");
         assertThat(dto.titulo()).isEqualTo("Contar fundas y cables");
         assertThat(dto.rolDestino()).isEqualTo("VENDEDOR");
         service.quitarPuntual(10, "u1");

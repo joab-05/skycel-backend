@@ -100,6 +100,16 @@ public class Tarea {
     @Column(name = "comentario_revision", length = 500)
     private String comentarioRevision;
 
+    /** Hay que subir una foto de evidencia antes de poder marcarla como hecha. */
+    @Column(name = "requiere_foto")
+    @Builder.Default
+    private Boolean requiereFoto = false;
+
+    /** Cuántas fotos tiene (se lleva aquí para no contarlas en cada lista). */
+    @Column(name = "num_fotos")
+    @Builder.Default
+    private Integer numFotos = 0;
+
     /** Quién creó la tarea puntual (usuario). */
     @Column(name = "creada_por", length = 50)
     private String creadaPor;

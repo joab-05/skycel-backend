@@ -36,6 +36,7 @@ public class LimpiezaService {
     private final int diasAvisos;
     private final int mesesHistorial;
     private final int diasFotos;
+    private final int diasFotosTareas;
 
     private final ReentrantLock candado = new ReentrantLock();
     private volatile Map<String, Object> ultimo;
@@ -46,7 +47,8 @@ public class LimpiezaService {
                            @Value("${skycel.limpieza.dias-sesiones:30}") int diasSesiones,
                            @Value("${skycel.limpieza.dias-avisos:90}") int diasAvisos,
                            @Value("${skycel.limpieza.meses-historial:24}") int mesesHistorial,
-                           @Value("${skycel.limpieza.dias-fotos:90}") int diasFotos) {
+                           @Value("${skycel.limpieza.dias-fotos:90}") int diasFotos,
+                           @Value("${skycel.limpieza.dias-fotos-tareas:60}") int diasFotosTareas) {
         this.jdbc = jdbc;
         this.transaccion = transaccion;
         this.respaldoService = respaldoService;
@@ -56,6 +58,7 @@ public class LimpiezaService {
         this.diasAvisos = Math.max(30, diasAvisos);
         this.mesesHistorial = Math.max(1, mesesHistorial);
         this.diasFotos = Math.max(30, diasFotos);
+        this.diasFotosTareas = Math.max(15, diasFotosTareas);
     }
 
     // Después del respaldo de las 23:30 y antes de que el servidor se apague (24:00)
@@ -98,6 +101,9 @@ public class LimpiezaService {
                 m.put("historialCambios", borrarHistorial(corteHistorial));
                 m.put("fotosDeReparaciones", jdbc.update("DELETE f FROM orden_servicio_foto f JOIN orden_servicio o ON o.idorden = f.idorden "
                         + "WHERE o.estado IN (4, 5) AND o.fecha_actualizacion < ?", ahora.minusDays(diasFotos)));
+                m.put("fotosDeTareas", jdbc.update("DELETE FROM tarea_foto WHERE fecha < ?", ahora.minusDays(diasFotosTareas)));
+                // el contador de fotos de cada tarea sigue a las que quedan
+                jdbc.update("UPDATE tarea t SET t.num_fotos = (SELECT COUNT(*) FROM tarea_foto f WHERE f.idtarea = t.idtarea) WHERE t.num_fotos > 0");
                 return m;
             });
             r.put("borrado", borrado);
